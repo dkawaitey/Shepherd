@@ -55,7 +55,7 @@ const contactFields = {
 };
 
 /** Generate next membership ID: AREA-DDMM-YYYY-SEQ (seq per area + day). */
-const nextMembershipId = async (
+export const nextMembershipId = async (
   ctx: MutationCtx,
   shortcut: string,
   dateMet: string,

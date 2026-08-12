@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { CLASS_OPTIONS, ROLES } from "./constants";
-import { getCurrentUser, logAudit, requireRole } from "./helpers";
+import { nextMembershipId } from "./contacts";
+import { getCurrentUser, logAudit, nowIso, requireRole } from "./helpers";
 
 /** Members list, filterable by class / status / search. View-only for non-admins. */
 export const list = query({
@@ -57,6 +58,7 @@ export const create = mutation({
     email: v.optional(v.string()),
     klass: v.optional(v.string()),
     dateJoined: v.optional(v.string()),
+    areaShortcut: v.optional(v.string()),
     classLeader: v.optional(v.string()),
     ministryRoles: v.optional(v.string()),
     occupation: v.optional(v.string()),
@@ -65,15 +67,11 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
     const klass = args.klass || CLASS_OPTIONS[0];
-    const seq = await ctx.db.query("members").collect();
-    const year = new Date().getFullYear();
-    const maxSeq = seq.reduce((max, m) => {
-      const match = m.membershipId?.match(/-(\d+)$/);
-      return match ? Math.max(max, parseInt(match[1], 10)) : max;
-    }, 0);
-    const prefix =
-      { Millison: "MLS", Reuben: "RBN", Jacob: "JCB", Romina: "RMN" }[klass] ?? "M";
-    const membershipId = `${prefix}-${year}-${String(maxSeq + 1).padStart(3, "0")}`;
+    // Same ID format as contacts (AREA-DDMM-YYYY-SEQ) so promoted contacts
+    // keep a consistent, non-class-based identifier. Shares the counter with
+    // contacts, so sequences never collide across the two tables.
+    const dateJoined = args.dateJoined || nowIso();
+    const membershipId = await nextMembershipId(ctx, args.areaShortcut || "", dateJoined);
     const now = Date.now();
     const id = await ctx.db.insert("members", {
       fullName: args.fullName,

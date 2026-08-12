@@ -247,7 +247,7 @@ function AddMemberDialog({
         <DialogHeader>
           <DialogTitle>Add member</DialogTitle>
           <DialogDescription>
-            Membership IDs are generated per class (e.g. MLS-2026-001). Only administrators can edit member records.
+            Membership IDs use the same format as contacts (e.g. AD-0104-2026-001), generated from the area code and join date. Only administrators can edit member records.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -269,6 +269,7 @@ function AddMemberDialog({
                 email: form.email || undefined,
                 klass: form.klass || CLASS_OPTIONS[0],
                 dateJoined: form.dateJoined || undefined,
+                areaShortcut: form.areaShortcut || undefined,
                 classLeader: form.classLeader || undefined,
                 ministryRoles: form.ministryRoles || undefined,
                 occupation: form.occupation || undefined,
@@ -321,6 +322,21 @@ function AddMemberDialog({
           <div>
             <Label htmlFor="m-joined">Date joined Youth Ministry</Label>
             <Input id="m-joined" type="date" className="mt-1" value={form.dateJoined ?? ""} onChange={(e) => set("dateJoined", e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="m-shortcut">Area code (Membership ID)</Label>
+            <div className="mt-1 flex items-center gap-2">
+              <Input id="m-shortcut" className="w-20 uppercase" maxLength={2} placeholder="AD" value={(form.areaShortcut ?? "").toUpperCase()} onChange={(e) => set("areaShortcut", e.target.value.toUpperCase())} />
+              <span className="text-[10px] text-muted-foreground">
+                → {(form.areaShortcut || "GN").toUpperCase()}-
+                {form.dateJoined
+                  ? `${new Date(form.dateJoined).getDate().toString().padStart(2, "0")}${(new Date(form.dateJoined).getMonth() + 1).toString().padStart(2, "0")}`
+                  : "DDMM"}
+                -
+                {form.dateJoined ? new Date(form.dateJoined).getFullYear() : "YYYY"}
+                -001
+              </span>
+            </div>
           </div>
           <div>
             <Label htmlFor="m-leader">Class leader</Label>
