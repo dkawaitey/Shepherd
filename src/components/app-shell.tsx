@@ -42,7 +42,7 @@ import { useOfflineSync } from "@/lib/offline-sync";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, code: "dash" },
-  { to: "/contacts", label: "People / Contacts", icon: Users, code: "ppl" },
+  { to: "/contacts", label: "Contacts", icon: Users, code: "ppl" },
   { to: "/followups", label: "Follow-ups", icon: CalendarCheck2, code: "fup" },
   { to: "/discipleship", label: "Discipleship", icon: Sparkles, code: "disc" },
   { to: "/bible-studies", label: "Bible Studies", icon: BookOpen, code: "bs" },

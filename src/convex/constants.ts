@@ -217,6 +217,7 @@ export const MARITAL_STATUSES = [
 
 export const MINISTRIES = [
   "Choir",
+  "Instrumentalist",
   "Ushering",
   "Evangelism Team",
   "Youth Ministry",

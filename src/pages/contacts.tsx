@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  AREA_PRESETS,
   CLASS_OPTIONS,
   CONTACT_DECISIONS,
   DECISION_LABELS,
@@ -260,12 +259,7 @@ export function QuickAddContact({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="qa-area">Area</Label>
-              <Input id="qa-area" value={form.area} onChange={(e) => set("area", e.target.value)} placeholder="Adjikpo" className="mt-1" list="area-presets" />
-              <datalist id="area-presets">
-                {AREA_PRESETS.map((a) => (
-                  <option key={a.shortcut} value={a.name} />
-                ))}
-              </datalist>
+              <Input id="qa-area" value={form.area} onChange={(e) => set("area", e.target.value)} placeholder="e.g. Adjikpo" className="mt-1" />
             </div>
             <div>
               <Label htmlFor="qa-shortcut">Area code</Label>
@@ -537,12 +531,7 @@ export function ContactFormDialog({
               </div>
               <div>
                 <Label htmlFor="c-area">Area</Label>
-                <Input id="c-area" value={field("area")} onChange={(e) => set("area", e.target.value)} className="mt-1" list="area-presets2" />
-                <datalist id="area-presets2">
-                  {AREA_PRESETS.map((a) => (
-                    <option key={a.shortcut} value={a.name} />
-                  ))}
-                </datalist>
+                <Input id="c-area" value={field("area")} onChange={(e) => set("area", e.target.value)} className="mt-1" placeholder="e.g. Adjikpo" />
               </div>
               <div>
                 <Label htmlFor="c-shortcut">Area code (Membership ID)</Label>
