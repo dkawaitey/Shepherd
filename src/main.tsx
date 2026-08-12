@@ -129,45 +129,45 @@ createRoot(document.getElementById("root")!).render(
         <ToolbarErrorBoundary>
           <VlyToolbar />
         </ToolbarErrorBoundary>
-        <ConvexAuthProvider client={convex}>
-        <BrowserRouter>
-          <RouteSyncer />
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
-              />
-              <Route
-                element={
-                  <RequireAuth>
-                    <AppShell />
-                  </RequireAuth>
-                }
-              >
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/contacts" element={<Contacts />} />
-                <Route path="/contacts/:id" element={<ContactProfile />} />
-                <Route path="/followups" element={<Followups />} />
-                <Route path="/discipleship" element={<Discipleship />} />
-                <Route path="/bible-studies" element={<BibleStudies />} />
-                <Route path="/members" element={<Members />} />
-                <Route path="/members/:id" element={<MemberProfile />} />
-                <Route path="/attendance" element={<Attendance />} />
-                <Route path="/prayer-journal" element={<PrayerJournal />} />
-                <Route path="/announcements" element={<Announcements />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/settings" element={<Settings />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-        <Toaster />
-        </ConvexAuthProvider>
-      </ThemeProvider>
+          <ConvexAuthProvider client={convex}>
+            <BrowserRouter>
+              <RouteSyncer />
+              <Suspense fallback={<RouteLoading />}>
+                <Routes>
+                  <Route path="/" element={<Landing />} />
+                  <Route
+                    path="/auth"
+                    element={<AuthPage redirectAfterAuth="/dashboard" />}
+                  />
+                  <Route
+                    element={
+                      <RequireAuth>
+                        <AppShell />
+                      </RequireAuth>
+                    }
+                  >
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/contacts" element={<Contacts />} />
+                    <Route path="/contacts/:id" element={<ContactProfile />} />
+                    <Route path="/followups" element={<Followups />} />
+                    <Route path="/discipleship" element={<Discipleship />} />
+                    <Route path="/bible-studies" element={<BibleStudies />} />
+                    <Route path="/members" element={<Members />} />
+                    <Route path="/members/:id" element={<MemberProfile />} />
+                    <Route path="/attendance" element={<Attendance />} />
+                    <Route path="/prayer-journal" element={<PrayerJournal />} />
+                    <Route path="/announcements" element={<Announcements />} />
+                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/analytics" element={<Analytics />} />
+                    <Route path="/settings" element={<Settings />} />
+                  </Route>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+            <Toaster />
+          </ConvexAuthProvider>
+        </ThemeProvider>
     </RootErrorBoundary>
   </StrictMode>,
 );
