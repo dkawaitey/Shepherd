@@ -349,7 +349,7 @@ function ProfileTab() {
           >
             Save profile
           </Button>
-          {saved && <p className="text-[11px] text-[#86efac]">✓ Saved</p>}
+          {saved && <p className="text-[11px] text-status-green">✓ Saved</p>}
         </div>
       </div>
     </div>
@@ -604,7 +604,7 @@ function EmailRemindersSection() {
                   <span
                     className={cn(
                       "shrink-0",
-                      l.status === "sent" ? "text-[#86efac]" : "text-[#f87171]",
+                      l.status === "sent" ? "text-status-green" : "text-status-red",
                     )}
                     title={l.error ?? ""}
                   >

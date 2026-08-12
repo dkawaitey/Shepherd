@@ -43,7 +43,7 @@ export default function Analytics() {
       label: "Response rate",
       value: `${report.rates.responseRate}%`,
       note: "Completed vs missed follow-ups — how reliable follow-up is.",
-      tone: report.rates.responseRate >= 75 ? "text-[#86efac]" : report.rates.responseRate >= 50 ? "text-[#fbbf24]" : "text-[#f87171]",
+      tone: report.rates.responseRate >= 75 ? "text-status-green" : report.rates.responseRate >= 50 ? "text-status-amber" : "text-status-red",
     },
     {
       icon: TrendingUp,
@@ -64,7 +64,7 @@ export default function Analytics() {
       label: "Drop-off rate",
       value: `${report.rates.dropOff}%`,
       note: "Where people fall out of the journey — your biggest growth lever.",
-      tone: report.rates.dropOff > 50 ? "text-[#f87171]" : "text-[#fbbf24]",
+      tone: report.rates.dropOff > 50 ? "text-status-red" : "text-status-amber",
     },
     {
       icon: Clock,
@@ -130,7 +130,7 @@ export default function Analytics() {
                     <span className="font-mono tabular-nums">
                       {f.count}
                       {i > 0 && (
-                        <span className={cn("ml-2", drop > 40 ? "text-[#f87171]" : "text-[#fbbf24]")}>
+                        <span className={cn("ml-2", drop > 40 ? "text-status-red" : "text-status-amber")}>
                           −{drop}%
                         </span>
                       )}
@@ -167,7 +167,7 @@ export default function Analytics() {
                     <div className="mb-1 flex items-center justify-between text-[11px]">
                       <span className="font-semibold">{w.name}</span>
                       <span className="font-mono tabular-nums text-muted-foreground">
-                        {w.completed}/{w.assigned} done · <b className={completionRate >= 75 ? "text-[#86efac]" : completionRate >= 40 ? "text-[#fbbf24]" : "text-[#f87171]"}>{completionRate}%</b>
+                        {w.completed}/{w.assigned} done · <b className={completionRate >= 75 ? "text-status-green" : completionRate >= 40 ? "text-status-amber" : "text-status-red"}>{completionRate}%</b>
                       </span>
                     </div>
                     <div className="h-3 overflow-hidden rounded-sm bg-muted">

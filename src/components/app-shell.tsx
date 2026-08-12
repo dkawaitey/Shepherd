@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { QuickAddContact } from "@/pages/contacts";
 import { useOfflineSync } from "@/lib/offline-sync";
 
@@ -214,6 +215,8 @@ export function AppShell() {
             <span className="hidden sm:inline">Quick Add Contact</span>
             <span className="sm:hidden">Add</span>
           </Button>
+
+          <ThemeToggle />
 
           {/* Notifications */}
           <DropdownMenu>

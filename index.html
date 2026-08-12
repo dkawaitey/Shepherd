@@ -7,6 +7,18 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shepherd App</title>
+  <script>
+    /* Apply the saved theme before first paint to avoid a flash. Dark is the
+       default; only an explicit "light" choice switches modes. */
+    (function () {
+      try {
+        var t = localStorage.getItem("shepherd.theme");
+        if (t !== "light") document.documentElement.classList.add("dark");
+      } catch (e) {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
 </head>
 
 

@@ -188,9 +188,9 @@ export default function Reports() {
                     <tr className="border-b">
                       <th className="py-1.5 pr-2">Worker</th>
                       <th className="py-1.5 pr-2">Assigned</th>
-                      <th className="py-1.5 pr-2 text-[#86efac]">Done</th>
-                      <th className="py-1.5 pr-2 text-[#f87171]">Missed</th>
-                      <th className="py-1.5 text-[#fbbf24]">Pending</th>
+                      <th className="py-1.5 pr-2 text-status-green">Done</th>
+                      <th className="py-1.5 pr-2 text-status-red">Missed</th>
+                      <th className="py-1.5 text-status-amber">Pending</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -198,9 +198,9 @@ export default function Reports() {
                       <tr key={w.name} className="border-b border-dashed">
                         <td className="py-1.5 pr-2 font-semibold">{w.name}</td>
                         <td className="py-1.5 pr-2 tabular-nums">{w.assigned}</td>
-                        <td className="py-1.5 pr-2 tabular-nums text-[#86efac]">{w.completed}</td>
-                        <td className="py-1.5 pr-2 tabular-nums text-[#f87171]">{w.missed}</td>
-                        <td className="py-1.5 tabular-nums text-[#fbbf24]">{w.pending}</td>
+                        <td className="py-1.5 pr-2 tabular-nums text-status-green">{w.completed}</td>
+                        <td className="py-1.5 pr-2 tabular-nums text-status-red">{w.missed}</td>
+                        <td className="py-1.5 tabular-nums text-status-amber">{w.pending}</td>
                       </tr>
                     ))}
                     {report.workers.length === 0 && (

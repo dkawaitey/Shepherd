@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/input-otp";
 
 import { useAuth } from "@/hooks/use-auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -116,9 +117,12 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               </div>
               <span className="text-sm font-bold tracking-[0.16em]">SHEPHERD</span>
             </Link>
-            <span className="text-[11px] text-muted-foreground">
-              <span className="text-primary">$</span> auth --method email
-            </span>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-muted-foreground">
+                <span className="text-primary">$</span> auth --method email
+              </span>
+              <ThemeToggle />
+            </div>
           </div>
         </header>
 

@@ -107,7 +107,7 @@ function ContactCard({
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
               title="Open WhatsApp"
-              className="flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:border-[#86efac]/50 hover:text-[#86efac]"
+              className="flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:border-status-green/50 hover:text-status-green"
             >
               <MessageCircle className="h-3.5 w-3.5" />
             </a>
@@ -128,7 +128,7 @@ function ContactCard({
         <StagePill stage={contact.status} />
         {events.slice(0, 2).map((label) => (
           <div key={label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="text-[#86efac]">✓</span>
+            <span className="text-status-green">✓</span>
             <span className="truncate">{label}</span>
           </div>
         ))}

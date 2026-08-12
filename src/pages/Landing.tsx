@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 
@@ -77,6 +78,7 @@ export default function Landing() {
             </span>
           </Link>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {isAuthenticated ? (
               <Button size="sm" onClick={() => navigate("/dashboard")}>
                 Open Dashboard <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -142,7 +144,7 @@ export default function Landing() {
             transition={{ delay: 0.2, duration: 0.5 }}
             className="mx-auto mt-14 max-w-3xl"
           >
-            <div className="term-window shadow-lg">
+            <div className="term-window term-shell shadow-lg">
               <div className="term-titlebar">
                 <span className="term-dot bg-[#f87171]" />
                 <span className="term-dot bg-[#fbbf24]" />
@@ -151,7 +153,7 @@ export default function Landing() {
                   shepherd — discipleship pipeline
                 </span>
               </div>
-              <div className="space-y-1.5 bg-card p-4 text-[12px] leading-6 sm:p-5">
+              <div className="term-body space-y-1.5 bg-card p-4 text-[12px] leading-6 sm:p-5">
                 <p className="text-muted-foreground">
                   <span className="text-primary">$</span> shepherd init --ministry "gethsemane-ym"
                 </p>
@@ -287,7 +289,7 @@ export default function Landing() {
             <span className="text-primary">$</span> shepherd --ministry gethsemane-ym
           </span>
           <span className="flex items-center gap-1">
-            <Check className="h-3 w-3 text-[#86efac]" /> Built for Gethsemane Ministry Youth · {new Date().getFullYear()}
+            <Check className="h-3 w-3 text-status-green" /> Built for Gethsemane Ministry Youth · {new Date().getFullYear()}
           </span>
         </div>
       </footer>

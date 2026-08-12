@@ -207,7 +207,7 @@ export default function ContactProfile() {
             <span className="term-label">journey</span>
             {lastEvents.map((ev) => (
               <span key={ev._id} className="flex items-center gap-1 rounded-full border bg-accent/50 px-2 py-0.5">
-                <span className="text-[#86efac]">✓</span> {ev.label}
+                <span className="text-status-green">✓</span> {ev.label}
                 <span className="text-muted-foreground/60">{fmtDate(ev.date)}</span>
               </span>
             ))}
@@ -392,10 +392,10 @@ function OverviewTab({ contact, isWorkerLimited }: { contact: any; isWorkerLimit
               <Row label="Bible verses shared" value={contact.bibleVersesShared} />
             </div>
             <div className="col-span-2 flex gap-4 text-[12px] text-muted-foreground">
-              <span className={cn(contact.prayerOffered && "text-[#86efac]")}>
+              <span className={cn(contact.prayerOffered && "text-status-green")}>
                 {contact.prayerOffered ? "✓ Prayer offered" : "○ Prayer not offered"}
               </span>
-              <span className={cn(contact.gospelShared && "text-[#86efac]")}>
+              <span className={cn(contact.gospelShared && "text-status-green")}>
                 {contact.gospelShared ? "✓ Gospel shared" : "○ Gospel not shared"}
               </span>
             </div>
@@ -849,7 +849,7 @@ function AttendanceTab({
       )}
 
       <div className="flex gap-4 text-[12px] text-muted-foreground">
-        <span>Attendance: <b className="text-[#86efac]">{counts.present} present</b></span>
+        <span>Attendance: <b className="text-status-green">{counts.present} present</b></span>
         <span>Total records: <b>{counts.total}</b></span>
       </div>
 

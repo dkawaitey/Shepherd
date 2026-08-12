@@ -108,11 +108,11 @@ export default function Members() {
                 <div className="text-[9px] text-muted-foreground">members</div>
               </div>
               <div>
-                <div className="font-mono text-sm font-bold text-[#86efac]">{cs.presentToday}</div>
+                <div className="font-mono text-sm font-bold text-status-green">{cs.presentToday}</div>
                 <div className="text-[9px] text-muted-foreground">present</div>
               </div>
               <div>
-                <div className="font-mono text-sm font-bold text-[#f87171]">{cs.absentToday}</div>
+                <div className="font-mono text-sm font-bold text-status-red">{cs.absentToday}</div>
                 <div className="text-[9px] text-muted-foreground">absent</div>
               </div>
             </div>
@@ -126,7 +126,7 @@ export default function Members() {
             <div className="mt-2 flex gap-2 text-[9px] text-muted-foreground">
               {cs.trend.map((t: any) => (
                 <span key={t.month} title={`${t.month}: ${t.percentage}%`}>
-                  {t.month} <b className={cn("font-mono", t.percentage >= 75 ? "text-[#86efac]" : t.percentage >= 40 ? "text-[#fbbf24]" : "text-[#f87171]")}>{t.percentage}%</b>
+                  {t.month} <b className={cn("font-mono", t.percentage >= 75 ? "text-status-green" : t.percentage >= 40 ? "text-status-amber" : "text-status-red")}>{t.percentage}%</b>
                 </span>
               ))}
             </div>

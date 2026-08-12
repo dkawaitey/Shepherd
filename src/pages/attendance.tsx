@@ -125,7 +125,7 @@ export default function Attendance() {
           </Button>
         </div>
         {savedDate === date && (
-          <p className="mt-2 text-[11px] text-[#86efac]">
+          <p className="mt-2 text-[11px] text-status-green">
             ✓ Register saved for {fmtDate(date)} — editing overwrites records for the same date + activity.
           </p>
         )}
@@ -190,7 +190,7 @@ export default function Attendance() {
       {/* Low attendance */}
       <div className="mt-6">
         <div className="mb-3 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-[#fbbf24]" />
+          <AlertTriangle className="h-4 w-4 text-status-amber" />
           <p className="term-label">members needing follow-up — low attendance</p>
         </div>
         {lowAttendance === undefined ? (
@@ -208,8 +208,8 @@ export default function Attendance() {
                 className="flex items-center justify-between gap-3 rounded-lg border border-[#f59e0b]/40 bg-[#2e2408]/80 px-4 py-3 transition-colors hover:border-[#f59e0b]/70"
               >
                 <div>
-                  <div className="text-[13px] font-semibold text-[#fbbf24]">{r.member.fullName}</div>
-                  <div className="text-[10px] text-[#fbbf24]/80">
+                  <div className="text-[13px] font-semibold text-status-amber">{r.member.fullName}</div>
+                  <div className="text-[10px] text-status-amber/80">
                     Has not attended a youth meeting in 4 weeks. Consider follow-up.
                   </div>
                 </div>

@@ -232,7 +232,7 @@ export default function Dashboard() {
         </div>
         <p className="mt-1 text-[13px] text-muted-foreground">
           <span className="text-primary">$</span> shepherd status --live{" "}
-          <span className="text-[#86efac]">// all counts from the database</span>
+          <span className="text-status-green">// all counts from the database</span>
         </p>
       </div>
 
@@ -320,12 +320,12 @@ export default function Dashboard() {
             </div>
             <div className="mb-3 grid grid-cols-2 gap-2 text-center">
               <div className="rounded-md border border-[#f59e0b]/40 bg-[#2e2408] py-2">
-                <div className="font-mono text-lg font-bold text-[#fbbf24]">{stats.prayers.activeCount}</div>
-                <div className="text-[9px] uppercase tracking-wide text-[#fbbf24]">active requests</div>
+                <div className="font-mono text-lg font-bold text-status-amber">{stats.prayers.activeCount}</div>
+                <div className="text-[9px] uppercase tracking-wide text-status-amber">active requests</div>
               </div>
               <div className="rounded-md border border-[#86efac]/40 bg-[#15291c] py-2">
-                <div className="font-mono text-lg font-bold text-[#86efac]">{stats.prayers.answeredCount}</div>
-                <div className="text-[9px] uppercase tracking-wide text-[#86efac]">answered</div>
+                <div className="font-mono text-lg font-bold text-status-green">{stats.prayers.answeredCount}</div>
+                <div className="text-[9px] uppercase tracking-wide text-status-green">answered</div>
               </div>
             </div>
             <div className="space-y-2">
@@ -384,8 +384,8 @@ export default function Dashboard() {
                   to={r.link}
                   className="block rounded-md border border-[#f59e0b]/40 bg-[#2e2408]/80 p-2.5 transition-colors hover:border-[#f59e0b]/70"
                 >
-                  <div className="text-[11px] font-bold text-[#fbbf24]">{r.title}</div>
-                  <div className="mt-0.5 text-[10px] leading-4 text-[#fbbf24]/80">{r.message}</div>
+                  <div className="text-[11px] font-bold text-status-amber">{r.title}</div>
+                  <div className="mt-0.5 text-[10px] leading-4 text-status-amber/80">{r.message}</div>
                 </Link>
               ))}
             </div>

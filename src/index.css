@@ -38,16 +38,60 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-status-green: var(--status-green);
+  --color-status-amber: var(--status-amber);
+  --color-status-red: var(--status-red);
+  --color-status-grey: var(--status-grey);
   --font-sans: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
     Menlo, Consolas, "Liberation Mono", monospace;
   --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
     Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-/* Premium dark terminal theme — near-black green surfaces, sage/moss green
-   and amber accents, monospace throughout. Clean, minimal, developer-facing. */
+/* Premium terminal theme. Dark by default — near-black green surfaces, sage/
+   moss green and amber accents, monospace throughout. Light mode is a soft
+   off-white terminal: same structure, darker ink, tuned status accents. */
 :root {
   --radius: 0.5rem;
+  --background: #f6f5ef; /* warm off-white */
+  --foreground: #20261c;
+  --card: #ffffff;
+  --card-foreground: #20261c;
+  --popover: #ffffff;
+  --popover-foreground: #20261c;
+  --primary: #55724c; /* moss — readable on off-white */
+  --primary-foreground: #f6f6f0;
+  --secondary: #e9ece1;
+  --secondary-foreground: #2a3226;
+  --muted: #eef0e6;
+  --muted-foreground: #5c6654;
+  --accent: #e6ebda; /* light sage */
+  --accent-foreground: #2a3226;
+  --destructive: #d04444;
+  --border: #dde1d1;
+  --input: #d3d9c8;
+  --ring: #7d996f;
+  --chart-1: #8faf8a; /* sage */
+  --chart-2: #c8912f; /* amber */
+  --chart-3: #a8b98e; /* muted olive */
+  --chart-4: #6f8f6a; /* moss */
+  --chart-5: #55724c; /* deep sage */
+  --sidebar: #f1f0e9;
+  --sidebar-foreground: #2a3226;
+  --sidebar-primary: #55724c;
+  --sidebar-primary-foreground: #f6f6f0;
+  --sidebar-accent: #e5eadd;
+  --sidebar-accent-foreground: #22291d;
+  --sidebar-border: #dfe2d3;
+  --sidebar-ring: #7d996f;
+  --status-green: #2f7d3e;
+  --status-amber: #a16207;
+  --status-red: #c02b2b;
+  --status-grey: #6b7280;
+}
+
+/* Dark mode — the product default. */
+.dark {
   --background: #0e110c; /* deep green-black */
   --foreground: #e7ece1;
   --card: #141813;
@@ -79,41 +123,10 @@
   --sidebar-accent-foreground: #e7ece1;
   --sidebar-border: #22291d;
   --sidebar-ring: #9db392;
-}
-
-/* Dark mode mirrors the default — the product is dark by design. */
-.dark {
-  --background: #0e110c;
-  --foreground: #e7ece1;
-  --card: #141813;
-  --card-foreground: #e7ece1;
-  --popover: #171b13;
-  --popover-foreground: #e7ece1;
-  --primary: #9db392;
-  --primary-foreground: #0d100b;
-  --secondary: #1b2118;
-  --secondary-foreground: #d8dfd1;
-  --muted: #191f16;
-  --muted-foreground: #93a08a;
-  --accent: #20271b;
-  --accent-foreground: #dbe3d5;
-  --destructive: #e5484d;
-  --border: #262d21;
-  --input: #2b3327;
-  --ring: #9db392;
-  --chart-1: #8faf8a;
-  --chart-2: #d9a441;
-  --chart-3: #a8b98e;
-  --chart-4: #6f8f6a;
-  --chart-5: #86b26f;
-  --sidebar: #0c0f0a;
-  --sidebar-foreground: #d5dccd;
-  --sidebar-primary: #9db392;
-  --sidebar-primary-foreground: #0d100b;
-  --sidebar-accent: #1a2117;
-  --sidebar-accent-foreground: #e7ece1;
-  --sidebar-border: #22291d;
-  --sidebar-ring: #9db392;
+  --status-green: #86efac;
+  --status-amber: #fbbf24;
+  --status-red: #f87171;
+  --status-grey: #9ca3af;
 }
 
 @layer base {
@@ -140,11 +153,17 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #2b3327;
+    background: #c9cfbc;
     border-radius: 6px;
-    border: 2px solid #0e110c;
+    border: 2px solid var(--background);
   }
   ::-webkit-scrollbar-thumb:hover {
+    background: #8faf8a;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #2b3327;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
     background: #8faf8a;
   }
 }
@@ -153,7 +172,7 @@
   /* Terminal prompt styling */
   .term-prompt::before {
     content: "❯ ";
-    color: #8faf8a;
+    color: var(--primary);
   }
   .term-label {
     @apply text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground;
@@ -169,20 +188,30 @@
     @apply h-2.5 w-2.5 rounded-full;
   }
   .term-grid {
-    background-image: linear-gradient(#1a2016 1px, transparent 1px),
-      linear-gradient(90deg, #1a2016 1px, transparent 1px);
+    background-image: linear-gradient(#e6e9db 1px, transparent 1px),
+      linear-gradient(90deg, #e6e9db 1px, transparent 1px);
     background-size: 22px 22px;
   }
-  .text-status-green {
-    color: #86efac;
+  .dark .term-grid {
+    background-image: linear-gradient(#1a2016 1px, transparent 1px),
+      linear-gradient(90deg, #1a2016 1px, transparent 1px);
   }
-  .text-status-amber {
-    color: #fbbf24;
+  /* Fixed-dark terminal shell — stays a real terminal in both themes. */
+  .term-shell.term-window {
+    background-color: #0f130d;
+    border-color: #2a3226;
   }
-  .text-status-red {
-    color: #f87171;
+  .term-shell.term-window .term-titlebar {
+    background-color: #171c13;
+    border-color: #262d21;
   }
-  .text-status-grey {
-    color: #9ca3af;
+  .term-shell .term-body {
+    background-color: #0f130d;
+  }
+  .term-shell .text-muted-foreground {
+    color: #87937e;
+  }
+  .term-shell .text-primary {
+    color: #9db392;
   }
 }
