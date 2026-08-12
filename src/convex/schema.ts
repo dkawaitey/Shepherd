@@ -250,6 +250,7 @@ const schema = defineSchema(
       whatsapp: v.optional(v.string()),
       email: v.optional(v.string()),
       klass: v.optional(v.string()), // Millison / Reuben / Jacob / Romina
+      area: v.optional(v.string()), // area used for the membership ID
       dateJoined: v.optional(v.string()),
       classLeader: v.optional(v.string()),
       ministryRoles: v.optional(v.string()),

@@ -4,6 +4,16 @@ import { CLASS_OPTIONS, ROLES } from "./constants";
 import { nextMembershipId } from "./contacts";
 import { getCurrentUser, logAudit, nowIso, requireRole } from "./helpers";
 
+/** Derive a 2-letter area code from the area name (same rule as contacts). */
+const deriveShortcut = (area?: string) =>
+  (area || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
 /** Members list, filterable by class / status / search. View-only for non-admins. */
 export const list = query({
   args: {
@@ -58,6 +68,7 @@ export const create = mutation({
     email: v.optional(v.string()),
     klass: v.optional(v.string()),
     dateJoined: v.optional(v.string()),
+    area: v.optional(v.string()),
     areaShortcut: v.optional(v.string()),
     classLeader: v.optional(v.string()),
     ministryRoles: v.optional(v.string()),
@@ -71,7 +82,8 @@ export const create = mutation({
     // keep a consistent, non-class-based identifier. Shares the counter with
     // contacts, so sequences never collide across the two tables.
     const dateJoined = args.dateJoined || nowIso();
-    const membershipId = await nextMembershipId(ctx, args.areaShortcut || "", dateJoined);
+    const shortcut = (args.areaShortcut || deriveShortcut(args.area) || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2);
+    const membershipId = await nextMembershipId(ctx, shortcut, dateJoined);
     const now = Date.now();
     const id = await ctx.db.insert("members", {
       fullName: args.fullName,
@@ -80,6 +92,7 @@ export const create = mutation({
       whatsapp: args.whatsapp,
       email: args.email,
       klass,
+      area: args.area,
       dateJoined: args.dateJoined,
       classLeader: args.classLeader,
       ministryRoles: args.ministryRoles,
@@ -111,6 +124,7 @@ export const update = mutation({
     email: v.optional(v.string()),
     klass: v.optional(v.string()),
     dateJoined: v.optional(v.string()),
+    area: v.optional(v.string()),
     classLeader: v.optional(v.string()),
     ministryRoles: v.optional(v.string()),
     occupation: v.optional(v.string()),

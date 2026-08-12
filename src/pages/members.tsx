@@ -36,6 +36,16 @@ import {
   downloadCsv,
   progressColor,
 } from "@/components/shared";
+
+/** Derive a 2-letter area code from the area name (same rule as contacts). */
+const deriveShortcut = (area: string) =>
+  area
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -184,6 +194,7 @@ export default function Members() {
               </div>
               <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                 <span>{m.klass} Class</span>
+                {m.area && <span>Area: {m.area}</span>}
                 {m.classLeader && <span>Leader: {m.classLeader}</span>}
                 {m.ministryRoles && <span>{m.ministryRoles}</span>}
               </div>
@@ -239,7 +250,13 @@ function AddMemberDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  // Auto-derive the area code from the area name until it's edited manually.
+  const set = (k: string, v: string) =>
+    setForm((f) => {
+      const next = { ...f, [k]: v };
+      if (k === "area" && !f.areaShortcut) next.areaShortcut = deriveShortcut(v);
+      return next;
+    });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -269,7 +286,9 @@ function AddMemberDialog({
                 email: form.email || undefined,
                 klass: form.klass || CLASS_OPTIONS[0],
                 dateJoined: form.dateJoined || undefined,
-                areaShortcut: form.areaShortcut || undefined,
+                area: form.area || undefined,
+                areaShortcut:
+                  form.areaShortcut || deriveShortcut(form.area || "") || undefined,
                 classLeader: form.classLeader || undefined,
                 ministryRoles: form.ministryRoles || undefined,
                 occupation: form.occupation || undefined,
@@ -322,6 +341,10 @@ function AddMemberDialog({
           <div>
             <Label htmlFor="m-joined">Date joined Youth Ministry</Label>
             <Input id="m-joined" type="date" className="mt-1" value={form.dateJoined ?? ""} onChange={(e) => set("dateJoined", e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="m-area">Area</Label>
+            <Input id="m-area" className="mt-1" placeholder="e.g. Adjikpo" value={form.area ?? ""} onChange={(e) => set("area", e.target.value)} />
           </div>
           <div>
             <Label htmlFor="m-shortcut">Area code (Membership ID)</Label>
@@ -409,6 +432,7 @@ export function MemberProfile() {
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
               <span className="text-primary">{member.membershipId}</span>
               <span>{member.klass} Class</span>
+              {member.area && <span>Area: {member.area}</span>}
               {member.classLeader && <span>Class leader: {member.classLeader}</span>}
               {member.dateJoined && <span>Joined {fmtDate(member.dateJoined)}</span>}
             </div>
