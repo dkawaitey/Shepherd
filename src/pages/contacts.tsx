@@ -37,6 +37,7 @@ import {
   STAGE_LABELS,
 } from "@/convex/constants";
 import { EmptyState, PageHeader, StatusPill, telLink, waLink, StagePill, downloadCsv } from "@/components/shared";
+import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import {
   MapPin,
@@ -193,23 +194,40 @@ export function QuickAddContact({
     }
     setBusy(true);
     setError(null);
+    const payload = {
+      fullName: form.fullName.trim(),
+      phone: form.phone || undefined,
+      whatsapp: form.whatsapp || undefined,
+      community: form.community || undefined,
+      klass: form.klass || undefined,
+      decision: form.decision || undefined,
+      area: form.area || undefined,
+      areaShortcut: form.areaShortcut || deriveShortcut(form.area) || undefined,
+      dateMet: new Date().toISOString(),
+    };
+    if (!navigator.onLine) {
+      queueEntry("quickAddContact", payload);
+      toast.warning(
+        "Saved offline — it will sync automatically when you're back online.",
+      );
+      onOpenChange(false);
+      return;
+    }
     try {
-      const res = await quickAdd({
-        fullName: form.fullName.trim(),
-        phone: form.phone || undefined,
-        whatsapp: form.whatsapp || undefined,
-        community: form.community || undefined,
-        klass: form.klass || undefined,
-        decision: form.decision || undefined,
-        area: form.area || undefined,
-        areaShortcut: form.areaShortcut || deriveShortcut(form.area) || undefined,
-        dateMet: new Date().toISOString(),
-      });
+      const res = await quickAdd(payload);
       toast.success(`Added ${form.fullName} · ${res.membershipId}`);
       onOpenChange(false);
       navigate(`/contacts/${res._id}`);
     } catch (err: any) {
-      setError(err?.message ?? "Failed to add contact");
+      if (isOfflineError(err)) {
+        queueEntry("quickAddContact", payload);
+        toast.warning(
+          "Saved offline — it will sync automatically when you're back online.",
+        );
+        onOpenChange(false);
+      } else {
+        setError(err?.message ?? "Failed to add contact");
+      }
     } finally {
       setBusy(false);
     }
@@ -339,8 +357,9 @@ export function ContactFormDialog({
     }
     setBusy(true);
     setError(null);
+    let payload: Record<string, any> = {};
     try {
-      const payload: Record<string, any> = {};
+      payload = {};
       for (const [k, v] of Object.entries(form)) {
         if (k === "_id" || k === "membershipId" || k === "createdAt" || k === "updatedAt" || k === "isDeleted" || k === "age") continue;
         payload[k] = v === "" ? undefined : v;
@@ -351,17 +370,42 @@ export function ContactFormDialog({
         onOpenChange(false);
         onSaved?.(contact._id);
       } else {
-        const res = await create({
+        const createPayload = {
           ...(payload as any),
           dateMet: payload.dateMet ?? new Date().toISOString(),
-          areaShortcut: payload.areaShortcut || (payload.area ? deriveShortcut(payload.area) : undefined),
-        });
+          areaShortcut:
+            payload.areaShortcut ||
+            (payload.area ? deriveShortcut(payload.area) : undefined),
+        };
+        if (!navigator.onLine) {
+          queueEntry("createContact", createPayload);
+          toast.warning(
+            "Saved offline — it will sync automatically when you're back online.",
+          );
+          onOpenChange(false);
+          return;
+        }
+        const res = await create(createPayload);
         toast.success(`Contact added · ${res.membershipId}`);
         onOpenChange(false);
         onSaved?.(res._id);
       }
     } catch (err: any) {
-      setError(err?.message ?? "Failed to save contact");
+      if (!contact && !navigator.onLine) {
+        queueEntry("createContact", {
+          ...(payload as any),
+          dateMet: payload.dateMet ?? new Date().toISOString(),
+          areaShortcut:
+            payload.areaShortcut ||
+            (payload.area ? deriveShortcut(payload.area) : undefined),
+        });
+        toast.warning(
+          "Saved offline — it will sync automatically when you're back online.",
+        );
+        onOpenChange(false);
+      } else {
+        setError(err?.message ?? "Failed to save contact");
+      }
     } finally {
       setBusy(false);
     }

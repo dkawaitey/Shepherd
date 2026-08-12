@@ -35,6 +35,7 @@ import {
   StatusPill,
   fmtDate,
 } from "@/components/shared";
+import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import { CalendarPlus, ExternalLink, Lock, Search, Trash2 } from "lucide-react";
 
@@ -249,19 +250,36 @@ export function ScheduleDialog({
     }
     setBusy(true);
     setError(null);
+    const payload = {
+      contactId: form.contactId as any,
+      type: form.type,
+      date: new Date(form.date).toISOString(),
+      assignedWorker: form.assignedWorker || undefined,
+      notes: form.notes || undefined,
+      reminder: form.reminder,
+    };
+    if (!navigator.onLine) {
+      queueEntry("createFollowup", payload);
+      toast.warning(
+        "Scheduled offline — it will sync automatically when you're back online.",
+      );
+      onOpenChange(false);
+      return;
+    }
     try {
-      await create({
-        contactId: form.contactId as any,
-        type: form.type,
-        date: new Date(form.date).toISOString(),
-        assignedWorker: form.assignedWorker || undefined,
-        notes: form.notes || undefined,
-        reminder: form.reminder,
-      });
+      await create(payload);
       toast.success("Follow-up scheduled (status: Pending)");
       onOpenChange(false);
     } catch (err: any) {
-      setError(err?.message ?? "Failed to schedule");
+      if (isOfflineError(err)) {
+        queueEntry("createFollowup", payload);
+        toast.warning(
+          "Scheduled offline — it will sync automatically when you're back online.",
+        );
+        onOpenChange(false);
+      } else {
+        setError(err?.message ?? "Failed to schedule");
+      }
     } finally {
       setBusy(false);
     }

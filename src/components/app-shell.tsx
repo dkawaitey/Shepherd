@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { QuickAddContact } from "@/pages/contacts";
+import { useOfflineSync } from "@/lib/offline-sync";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, code: "dash" },
@@ -54,7 +55,15 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: Settings, code: "cfg" },
 ] as const;
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  onNavigate,
+  online,
+  queued,
+}: {
+  onNavigate?: () => void;
+  online: boolean;
+  queued: number;
+}) {
   const location = useLocation();
   return (
     <div className="flex h-full flex-col">
@@ -70,10 +79,26 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </div>
 
-      <div className="mx-5 mb-3 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#86b26f] animate-pulse" />
+      <div
+        className={cn(
+          "mx-5 mb-3 flex items-center gap-2 rounded-md border px-3 py-1.5 text-[11px]",
+          online
+            ? "border-border bg-muted/50 text-muted-foreground"
+            : "border-[#f59e0b]/40 bg-[#2e2408] text-[#fbbf24]",
+        )}
+      >
+        <span
+          className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            online ? "bg-[#86b26f] animate-pulse" : "bg-[#fbbf24]",
+          )}
+        />
         <span>
-          gethsemane-ym <span className="opacity-60">// connected</span>
+          gethsemane-ym{" "}
+          <span className="opacity-60">
+            {online ? "// connected" : "// offline"}
+            {queued > 0 ? ` · ${queued} queued` : ""}
+          </span>
         </span>
       </div>
 
@@ -125,6 +150,7 @@ export function AppShell() {
   const notifications = useQuery(api.settings.listNotifications);
   const markAllRead = useMutation(api.settings.markAllRead);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const offline = useOfflineSync();
 
   useEffect(() => {
     if (user && !user.role) {
@@ -153,12 +179,16 @@ export function AppShell() {
     <div className="flex min-h-screen bg-background">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r bg-sidebar md:block">
-        <SidebarContent />
+        <SidebarContent online={offline.online} queued={offline.pending.length} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-64 p-0">
-          <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          <SidebarContent
+            onNavigate={() => setMobileOpen(false)}
+            online={offline.online}
+            queued={offline.pending.length}
+          />
         </SheetContent>
       </Sheet>
 
