@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { CLASS_OPTIONS, ROLES } from "./constants";
 import { nextMembershipId } from "./contacts";
-import { getCurrentUser, logAudit, nowIso, requireRole } from "./helpers";
+import { getCurrentUser, logAudit, nowIso, requireRole, classScoped, assertClassScope } from "./helpers";
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
 const deriveShortcut = (area?: string) =>
@@ -22,8 +22,11 @@ export const list = query({
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const scope = classScoped(user);
     let members = await ctx.db.query("members").collect();
     members = members.filter((m) => !m.isDeleted);
+    if (scope) members = members.filter((m) => m.klass === scope);
     if (args.klass && args.klass !== "all") members = members.filter((m) => m.klass === args.klass);
     if (args.status && args.status !== "all") members = members.filter((m) => m.status === args.status);
     if (args.search) {
@@ -49,8 +52,10 @@ export const list = query({
 export const get = query({
   args: { id: v.id("members") },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
     const member = await ctx.db.get(args.id);
     if (!member || member.isDeleted) return null;
+    assertClassScope(user, member.klass);
     const attendance = await ctx.db
       .query("attendance")
       .withIndex("memberId", (q) => q.eq("memberId", args.id))
@@ -170,11 +175,14 @@ export const remove = mutation({
 export const classStats = query({
   args: { klass: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const scope = classScoped(user);
+    const klassNames = scope ? [scope] : CLASS_OPTIONS;
     const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
     const attendance = await ctx.db.query("attendance").collect();
     const memberRows = attendance.filter((a) => a.subjectType === "member");
 
-    return CLASS_OPTIONS.map((klassName) => {
+    return klassNames.map((klassName) => {
       if (args.klass && args.klass !== klassName) return null;
       const classMembers = members.filter((m) => m.klass === klassName);
       const ids = new Set(classMembers.map((m) => m._id));
@@ -220,7 +228,10 @@ export const lowAttendance = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
-    const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
+    const scope = classScoped(user);
+    const members = (await ctx.db.query("members").collect()).filter(
+      (m) => !m.isDeleted && (!scope || m.klass === scope),
+    );
     const attendance = await ctx.db.query("attendance").collect();
     const now = new Date();
     const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000)

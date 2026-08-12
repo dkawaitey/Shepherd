@@ -5,7 +5,7 @@ import {
   STAGE_ORDER,
   STAGE_LABELS,
 } from "./constants";
-import { getCurrentUser } from "./helpers";
+import { getCurrentUser, classScoped } from "./helpers";
 
 /** All journey timeline events (for milestone checkmarks on contact cards). */
 export const journeyEventsAll = query({
@@ -13,7 +13,15 @@ export const journeyEventsAll = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
-    const events = await ctx.db.query("journeyEvents").collect();
+    const scope = classScoped(user);
+    let events = await ctx.db.query("journeyEvents").collect();
+    if (scope) {
+      const contacts = await ctx.db.query("contacts").collect();
+      const ids = new Set(
+        contacts.filter((c) => c.klass === scope).map((c) => c._id),
+      );
+      events = events.filter((e) => ids.has(e.contactId));
+    }
     events.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
     return events;
   },
@@ -24,8 +32,9 @@ export const stats = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) return null;
+    const scope = classScoped(user);
 
-    const [contacts, followUps, prayers, members, attendance] = await Promise.all([
+    const [allContacts, allFollowups, allPrayers, allMembers, allAttendance] = await Promise.all([
       ctx.db.query("contacts").collect(),
       ctx.db.query("followUps").collect(),
       ctx.db.query("prayerRequests").collect(),
@@ -33,8 +42,21 @@ export const stats = query({
       ctx.db.query("attendance").collect(),
     ]);
 
-    const live = contacts.filter((c) => !c.isDeleted);
-    const liveFollowups = followUps.filter((f) => !f.isDeleted);
+    const live = allContacts.filter((c) => !c.isDeleted && (!scope || c.klass === scope));
+    const liveIds = new Set(live.map((c) => c._id));
+    const liveFollowups = allFollowups.filter(
+      (f) => !f.isDeleted && (!scope || liveIds.has(f.contactId)),
+    );
+    const prayers = scope ? allPrayers.filter((p) => liveIds.has(p.contactId)) : allPrayers;
+    const liveMembers = allMembers.filter((m) => !m.isDeleted && (!scope || m.klass === scope));
+    const memberIds = new Set(liveMembers.map((m) => m._id));
+    const attendance = scope
+      ? allAttendance.filter(
+          (a) =>
+            (a.subjectType === "contact" && a.contactId && liveIds.has(a.contactId)) ||
+            (a.subjectType === "member" && a.memberId && memberIds.has(a.memberId)),
+        )
+      : allAttendance;
 
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
@@ -155,7 +177,6 @@ export const stats = query({
     const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
-    const liveMembers = members.filter((m) => !m.isDeleted);
     const memberAttendance = attendance.filter((a) => a.subjectType === "member" && a.date >= fourWeeksAgo);
     for (const m of liveMembers) {
       const attended = memberAttendance.some(

@@ -7,7 +7,7 @@ import {
   STAGE_LABELS,
   ROLES,
 } from "./constants";
-import { getCurrentUser, logAudit, nowIso, requireRole } from "./helpers";
+import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, classScoped, assertClassScope } from "./helpers";
 
 /** List follow-ups (optionally joined with contact name). Workers see their assigned contacts' follow-ups. */
 export const list = query({
@@ -22,12 +22,22 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
+    const scope = classScoped(user);
 
     let all = await ctx.db.query("followUps").collect();
     all = all.filter((f) => !f.isDeleted);
 
+    // Class leaders see follow-ups for contacts in their class only
+    if (scope) {
+      const contacts = await ctx.db.query("contacts").collect();
+      const mine = new Set(
+        contacts.filter((c) => c.klass === scope).map((c) => c._id),
+      );
+      all = all.filter((f) => mine.has(f.contactId));
+    }
+
     // Workers see follow-ups for their assigned contacts only
-    if (user.role === ROLES.WORKER) {
+    if (hasRole(user, ROLES.WORKER)) {
       const contacts = await ctx.db.query("contacts").collect();
       const mine = new Set(
         contacts
@@ -83,9 +93,10 @@ export const create = mutation({
     reminder: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.contactId);
     if (!contact || contact.isDeleted) throw new Error("Contact not found");
+    assertClassScope(user, contact.klass);
     if (!FOLLOWUP_TYPE_LABELS[args.type]) throw new Error("Invalid follow-up type");
 
     const id = await ctx.db.insert("followUps", {
@@ -121,12 +132,14 @@ export const update = mutation({
     reminder: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const f = await ctx.db.get(args.id);
     if (!f || f.isDeleted) throw new Error("Follow-up not found");
     if (f.status !== FOLLOWUP_STATUS.PENDING) {
       throw new Error("Only pending follow-ups can be edited");
     }
+    const fuContact = await ctx.db.get(f.contactId);
+    assertClassScope(user, fuContact?.klass);
     const patch: Record<string, unknown> = {};
     if (args.type !== undefined) patch.type = args.type;
     if (args.date !== undefined) patch.date = args.date;
@@ -156,11 +169,13 @@ export const changeStatus = mutation({
     reasonCancelled: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const f = await ctx.db.get(args.id);
     if (!f || f.isDeleted) throw new Error("Follow-up not found");
+    const fuContact = await ctx.db.get(f.contactId);
+    assertClassScope(user, fuContact?.klass);
 
-    if (f.locked && user.role !== ROLES.ADMIN) {
+    if (f.locked && !hasRole(user, ROLES.ADMIN)) {
       throw new Error("This follow-up status is locked. Only an administrator can override it.");
     }
 
@@ -259,10 +274,12 @@ export const adminOverride = mutation({
 export const remove = mutation({
   args: { id: v.id("followUps") },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const f = await ctx.db.get(args.id);
     if (!f) throw new Error("Follow-up not found");
-    if (f.status !== FOLLOWUP_STATUS.PENDING && user.role !== ROLES.ADMIN) {
+    const fuContact = await ctx.db.get(f.contactId);
+    assertClassScope(user, fuContact?.klass);
+    if (f.status !== FOLLOWUP_STATUS.PENDING && !hasRole(user, ROLES.ADMIN)) {
       throw new Error("Only pending follow-ups can be deleted");
     }
     await ctx.db.patch(args.id, { isDeleted: true });

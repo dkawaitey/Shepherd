@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { ROLE_LABELS } from "@/convex/constants";
+import { formatRoles } from "@/components/shared";
 import { useMutation, useQuery } from "convex/react";
 import {
   BarChart3,
@@ -288,7 +288,7 @@ export function AppShell() {
                   {user?.email}
                 </div>
                 <Badge variant="secondary" className="mt-1.5 text-[10px]">
-                  {user?.role ? ROLE_LABELS[user.role] : "Pending role"}
+                  {formatRoles(user)}
                 </Badge>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

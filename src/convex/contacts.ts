@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { STAGE_ORDER, STAGES, STAGE_LABELS, ROLES } from "./constants";
-import { getCurrentUser, logAudit, nowIso, requireRole } from "./helpers";
+import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, classScoped, assertClassScope } from "./helpers";
 
 const contactFields = {
   fullName: v.string(),
@@ -99,10 +99,15 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
-    const isWorker = user.role === ROLES.WORKER;
+    const isWorker = hasRole(user, ROLES.WORKER);
+    const scope = classScoped(user);
 
     let contacts = await ctx.db.query("contacts").collect();
     contacts = contacts.filter((c) => !c.isDeleted);
+
+    if (scope) {
+      contacts = contacts.filter((c) => c.klass === scope);
+    }
 
     if (isWorker) {
       contacts = contacts.filter(
@@ -155,7 +160,8 @@ export const get = query({
     if (!user) return null;
     const contact = await ctx.db.get(args.id);
     if (!contact || contact.isDeleted) return null;
-    if (user.role === ROLES.WORKER && contact.assignedWorkerId !== user._id) {
+    assertClassScope(user, contact.klass);
+    if (hasRole(user, ROLES.WORKER) && contact.assignedWorkerId !== user._id) {
       throw new Error("You can only view contacts assigned to you");
     }
 
@@ -187,8 +193,10 @@ export const get = query({
 export const create = mutation({
   args: { ...contactFields, dateMetRequired: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const { dateMetRequired: _unused, ...data } = args;
+    const scope = classScoped(user);
+    if (scope) data.klass = scope; // class leaders can only create within their own class
     const dateMet = data.dateMet || nowIso();
     const membershipId = await nextMembershipId(ctx, data.areaShortcut || "", dateMet);
 
@@ -252,7 +260,11 @@ export const quickAdd = mutation({
     dateMet: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    const scope = classScoped(user);
+    if (scope) {
+      args.klass = scope; // class leaders can only create within their own class
+    }
     const dateMet = args.dateMet || nowIso();
     const membershipId = await nextMembershipId(ctx, args.areaShortcut || "", dateMet);
     const id = await ctx.db.insert("contacts", {
@@ -294,13 +306,16 @@ export const quickAdd = mutation({
 export const update = mutation({
   args: { id: v.id("contacts"), ...contactFields },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const { id, ...data } = args;
     const existing = await ctx.db.get(id);
     if (!existing || existing.isDeleted) throw new Error("Contact not found");
-    if (user.role === ROLES.WORKER && existing.assignedWorkerId !== user._id) {
+    assertClassScope(user, existing.klass);
+    if (hasRole(user, ROLES.WORKER) && existing.assignedWorkerId !== user._id) {
       throw new Error("You can only edit contacts assigned to you");
     }
+    const scope = classScoped(user);
+    if (scope) data.klass = scope; // a class leader cannot move a contact out of their class
     await ctx.db.patch(id, { ...data, updatedAt: Date.now() });
     await logAudit(ctx, {
       action: "contact.update",
@@ -337,9 +352,10 @@ export const setStage = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
     if (!contact) throw new Error("Contact not found");
+    assertClassScope(user, contact.klass);
     if (!STAGE_ORDER.includes(args.stage as any)) throw new Error("Invalid stage");
     const stage = args.stage as (typeof STAGE_ORDER)[number];
     const date = (args.date || nowIso()).slice(0, 10);
@@ -401,9 +417,10 @@ export const addJourneyEvent = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
     if (!contact) throw new Error("Contact not found");
+    assertClassScope(user, contact.klass);
     await ctx.db.insert("journeyEvents", {
       contactId: args.id,
       stage: args.stage || contact.status || STAGES.REACHED,
@@ -427,7 +444,7 @@ export const addJourneyEvent = mutation({
 export const findDuplicates = query({
   args: { fullName: v.optional(v.string()), phone: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const all = await ctx.db.query("contacts").collect();
     const live = all.filter((c) => !c.isDeleted);
     const name = (args.fullName || "").toLowerCase().trim();

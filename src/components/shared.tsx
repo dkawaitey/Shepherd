@@ -1,12 +1,29 @@
 import { cn } from "@/lib/utils";
 import {
   FOLLOWUP_STATUS_COLORS,
+  ROLE_LABELS,
   STAGE_LABELS,
   FollowupStatus,
+  Role,
   Stage,
 } from "@/convex/constants";
 import { ReactNode } from "react";
 import { Inbox } from "lucide-react";
+
+/** Human-readable labels for every role a user holds (e.g. "Administrator + Class Leader"). */
+export function formatRoles(user?: {
+  role?: string;
+  roles?: string[];
+  classScope?: string;
+} | null) {
+  const roles = user?.roles?.length ? user.roles : user?.role ? [user.role] : [];
+  const labels = roles.map((r) => ROLE_LABELS[r as Role] ?? r);
+  const base = labels.length ? labels.join(" + ") : "Pending role";
+  if (user?.classScope && roles.includes("classLeader")) {
+    return `${base} · ${user.classScope}`;
+  }
+  return base;
+}
 
 export function StatusPill({
   status,

@@ -16,6 +16,7 @@ export const roleValidator = v.union(
   v.literal("coordinator"),
   v.literal("worker"),
   v.literal("leader"),
+  v.literal("classLeader"),
 );
 
 const schema = defineSchema(
@@ -31,7 +32,9 @@ const schema = defineSchema(
       emailVerificationTime: v.optional(v.number()), // do not remove
       isAnonymous: v.optional(v.boolean()), // do not remove
 
-      role: v.optional(roleValidator), // role of the user
+      role: v.optional(roleValidator), // primary role (kept for display / back-compat)
+      roles: v.optional(v.array(v.string())), // all assigned roles (a user may hold several)
+      classScope: v.optional(v.string()), // class a Class Leader is locked to (Millison/Reuben/Jacob/Romina)
       phone: v.optional(v.string()), // contact number for workers
     }).index("email", ["email"]), // do not remove or modify
 

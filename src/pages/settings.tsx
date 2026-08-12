@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -14,10 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  CLASS_OPTIONS,
   ROLE_LABELS,
+  ROLE_NOTES,
   ROLES,
+  Role,
 } from "@/convex/constants";
-import { PageHeader, fmtDateTime, downloadCsv } from "@/components/shared";
+import { PageHeader, fmtDateTime, downloadCsv, formatRoles } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
   Download,
@@ -94,9 +106,39 @@ export default function Settings() {
 
 function UsersTab() {
   const users = useQuery(api.users.list);
-  const setRole = useMutation(api.users.setRole);
+  const setRoles = useMutation(api.users.setRoles);
   const removeUser = useMutation(api.users.removeUser);
   const me = useQuery(api.users.currentUser);
+  const [editing, setEditing] = useState<{
+    user: NonNullable<typeof users>[number];
+    roles: string[];
+    classScope: string;
+  } | null>(null);
+
+  const openEditor = (u: NonNullable<typeof users>[number]) => {
+    const current = u.roles?.length ? [...u.roles] : u.role ? [u.role] : [];
+    setEditing({ user: u, roles: current, classScope: u.classScope ?? "" });
+  };
+
+  const saveRoles = async () => {
+    if (!editing) return;
+    await setRoles({
+      userId: editing.user._id,
+      roles: editing.roles,
+      classScope: editing.classScope || undefined,
+    });
+    toast.success("Roles updated");
+    setEditing(null);
+  };
+
+  const toggleRole = (k: string) => {
+    setEditing((e) => {
+      if (!e) return e;
+      const active = e.roles.includes(k);
+      const roles = active ? e.roles.filter((r) => r !== k) : [...e.roles, k];
+      return { ...e, roles };
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -106,18 +148,16 @@ function UsersTab() {
           <p className="term-label">create & manage ministry users</p>
         </div>
         <p className="text-[11px] leading-5 text-muted-foreground">
-          Users sign up with their email from the sign-in page, then an administrator assigns their role here.
-          Roles control what each person can see and do across the system.
+          Users sign up with their email from the sign-in page, then an administrator assigns roles here.
+          A user may hold several roles — for example Administrator plus Class Leader. A Class Leader is
+          locked to a single class and can manage contacts, workers, follow-ups, prayers and notes there.
         </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           {Object.entries(ROLE_LABELS).map(([k, v]) => (
             <div key={k} className="rounded-md border bg-muted/40 p-2.5">
               <div className="text-[11px] font-bold">{v}</div>
               <div className="text-[9px] leading-4 text-muted-foreground">
-                {k === ROLES.ADMIN && "Full access, audit logs, settings, member control"}
-                {k === ROLES.COORDINATOR && "Add contacts, assign workers, schedule, reports"}
-                {k === ROLES.WORKER && "Assigned contacts, visits, prayers, progress"}
-                {k === ROLES.LEADER && "View statistics, reports and dashboards only"}
+                {ROLE_NOTES[k as Role]}
               </div>
             </div>
           ))}
@@ -129,7 +169,7 @@ function UsersTab() {
           <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">User</th>
-              <th className="px-3 py-2">Role</th>
+              <th className="px-3 py-2">Roles</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
@@ -142,54 +182,126 @@ function UsersTab() {
                     </td>
                   </tr>
                 ))
-              : users.map((u) => (
-                  <tr key={u._id} className="border-t">
-                    <td className="px-3 py-2.5">
-                      <div className="font-semibold">{u.name || "—"}</div>
-                      <div className="text-[10px] text-muted-foreground">{u.email}</div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <Select
-                        value={u.role ?? ""}
-                        onValueChange={async (v) => {
-                          await setRole({ userId: u._id, role: v });
-                          toast.success(`Role updated → ${ROLE_LABELS[v as keyof typeof ROLE_LABELS]}`);
-                        }}
-                        disabled={u._id === me?._id}
-                      >
-                        <SelectTrigger className="w-52">
-                          <SelectValue placeholder="No role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                            <SelectItem key={k} value={k}>{v}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      {u._id !== me?._id && u.role && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={async () => {
-                            await removeUser({ userId: u._id });
-                            toast.success("User removed");
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+              : users.map((u) => {
+                  const roleList = u.roles?.length ? u.roles : u.role ? [u.role] : [];
+                  return (
+                    <tr key={u._id} className="border-t">
+                      <td className="px-3 py-2.5">
+                        <div className="font-semibold">{u.name || "—"}</div>
+                        <div className="text-[10px] text-muted-foreground">{u.email}</div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {roleList.length === 0 ? (
+                            <span className="text-[11px] text-muted-foreground">Pending role</span>
+                          ) : (
+                            roleList.map((r) => (
+                              <Badge key={r} variant="secondary" className="text-[10px]">
+                                {ROLE_LABELS[r as Role] ?? r}
+                              </Badge>
+                            ))
+                          )}
+                          {u.classScope && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {u.classScope} Class
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {u._id !== me?._id && (
+                            <Button variant="ghost" size="sm" onClick={() => openEditor(u)}>
+                              Edit roles
+                            </Button>
+                          )}
+                          {u._id === me?._id && (
+                            <span className="pr-2 text-[10px] text-muted-foreground">You</span>
+                          )}
+                          {u._id !== me?._id && roleList.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={async () => {
+                                await removeUser({ userId: u._id });
+                                toast.success("User removed");
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
           </tbody>
         </table>
       </div>
       <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
         <ShieldCheck className="h-3 w-3" /> The first account to sign in becomes the Administrator automatically.
       </p>
+
+      {/* Role editor */}
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Roles — {editing?.user.name ?? editing?.user.email}</DialogTitle>
+            <DialogDescription>
+              A user may hold several roles. A Class Leader is locked to the class you assign here.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {Object.entries(ROLE_LABELS).map(([k, v]) => {
+              const active = editing?.roles.includes(k) ?? false;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => toggleRole(k)}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                    active
+                      ? "border-primary/60 bg-primary/10"
+                      : "hover:bg-muted",
+                  )}
+                >
+                  <span>
+                    <span className="block font-semibold">{v}</span>
+                    <span className="block text-[10px] text-muted-foreground">{ROLE_NOTES[k as Role]}</span>
+                  </span>
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", active ? "bg-primary" : "bg-border")} />
+                </button>
+              );
+            })}
+            {editing?.roles.includes(ROLES.CLASS_LEADER) && (
+              <div className="pt-1">
+                <Label className="text-[11px]">Class scope</Label>
+                <Select
+                  value={editing.classScope}
+                  onValueChange={(v) => setEditing((e) => (e ? { ...e, classScope: v } : e))}
+                >
+                  <SelectTrigger className="mt-1 w-full">
+                    <SelectValue placeholder="Select class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLASS_OPTIONS.map((c) => (
+                      <SelectItem key={c} value={c}>{c} Class</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={saveRoles} disabled={!editing?.roles.length}>
+              Save roles
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -223,8 +335,8 @@ function ProfileTab() {
             <Input className="mt-1" value={me?.email ?? ""} disabled />
           </div>
           <div>
-            <Label>Role</Label>
-            <Input className="mt-1" value={me?.role ? ROLE_LABELS[me.role] : "Pending role"} disabled />
+            <Label>Roles</Label>
+            <Input className="mt-1" value={formatRoles(me)} disabled />
           </div>
           <Button
             onClick={async () => {

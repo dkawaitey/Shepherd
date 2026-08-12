@@ -1,6 +1,16 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { QueryCtx, MutationCtx } from "./_generated/server";
-import { ROLES, Role } from "./constants";
+import { ROLES, Role, CLASS_OPTIONS } from "./constants";
+
+export type CurrentUser = {
+  _id: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  roles?: string[];
+  classScope?: string;
+  [key: string]: unknown;
+};
 
 export const getCurrentUser = async (ctx: QueryCtx | MutationCtx) => {
   const userId = await getAuthUserId(ctx);
@@ -10,6 +20,43 @@ export const getCurrentUser = async (ctx: QueryCtx | MutationCtx) => {
   return { ...user, _id: userId };
 };
 
+/** True if the user holds the given role (admins implicitly hold every role). */
+export const hasRole = (user: CurrentUser | null | undefined, role: string) => {
+  if (!user) return false;
+  if (user.role === ROLES.ADMIN) return true;
+  const all = user.roles?.length ? user.roles : user.role ? [user.role] : [];
+  return all.includes(role);
+};
+
+/** Every role a user holds (admins count as admin only — not implicitly everything for display). */
+export const userRoles = (user: CurrentUser | null | undefined): string[] => {
+  if (!user) return [];
+  if (user.roles?.length) return user.roles;
+  return user.role ? [user.role] : [];
+};
+
+/** True for a plain class leader (a class leader who is not also an admin). */
+export const isScopedClassLeader = (user: CurrentUser | null | undefined) =>
+  !!user && !hasRole(user, ROLES.ADMIN) && hasRole(user, ROLES.CLASS_LEADER);
+
+/** The class a user is locked to, or undefined for unscoped users. */
+export const classScoped = (user: CurrentUser | null | undefined): string | undefined => {
+  if (!user) return undefined;
+  if (hasRole(user, ROLES.ADMIN)) return undefined;
+  return hasRole(user, ROLES.CLASS_LEADER) ? user.classScope : undefined;
+};
+
+/** Throws if the user is a class leader and the record's class is outside their scope. */
+export const assertClassScope = (
+  user: CurrentUser | null | undefined,
+  klass: string | undefined | null,
+) => {
+  const scope = classScoped(user);
+  if (scope && klass !== scope) {
+    throw new Error(`You can only work with ${scope} Class records`);
+  }
+};
+
 /** Throws unless the signed-in user has one of the allowed roles (admin always passes). */
 export const requireRole = async (
   ctx: MutationCtx | QueryCtx,
@@ -17,8 +64,8 @@ export const requireRole = async (
 ) => {
   const user = await getCurrentUser(ctx);
   if (!user) throw new Error("Not authenticated");
-  if (user.role === ROLES.ADMIN) return user;
-  if (user.role && (roles as string[]).includes(user.role)) return user;
+  if (hasRole(user, ROLES.ADMIN)) return user;
+  if (roles.some((r) => hasRole(user, r))) return user;
   throw new Error("You do not have permission to perform this action");
 };
 
@@ -28,6 +75,10 @@ export const requireAdmin = async (ctx: MutationCtx | QueryCtx) => {
 };
 
 export const isAdmin = (role?: string) => role === ROLES.ADMIN;
+
+/** Validates that a class scope value is one of the four ministry classes. */
+export const validClassScope = (scope?: string) =>
+  !!scope && CLASS_OPTIONS.includes(scope as (typeof CLASS_OPTIONS)[number]);
 
 export const logAudit = async (
   ctx: MutationCtx,

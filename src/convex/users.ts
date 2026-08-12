@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
-import { logAudit, requireAdmin, requireRole } from "./helpers";
+import { logAudit, requireAdmin, requireRole, hasRole, validClassScope } from "./helpers";
 import { ROLES, ROLE_LABELS, Role } from "./constants";
 
 /**
@@ -48,13 +48,62 @@ export const list = query({
         name: u.name,
         email: u.email,
         role: u.role,
+        roles: u.roles,
+        classScope: u.classScope,
         phone: u.phone,
         createdAt: (u as { createdAt?: number }).createdAt ?? 0,
       }));
   },
 });
 
-/** Assign or change a user's role. Admin only. */
+/**
+ * Assign a user's roles (a user may hold several, e.g. Administrator + Class
+ * Leader). A Class Leader must also be given a classScope to be locked to.
+ * Admin only.
+ */
+export const setRoles = mutation({
+  args: {
+    userId: v.id("users"),
+    roles: v.array(v.string()),
+    classScope: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const valid: Role[] = [
+      ROLES.ADMIN,
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.LEADER,
+      ROLES.CLASS_LEADER,
+    ];
+    const unique = [...new Set(args.roles)];
+    if (unique.length === 0) throw new Error("At least one role is required");
+    if (unique.some((r) => !valid.includes(r as Role))) {
+      throw new Error("Invalid role");
+    }
+    const isClassLeader = unique.includes(ROLES.CLASS_LEADER);
+    const scope = args.classScope?.trim() || undefined;
+    if (isClassLeader && !validClassScope(scope)) {
+      throw new Error("A Class Leader must be assigned to one of the four classes");
+    }
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new Error("User not found");
+    await ctx.db.patch(args.userId, {
+      roles: unique,
+      role: unique[0] as Role, // primary role for display / back-compat
+      classScope: isClassLeader ? scope : undefined,
+      name: target.name,
+    });
+    await logAudit(ctx, {
+      action: "role.change",
+      entityType: "users",
+      entityId: args.userId,
+      details: `${target.email} -> ${unique.map((r) => ROLE_LABELS[r as Role]).join(" + ")}${scope ? ` (${scope})` : ""}`,
+    });
+  },
+});
+
+/** Back-compat single-role setter, kept for callers that pass one role. */
 export const setRole = mutation({
   args: { userId: v.id("users"), role: v.string() },
   handler: async (ctx, args) => {
@@ -64,6 +113,7 @@ export const setRole = mutation({
       ROLES.COORDINATOR,
       ROLES.WORKER,
       ROLES.LEADER,
+      ROLES.CLASS_LEADER,
     ];
     if (!valid.includes(args.role as Role)) {
       throw new Error("Invalid role");
@@ -72,6 +122,7 @@ export const setRole = mutation({
     if (!target) throw new Error("User not found");
     await ctx.db.patch(args.userId, {
       role: args.role as Role,
+      roles: [args.role as Role],
       name: target.name,
     });
     await logAudit(ctx, {
@@ -87,7 +138,7 @@ export const setRole = mutation({
 export const updateProfile = mutation({
   args: { name: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.LEADER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.LEADER, ROLES.CLASS_LEADER]);
     await ctx.db.patch(user._id, { name: args.name, phone: args.phone });
   },
 });
@@ -102,9 +153,9 @@ export const bootstrapAdmin = mutation({
     const user = await getCurrentUser(ctx);
     if (!user || user.role) return;
     const admins = await ctx.db.query("users").collect();
-    const hasAdmin = admins.some((u) => u.role === ROLES.ADMIN);
+    const hasAdmin = admins.some((u) => u.role === ROLES.ADMIN || hasRole(u, ROLES.ADMIN));
     if (!hasAdmin) {
-      await ctx.db.patch(user._id, { role: ROLES.ADMIN });
+      await ctx.db.patch(user._id, { role: ROLES.ADMIN, roles: [ROLES.ADMIN] });
       await logAudit(ctx, {
         action: "user.bootstrap",
         entityType: "users",

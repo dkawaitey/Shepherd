@@ -6,7 +6,7 @@ import {
   STAGE_ORDER,
   STAGE_LABELS,
 } from "./constants";
-import { getCurrentUser } from "./helpers";
+import { getCurrentUser, classScoped } from "./helpers";
 
 const monthKey = (ts: number) => {
   const d = new Date(ts);
@@ -18,8 +18,9 @@ export const overview = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return null;
+    const scope = classScoped(user);
 
-    const [contacts, followUps, bibleStudies, attendance, prayers] = await Promise.all([
+    const [allContacts, allFollowups, allBibleStudies, allAttendance, allPrayers] = await Promise.all([
       ctx.db.query("contacts").collect(),
       ctx.db.query("followUps").collect(),
       ctx.db.query("bibleStudies").collect(),
@@ -27,8 +28,16 @@ export const overview = query({
       ctx.db.query("prayerRequests").collect(),
     ]);
 
-    const live = contacts.filter((c) => !c.isDeleted);
-    const liveFollowups = followUps.filter((f) => !f.isDeleted);
+    const live = allContacts.filter((c) => !c.isDeleted && (!scope || c.klass === scope));
+    const liveIds = new Set(live.map((c) => c._id));
+    const liveFollowups = allFollowups.filter(
+      (f) => !f.isDeleted && (!scope || liveIds.has(f.contactId)),
+    );
+    const bibleStudies = scope ? allBibleStudies.filter((b) => liveIds.has(b.contactId)) : allBibleStudies;
+    const prayers = scope ? allPrayers.filter((p) => liveIds.has(p.contactId)) : allPrayers;
+    const attendance = scope
+      ? allAttendance.filter((a) => a.contactId && liveIds.has(a.contactId))
+      : allAttendance;
     const inRange = (ts: number) => (!args.from || ts >= new Date(args.from).getTime()) && (!args.to || ts <= new Date(args.to).getTime());
     const inRangeDate = (d: string) => (!args.from || d >= args.from) && (!args.to || d <= args.to);
 

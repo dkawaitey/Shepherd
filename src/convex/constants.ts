@@ -5,6 +5,7 @@ export const ROLES = {
   COORDINATOR: "coordinator",
   WORKER: "worker",
   LEADER: "leader",
+  CLASS_LEADER: "classLeader",
 } as const;
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
@@ -13,6 +14,16 @@ export const ROLE_LABELS: Record<Role, string> = {
   [ROLES.COORDINATOR]: "Evangelism Coordinator",
   [ROLES.WORKER]: "Follow-up Worker",
   [ROLES.LEADER]: "Read-only Leader",
+  [ROLES.CLASS_LEADER]: "Class Leader",
+};
+
+/** Short capability notes shown in the Settings role picker. */
+export const ROLE_NOTES: Record<Role, string> = {
+  [ROLES.ADMIN]: "Full access, audit logs, settings, member control",
+  [ROLES.COORDINATOR]: "Add contacts, assign workers, schedule, reports",
+  [ROLES.WORKER]: "Assigned contacts, visits, prayers, progress",
+  [ROLES.LEADER]: "View statistics, reports and dashboards only",
+  [ROLES.CLASS_LEADER]: "Manage one class: contacts, workers, follow-ups, prayers, notes",
 };
 
 // Spiritual journey stages (contact.status = furthest stage reached)

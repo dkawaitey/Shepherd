@@ -1,7 +1,16 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { BIBLE_LESSONS, ROLES } from "./constants";
-import { getCurrentUser, logAudit, nowIso, requireRole } from "./helpers";
+import {
+  getCurrentUser,
+  logAudit,
+  nowIso,
+  requireRole,
+  hasRole,
+  classScoped,
+  assertClassScope,
+  isScopedClassLeader,
+} from "./helpers";
 
 // ================= Bible Studies =================
 
@@ -9,6 +18,9 @@ import { getCurrentUser, logAudit, nowIso, requireRole } from "./helpers";
 export const bibleStudiesForContact = query({
   args: { contactId: v.id("contacts") },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const contact = await ctx.db.get(args.contactId);
+    assertClassScope(user, contact?.klass);
     const rows = await ctx.db
       .query("bibleStudies")
       .withIndex("contactId", (q) => q.eq("contactId", args.contactId))
@@ -52,12 +64,13 @@ export const updateBibleStudy = mutation({
     questionsAskedByContact: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     if (args.lesson < 1 || args.lesson > BIBLE_LESSONS.length) {
       throw new Error("Invalid lesson number");
     }
     const contact = await ctx.db.get(args.contactId);
     if (!contact) throw new Error("Contact not found");
+    assertClassScope(user, contact.klass);
 
     if (args.status === "completed") {
       if (!args.instructorObservations?.trim()) {
@@ -138,7 +151,14 @@ export const recordAttendance = mutation({
     status: v.union(v.literal("present"), v.literal("absent"), v.literal("excused")),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    if (args.memberId && isScopedClassLeader(user)) {
+      throw new Error("Member attendance can only be recorded by administrators or coordinators");
+    }
+    if (args.contactId) {
+      const contact = await ctx.db.get(args.contactId);
+      assertClassScope(user, contact?.klass);
+    }
     const id = await ctx.db.insert("attendance", {
       subjectType: args.subjectType,
       contactId: args.contactId,
@@ -172,7 +192,14 @@ export const setAttendance = mutation({
     status: v.union(v.literal("present"), v.literal("absent"), v.literal("excused")),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    if (args.memberId && isScopedClassLeader(user)) {
+      throw new Error("Member attendance can only be recorded by administrators or coordinators");
+    }
+    if (args.contactId) {
+      const contact = await ctx.db.get(args.contactId);
+      assertClassScope(user, contact?.klass);
+    }
     const existing = await ctx.db
       .query("attendance")
       .filter((q) =>
@@ -216,7 +243,26 @@ export const listAttendance = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const scope = classScoped(user);
     let rows = await ctx.db.query("attendance").collect();
+    if (scope) {
+      const [contacts, members] = await Promise.all([
+        ctx.db.query("contacts").collect(),
+        ctx.db.query("members").collect(),
+      ]);
+      const contactIds = new Set(
+        contacts.filter((c) => c.klass === scope).map((c) => c._id),
+      );
+      const memberIds = new Set(
+        members.filter((m) => m.klass === scope).map((m) => m._id),
+      );
+      rows = rows.filter(
+        (r) =>
+          (r.subjectType === "contact" && r.contactId && contactIds.has(r.contactId)) ||
+          (r.subjectType === "member" && r.memberId && memberIds.has(r.memberId)),
+      );
+    }
     if (args.contactId) rows = rows.filter((r) => r.contactId === args.contactId);
     if (args.memberId) rows = rows.filter((r) => r.memberId === args.memberId);
     if (args.from) rows = rows.filter((r) => r.date >= args.from!);
@@ -238,9 +284,10 @@ export const addPrayer = mutation({
     confidential: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.contactId);
     if (!contact) throw new Error("Contact not found");
+    assertClassScope(user, contact.klass);
     const now = Date.now();
     const id = await ctx.db.insert("prayerRequests", {
       contactId: args.contactId,
@@ -269,9 +316,11 @@ export const updatePrayerStatus = mutation({
     answer: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const p = await ctx.db.get(args.id);
     if (!p) throw new Error("Prayer request not found");
+    const pContact = await ctx.db.get(p.contactId);
+    assertClassScope(user, pContact?.klass);
     if (args.status === "answered" && !args.answer?.trim()) {
       throw new Error("Describe how the prayer was answered");
     }
@@ -293,7 +342,16 @@ export const updatePrayerStatus = mutation({
 export const prayerFeed = query({
   args: { status: v.optional(v.string()), search: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const scope = classScoped(user);
     let prayers = await ctx.db.query("prayerRequests").collect();
+    if (scope) {
+      const contacts = await ctx.db.query("contacts").collect();
+      const ids = new Set(
+        contacts.filter((c) => c.klass === scope).map((c) => c._id),
+      );
+      prayers = prayers.filter((p) => ids.has(p.contactId));
+    }
     if (args.status) prayers = prayers.filter((p) => p.status === args.status);
     if (args.search) {
       const q = args.search.toLowerCase();
@@ -325,9 +383,10 @@ export const addNote = mutation({
     isPrivate: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.contactId);
     if (!contact) throw new Error("Contact not found");
+    assertClassScope(user, contact.klass);
     const id = await ctx.db.insert("notes", {
       contactId: args.contactId,
       author: user.name,
