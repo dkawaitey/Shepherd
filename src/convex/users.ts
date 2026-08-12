@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query, QueryCtx } from "./_generated/server";
+import { mutation, internalQuery, query, QueryCtx } from "./_generated/server";
 import { logAudit, requireAdmin, requireRole, hasRole, validClassScope } from "./helpers";
 import { ROLES, ROLE_LABELS, Role } from "./constants";
 
@@ -20,6 +20,12 @@ export const currentUser = query({
 
     return user;
   },
+});
+
+/** Look up a user by id — used by actions to verify roles (auth propagates to runQuery). */
+export const meById = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => ctx.db.get(args.userId),
 });
 
 /**

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, internalMutation, query } from "./_generated/server";
 import { getCurrentUser, requireAdmin, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
@@ -114,5 +114,61 @@ export const pushNotification = mutation({
       read: false,
       createdAt: Date.now(),
     });
+  },
+});
+
+/** Push a notification with no signed-in caller (used by cron/actions). */
+export const pushNotificationInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    title: v.string(),
+    message: v.string(),
+    type: v.optional(v.string()),
+    link: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("notifications", {
+      userId: args.userId,
+      title: args.title,
+      message: args.message,
+      type: args.type,
+      link: args.link,
+      read: false,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Record an outbound email (transport layer). */
+export const logEmail = internalMutation({
+  args: {
+    to: v.string(),
+    subject: v.string(),
+    kind: v.string(),
+    userId: v.optional(v.id("users")),
+    status: v.union(v.literal("sent"), v.literal("failed")),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("emailLogs", {
+      to: args.to,
+      subject: args.subject,
+      kind: args.kind,
+      userId: args.userId,
+      status: args.status,
+      error: args.error,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Recent outbound email log (admin only). */
+export const listEmailLogs = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const rows = await ctx.db.query("emailLogs").collect();
+    rows.sort((a, b) => b.createdAt - a.createdAt);
+    return rows.slice(0, args.limit ?? 20);
   },
 });

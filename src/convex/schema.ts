@@ -318,6 +318,17 @@ const schema = defineSchema(
       updatedAt: v.number(),
     }).index("key", ["key"]),
 
+    // ===== Sent emails (reminder digests, tests) =====
+    emailLogs: defineTable({
+      to: v.string(),
+      subject: v.string(),
+      kind: v.string(), // workerFollowups | classDigest | test
+      userId: v.optional(v.id("users")),
+      status: v.union(v.literal("sent"), v.literal("failed")),
+      error: v.optional(v.string()),
+      createdAt: v.number(),
+    }).index("createdAt", ["createdAt"]),
+
     // ===== Sequence counters (membership IDs, per area+date) =====
     counters: defineTable({
       name: v.string(),
