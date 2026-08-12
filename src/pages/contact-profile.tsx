@@ -207,7 +207,7 @@ export default function ContactProfile() {
             <span className="term-label">journey</span>
             {lastEvents.map((ev) => (
               <span key={ev._id} className="flex items-center gap-1 rounded-full border bg-accent/50 px-2 py-0.5">
-                <span className="text-[#4d7c0f]">✓</span> {ev.label}
+                <span className="text-[#86efac]">✓</span> {ev.label}
                 <span className="text-muted-foreground/60">{fmtDate(ev.date)}</span>
               </span>
             ))}
@@ -392,10 +392,10 @@ function OverviewTab({ contact, isWorkerLimited }: { contact: any; isWorkerLimit
               <Row label="Bible verses shared" value={contact.bibleVersesShared} />
             </div>
             <div className="col-span-2 flex gap-4 text-[12px] text-muted-foreground">
-              <span className={cn(contact.prayerOffered && "text-[#4d7c0f]")}>
+              <span className={cn(contact.prayerOffered && "text-[#86efac]")}>
                 {contact.prayerOffered ? "✓ Prayer offered" : "○ Prayer not offered"}
               </span>
-              <span className={cn(contact.gospelShared && "text-[#4d7c0f]")}>
+              <span className={cn(contact.gospelShared && "text-[#86efac]")}>
                 {contact.gospelShared ? "✓ Gospel shared" : "○ Gospel not shared"}
               </span>
             </div>
@@ -413,7 +413,7 @@ function OverviewTab({ contact, isWorkerLimited }: { contact: any; isWorkerLimit
         </section>
 
         {isWorkerLimited && (
-          <p className="rounded-md border border-[#b45309]/40 bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
+          <p className="rounded-md border border-[#f59e0b]/40 bg-[#2e2408] px-3 py-2 text-[11px] text-[#fbbf24]">
             You are viewing this contact as an assigned worker. Full contact details are visible to
             coordinators and administrators.
           </p>
@@ -608,9 +608,9 @@ function BibleStudiesTab({
                   <span className={cn(
                     "flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-bold",
                     status === "completed"
-                      ? "border-[#4d7c0f]/40 bg-[#ECFCCB] text-[#3F6212]"
+                      ? "border-[#86efac]/40 bg-[#15291c] text-[#86efac]"
                       : status === "inProgress"
-                        ? "border-[#b45309]/40 bg-[#FEF3C7] text-[#92400E]"
+                        ? "border-[#f59e0b]/40 bg-[#2e2408] text-[#fbbf24]"
                         : "border-border bg-muted text-muted-foreground",
                   )}>
                     {status === "completed" ? "✓" : i + 1}
@@ -849,7 +849,7 @@ function AttendanceTab({
       )}
 
       <div className="flex gap-4 text-[12px] text-muted-foreground">
-        <span>Attendance: <b className="text-[#4d7c0f]">{counts.present} present</b></span>
+        <span>Attendance: <b className="text-[#86efac]">{counts.present} present</b></span>
         <span>Total records: <b>{counts.total}</b></span>
       </div>
 
@@ -942,7 +942,7 @@ function PrayerTab({
               </div>
               <p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">{p.summary}</p>
               {p.answer && (
-                <p className="mt-2 rounded bg-[#ECFCCB]/60 px-2 py-1.5 text-[11px] text-[#3F6212]">
+                <p className="mt-2 rounded bg-[#15291c]/80 px-2 py-1.5 text-[11px] text-[#86efac]">
                   <b>Answered:</b> {p.answer}
                 </p>
               )}

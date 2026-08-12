@@ -16,22 +16,22 @@ export function StatusPill({
   className?: string;
 }) {
   const colors: Record<string, string> = {
-    pending: "bg-[#FEF3C7] text-[#92400E] border-[#F59E0B]/40",
-    completed: "bg-[#ECFCCB] text-[#3F6212] border-[#65A30D]/40",
-    missed: "bg-[#FEE2E2] text-[#991B1B] border-[#EF4444]/40",
-    cancelled: "bg-[#F3F4F6] text-[#4B5563] border-[#9CA3AF]/50",
-    active: "bg-[#FEF3C7] text-[#92400E] border-[#F59E0B]/40",
-    answered: "bg-[#ECFCCB] text-[#3F6212] border-[#65A30D]/40",
-    closed: "bg-[#F3F4F6] text-[#4B5563] border-[#9CA3AF]/50",
-    present: "bg-[#ECFCCB] text-[#3F6212] border-[#65A30D]/40",
-    absent: "bg-[#FEE2E2] text-[#991B1B] border-[#EF4444]/40",
-    excused: "bg-[#FEF3C7] text-[#92400E] border-[#F59E0B]/40",
-    male: "bg-[#E0E7FF] text-[#3730A3] border-[#6366F1]/40",
-    female: "bg-[#FCE7F3] text-[#9D174D] border-[#EC4899]/40",
-    inProgress: "bg-[#FEF3C7] text-[#92400E] border-[#F59E0B]/40",
-    notStarted: "bg-[#F3F4F6] text-[#4B5563] border-[#9CA3AF]/50",
-    activeMember: "bg-[#ECFCCB] text-[#3F6212] border-[#65A30D]/40",
-    inactive: "bg-[#F3F4F6] text-[#4B5563] border-[#9CA3AF]/50",
+    pending: "bg-[#2e2408] text-[#fbbf24] border-[#f59e0b]/40",
+    completed: "bg-[#15291c] text-[#86efac] border-[#4ade80]/30",
+    missed: "bg-[#331215] text-[#fca5a5] border-[#f87171]/40",
+    cancelled: "bg-[#1f251d] text-[#a3adb9] border-[#9ca3af]/40",
+    active: "bg-[#2e2408] text-[#fbbf24] border-[#f59e0b]/40",
+    answered: "bg-[#15291c] text-[#86efac] border-[#4ade80]/30",
+    closed: "bg-[#1f251d] text-[#a3adb9] border-[#9ca3af]/40",
+    present: "bg-[#15291c] text-[#86efac] border-[#4ade80]/30",
+    absent: "bg-[#331215] text-[#fca5a5] border-[#f87171]/40",
+    excused: "bg-[#2e2408] text-[#fbbf24] border-[#f59e0b]/40",
+    male: "bg-[#141c2e] text-[#93b4f8] border-[#6366f1]/40",
+    female: "bg-[#2e1422] text-[#f2a6cf] border-[#ec4899]/40",
+    inProgress: "bg-[#2e2408] text-[#fbbf24] border-[#f59e0b]/40",
+    notStarted: "bg-[#1f251d] text-[#a3adb9] border-[#9ca3af]/40",
+    activeMember: "bg-[#15291c] text-[#86efac] border-[#4ade80]/30",
+    inactive: "bg-[#1f251d] text-[#a3adb9] border-[#9ca3af]/40",
   };
   const statusLabels: Record<string, string> = {
     pending: "Pending",
@@ -63,11 +63,11 @@ export function StatusPill({
           background:
             FOLLOWUP_STATUS_COLORS[status as FollowupStatus] ??
             (status === "answered" || status === "completed" || status === "present"
-              ? "#4d7c0f"
+              ? "#86efac"
               : status === "pending" || status === "active" || status === "excused"
-                ? "#b45309"
+                ? "#fbbf24"
                 : status === "missed" || status === "absent"
-                  ? "#b3261e"
+                  ? "#f87171"
                   : "#9ca3af"),
         }}
       />
@@ -205,7 +205,7 @@ export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
 }
 
 export function progressColor(pct: number) {
-  if (pct >= 75) return "#4d7c0f";
-  if (pct >= 40) return "#b45309";
-  return "#b3261e";
+  if (pct >= 75) return "#86efac";
+  if (pct >= 40) return "#fbbf24";
+  return "#f87171";
 }

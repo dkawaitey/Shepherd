@@ -103,9 +103,9 @@ export default function BibleStudies() {
                         className={cn(
                           "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold",
                           b.status === "completed"
-                            ? "border-[#4d7c0f]/40 bg-[#ECFCCB] text-[#3F6212]"
+                            ? "border-[#86efac]/40 bg-[#15291c] text-[#86efac]"
                             : b.status === "inProgress"
-                              ? "border-[#b45309]/40 bg-[#FEF3C7] text-[#92400E]"
+                              ? "border-[#f59e0b]/40 bg-[#2e2408] text-[#fbbf24]"
                               : "border-border bg-muted text-muted-foreground",
                         )}
                       >

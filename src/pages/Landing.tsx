@@ -105,7 +105,7 @@ export default function Landing() {
             className="mx-auto max-w-3xl text-center"
           >
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-accent px-3 py-1 text-[11px] font-medium text-accent-foreground">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#4d7c0f]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#86b26f]" />
               discipleship management system · v1.0
             </div>
             <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
@@ -146,7 +146,7 @@ export default function Landing() {
               <div className="term-titlebar">
                 <span className="term-dot bg-[#f87171]" />
                 <span className="term-dot bg-[#fbbf24]" />
-                <span className="term-dot bg-[#4d7c0f]" />
+                <span className="term-dot bg-[#86b26f]" />
                 <span className="ml-2 text-[11px] text-muted-foreground">
                   shepherd — discipleship pipeline
                 </span>
@@ -155,19 +155,19 @@ export default function Landing() {
                 <p className="text-muted-foreground">
                   <span className="text-primary">$</span> shepherd init --ministry "gethsemane-ym"
                 </p>
-                <p className="text-[#4d7c0f]">✔ ministry configured · classes: millison, reuben, jacob, romina</p>
+                <p className="text-[#86efac]">✔ ministry configured · classes: millison, reuben, jacob, romina</p>
                 <p className="text-muted-foreground">
                   <span className="text-primary">$</span> shepherd outreach add "John Mensah" --area adjikpo
                 </p>
-                <p className="text-[#4d7c0f]">✔ membership ID generated: AD-0408-2026-001</p>
+                <p className="text-[#86efac]">✔ membership ID generated: AD-0408-2026-001</p>
                 <p className="text-muted-foreground">
                   <span className="text-primary">$</span> shepherd followup schedule --type home-visit --date +3d
                 </p>
-                <p className="text-[#b45309]">◐ follow-up pending · assigned to Bro. Daniel</p>
+                <p className="text-[#fbbf24]">◐ follow-up pending · assigned to Bro. Daniel</p>
                 <p className="text-muted-foreground">
                   <span className="text-primary">$</span> shepherd followup complete --outcome "accepted bible study"
                 </p>
-                <p className="text-[#4d7c0f]">✔ timeline updated: first follow-up completed</p>
+                <p className="text-[#86efac]">✔ timeline updated: first follow-up completed</p>
                 <p className="text-muted-foreground">
                   <span className="text-primary">$</span> shepherd report --conversion-funnel
                 </p>
@@ -191,10 +191,10 @@ export default function Landing() {
             <div key={p.step} className="flex items-center gap-3 px-4 py-5">
               <span className="text-[10px] font-bold text-primary">{p.step}</span>
               <div>
-                <div className="text-[13px] font-semibold">{p.label}</div>
-                <div className="text-[10px] text-muted-foreground">
-                  {i < 4 ? "next →" : "forever"}
-                </div>
+              <div className="text-[13px] font-semibold">{p.label}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {i < 4 ? "→" : "→"}
+              </div>
               </div>
             </div>
           ))}
@@ -257,7 +257,7 @@ export default function Landing() {
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <div className="term-window border-primary/30 bg-accent/40">
           <div className="term-titlebar border-primary/20">
-            <span className="term-dot bg-[#4d7c0f]" />
+            <span className="term-dot bg-[#86b26f]" />
             <span className="ml-2 text-[11px] text-muted-foreground">ready when you are</span>
           </div>
           <div className="flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -287,7 +287,7 @@ export default function Landing() {
             <span className="text-primary">$</span> shepherd --ministry gethsemane-ym
           </span>
           <span className="flex items-center gap-1">
-            <Check className="h-3 w-3 text-[#4d7c0f]" /> Shepherd © {new Date().getFullYear()} · made with care
+            <Check className="h-3 w-3 text-[#86efac]" /> Built for Gethsemane Ministry Youth · {new Date().getFullYear()}
           </span>
         </div>
       </footer>

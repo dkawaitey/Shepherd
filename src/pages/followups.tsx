@@ -181,7 +181,7 @@ export function StatusChangeDialog({
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          <div className="rounded-md border border-[#b45309]/40 bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
+          <div className="rounded-md border border-[#f59e0b]/40 bg-[#2e2408] px-3 py-2 text-[11px] text-[#fbbf24]">
             Closing this window keeps the follow-up as <b>Pending</b> — nothing is saved until you submit.
             Once saved, the status is locked. Only an administrator can override it.
           </div>
@@ -422,9 +422,9 @@ export default function Followups() {
       {/* Legend */}
       <div className="mb-4 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
         <span className="term-label">status legend</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#b45309]" /> Pending</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#4d7c0f]" /> Completed</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#b3261e]" /> Missed</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#fbbf24]" /> Pending</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#86efac]" /> Completed</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#f87171]" /> Missed</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#9ca3af]" /> Cancelled</span>
       </div>
 

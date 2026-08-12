@@ -37,14 +37,14 @@ import {
 import { Link } from "react-router";
 
 const CARDS = [
-  { key: "totalReached", label: "Total People Reached", to: "/contacts", icon: Users, accent: "#5f7a52" },
-  { key: "activeFollowups", label: "Active Follow-ups", to: "/followups?status=pending", icon: CalendarCheck2, accent: "#b45309" },
-  { key: "newConverts", label: "New Converts", to: "/contacts?status=newConvert", icon: Target, accent: "#4d7c0f" },
-  { key: "baptized", label: "Baptized Members", to: "/contacts?status=baptized", icon: Baby, accent: "#7a9470" },
-  { key: "joinedChurch", label: "Joined Church", to: "/contacts?status=joinedChurch", icon: Church, accent: "#9caf88" },
-  { key: "completedDiscipleship", label: "Completed Discipleship", to: "/contacts?status=completedDiscipleship", icon: Crown, accent: "#a8b98e" },
-  { key: "missedFollowups", label: "Missed Follow-ups", to: "/followups?status=missed", icon: AlertTriangle, accent: "#b3261e" },
-  { key: "upcomingVisitsThisWeek", label: "Upcoming Visits This Week", to: "/followups?status=pending", icon: Flame, accent: "#b45309" },
+  { key: "totalReached", label: "Total People Reached", to: "/contacts", icon: Users, accent: "#9db392" },
+  { key: "activeFollowups", label: "Active Follow-ups", to: "/followups?status=pending", icon: CalendarCheck2, accent: "#fbbf24" },
+  { key: "newConverts", label: "New Converts", to: "/contacts?status=newConvert", icon: Target, accent: "#86b26f" },
+  { key: "baptized", label: "Baptized Members", to: "/contacts?status=baptized", icon: Baby, accent: "#a8c49d" },
+  { key: "joinedChurch", label: "Joined Church", to: "/contacts?status=joinedChurch", icon: Church, accent: "#bcd2b0" },
+  { key: "completedDiscipleship", label: "Completed Discipleship", to: "/contacts?status=completedDiscipleship", icon: Crown, accent: "#c2d4a8" },
+  { key: "missedFollowups", label: "Missed Follow-ups", to: "/followups?status=missed", icon: AlertTriangle, accent: "#f87171" },
+  { key: "upcomingVisitsThisWeek", label: "Upcoming Visits This Week", to: "/followups?status=pending", icon: Flame, accent: "#fbbf24" },
 ];
 
 // ---------- Month calendar ----------
@@ -162,9 +162,9 @@ function FollowupCalendar({ events }: { events: any[] }) {
       </div>
 
       <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#b45309]" /> Pending</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#4d7c0f]" /> Completed</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#b3261e]" /> Missed</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#fbbf24]" /> Pending</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#86efac]" /> Completed</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#f87171]" /> Missed</span>
         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#9ca3af]" /> Cancelled</span>
       </div>
 
@@ -202,6 +202,7 @@ function FollowupCalendar({ events }: { events: any[] }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const stats = useQuery(api.dashboard.stats);
+  const posts = useQuery(api.posts.list, {});
 
   if (!stats) {
     return (
@@ -231,7 +232,7 @@ export default function Dashboard() {
         </div>
         <p className="mt-1 text-[13px] text-muted-foreground">
           <span className="text-primary">$</span> shepherd status --live{" "}
-          <span className="text-[#4d7c0f]">// all counts from the database</span>
+          <span className="text-[#86efac]">// all counts from the database</span>
         </p>
       </div>
 
@@ -276,7 +277,7 @@ export default function Dashboard() {
                 </div>
                 <div className="h-3 overflow-hidden rounded-sm bg-muted">
                   <div
-                    className="h-full rounded-sm bg-[#7a9470] transition-all"
+                    className="h-full rounded-sm bg-[#8faf8a] transition-all"
                     style={{ width: `${Math.max(2, (f.count / maxFunnel) * 100)}%` }}
                   />
                 </div>
@@ -302,7 +303,7 @@ export default function Dashboard() {
                   </div>
                   <div className="h-3 overflow-hidden rounded-sm bg-muted">
                     <div
-                      className={cn("h-full rounded-sm", g.label === "Male" ? "bg-[#5f7a52]" : "bg-[#9caf88]")}
+                      className={cn("h-full rounded-sm", g.label === "Male" ? "bg-[#9db392]" : "bg-[#a8b98e]")}
                       style={{ width: `${(g.count / maxGender) * 100}%` }}
                     />
                   </div>
@@ -318,13 +319,13 @@ export default function Dashboard() {
               <HeartHandshake className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="mb-3 grid grid-cols-2 gap-2 text-center">
-              <div className="rounded-md border border-[#b45309]/30 bg-[#FEF3C7] py-2">
-                <div className="font-mono text-lg font-bold text-[#92400E]">{stats.prayers.activeCount}</div>
-                <div className="text-[9px] uppercase tracking-wide text-[#92400E]">active requests</div>
+              <div className="rounded-md border border-[#f59e0b]/40 bg-[#2e2408] py-2">
+                <div className="font-mono text-lg font-bold text-[#fbbf24]">{stats.prayers.activeCount}</div>
+                <div className="text-[9px] uppercase tracking-wide text-[#fbbf24]">active requests</div>
               </div>
-              <div className="rounded-md border border-[#4d7c0f]/30 bg-[#ECFCCB] py-2">
-                <div className="font-mono text-lg font-bold text-[#3F6212]">{stats.prayers.answeredCount}</div>
-                <div className="text-[9px] uppercase tracking-wide text-[#3F6212]">answered</div>
+              <div className="rounded-md border border-[#86efac]/40 bg-[#15291c] py-2">
+                <div className="font-mono text-lg font-bold text-[#86efac]">{stats.prayers.answeredCount}</div>
+                <div className="text-[9px] uppercase tracking-wide text-[#86efac]">answered</div>
               </div>
             </div>
             <div className="space-y-2">
@@ -336,7 +337,7 @@ export default function Dashboard() {
                 >
                   <span className={cn(
                     "mt-1 h-1.5 w-1.5 shrink-0 rounded-full",
-                    p.status === "active" ? "bg-[#b45309]" : p.status === "answered" ? "bg-[#4d7c0f]" : "bg-[#9ca3af]",
+                    p.status === "active" ? "bg-[#fbbf24]" : p.status === "answered" ? "bg-[#86efac]" : "bg-[#9ca3af]",
                   )} />
                   <span className="min-w-0">
                     <span className="block truncate text-[11px] font-semibold">{p.contactName}</span>
@@ -381,10 +382,10 @@ export default function Dashboard() {
                 <Link
                   key={i}
                   to={r.link}
-                  className="block rounded-md border border-[#b45309]/30 bg-[#FEF3C7]/60 p-2.5 transition-colors hover:border-[#b45309]/60"
+                  className="block rounded-md border border-[#f59e0b]/40 bg-[#2e2408]/80 p-2.5 transition-colors hover:border-[#f59e0b]/70"
                 >
-                  <div className="text-[11px] font-bold text-[#92400E]">{r.title}</div>
-                  <div className="mt-0.5 text-[10px] leading-4 text-[#92400E]/80">{r.message}</div>
+                  <div className="text-[11px] font-bold text-[#fbbf24]">{r.title}</div>
+                  <div className="mt-0.5 text-[10px] leading-4 text-[#fbbf24]/80">{r.message}</div>
                 </Link>
               ))}
             </div>
@@ -408,6 +409,44 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Latest team updates */}
+      <div className="rounded-lg border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="term-label">latest updates</p>
+          <Link to="/announcements" className="text-[10px] text-primary hover:underline">
+            all posts →
+          </Link>
+        </div>
+        {(posts ?? []).length === 0 ? (
+          <p className="py-3 text-center text-[11px] text-muted-foreground">
+            No team posts yet — share the first update in Announcements.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {(posts ?? []).slice(0, 4).map((p) => (
+              <Link
+                key={p._id}
+                to="/announcements"
+                className="flex items-start gap-2.5 rounded-md border border-transparent p-2 transition-colors hover:border-primary/40 hover:bg-muted/40"
+              >
+                <span className="mt-0.5 text-[10px] font-bold text-primary">❯</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[12px] font-semibold">{p.title}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {p.author} · {fmtDate(new Date(p.createdAt).toISOString())}
+                  </span>
+                </span>
+                {p.commentCount > 0 && (
+                  <span className="ml-auto shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                    {p.commentCount} 💬
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Upcoming this week */}
       <div className="rounded-lg border bg-card p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -426,7 +465,7 @@ export default function Dashboard() {
                 to={`/contacts/${f.contactId}`}
                 className="flex items-center gap-3 rounded-md border p-2.5 transition-colors hover:border-primary/50 hover:bg-muted/40"
               >
-                <span className="h-2 w-2 shrink-0 rounded-full bg-[#b45309]" />
+                <span className="h-2 w-2 shrink-0 rounded-full bg-[#fbbf24]" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[12px] font-semibold">{f.contactName}</div>
                   <div className="text-[10px] text-muted-foreground">

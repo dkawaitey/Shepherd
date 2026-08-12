@@ -235,7 +235,7 @@ function ProfileTab() {
           >
             Save profile
           </Button>
-          {saved && <p className="text-[11px] text-[#4d7c0f]">✓ Saved</p>}
+          {saved && <p className="text-[11px] text-[#86efac]">✓ Saved</p>}
         </div>
       </div>
     </div>

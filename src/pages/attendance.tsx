@@ -125,7 +125,7 @@ export default function Attendance() {
           </Button>
         </div>
         {savedDate === date && (
-          <p className="mt-2 text-[11px] text-[#4d7c0f]">
+          <p className="mt-2 text-[11px] text-[#86efac]">
             ✓ Register saved for {fmtDate(date)} — editing overwrites records for the same date + activity.
           </p>
         )}
@@ -167,10 +167,10 @@ export default function Attendance() {
                             "rounded-md border px-2.5 py-1 text-[10px] font-medium transition-colors",
                             marks[m._id] === k
                               ? k === "present"
-                                ? "border-[#4d7c0f]/50 bg-[#ECFCCB] text-[#3F6212]"
+                                ? "border-[#86efac]/50 bg-[#15291c] text-[#86efac]"
                                 : k === "absent"
-                                  ? "border-[#b3261e]/50 bg-[#FEE2E2] text-[#991B1B]"
-                                  : "border-[#b45309]/50 bg-[#FEF3C7] text-[#92400E]"
+                                  ? "border-[#f87171]/50 bg-[#331215] text-[#fca5a5]"
+                                  : "border-[#f59e0b]/50 bg-[#2e2408] text-[#fbbf24]"
                               : "border-border text-muted-foreground hover:bg-muted",
                             !canRecord && "cursor-not-allowed opacity-50",
                           )}
@@ -190,7 +190,7 @@ export default function Attendance() {
       {/* Low attendance */}
       <div className="mt-6">
         <div className="mb-3 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-[#b45309]" />
+          <AlertTriangle className="h-4 w-4 text-[#fbbf24]" />
           <p className="term-label">members needing follow-up — low attendance</p>
         </div>
         {lowAttendance === undefined ? (
@@ -205,11 +205,11 @@ export default function Attendance() {
               <Link
                 key={r.member._id}
                 to={`/members/${r.member._id}`}
-                className="flex items-center justify-between gap-3 rounded-lg border border-[#b45309]/30 bg-[#FEF3C7]/60 px-4 py-3 transition-colors hover:border-[#b45309]/60"
+                className="flex items-center justify-between gap-3 rounded-lg border border-[#f59e0b]/40 bg-[#2e2408]/80 px-4 py-3 transition-colors hover:border-[#f59e0b]/70"
               >
                 <div>
-                  <div className="text-[13px] font-semibold text-[#92400E]">{r.member.fullName}</div>
-                  <div className="text-[10px] text-[#92400E]/80">
+                  <div className="text-[13px] font-semibold text-[#fbbf24]">{r.member.fullName}</div>
+                  <div className="text-[10px] text-[#fbbf24]/80">
                     Has not attended a youth meeting in 4 weeks. Consider follow-up.
                   </div>
                 </div>

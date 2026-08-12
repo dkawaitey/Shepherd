@@ -285,6 +285,28 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("createdAt", ["createdAt"]),
 
+    // ===== Team posts / announcements (internal content + comments) =====
+    posts: defineTable({
+      author: v.optional(v.string()),
+      authorId: v.optional(v.id("users")),
+      title: v.string(),
+      body: v.string(),
+      tags: v.optional(v.array(v.string())),
+      isPinned: v.optional(v.boolean()),
+      isDeleted: v.optional(v.boolean()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("createdAt", ["createdAt"]),
+
+    comments: defineTable({
+      postId: v.id("posts"),
+      author: v.optional(v.string()),
+      authorId: v.optional(v.id("users")),
+      body: v.string(),
+      isDeleted: v.optional(v.boolean()),
+      createdAt: v.number(),
+    }).index("postId", ["postId"]),
+
     // ===== Ministry settings (key/value) =====
     settings: defineTable({
       key: v.string(),

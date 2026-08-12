@@ -14,6 +14,7 @@ import {
   HandHeart,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Menu,
   ScrollText,
   Settings,
@@ -47,6 +48,7 @@ const NAV = [
   { to: "/members", label: "Members", icon: ScrollText, code: "mem" },
   { to: "/attendance", label: "Attendance", icon: ClipboardList, code: "att" },
   { to: "/prayer-journal", label: "Prayer Journal", icon: HandHeart, code: "pray" },
+  { to: "/announcements", label: "Announcements", icon: Megaphone, code: "ann" },
   { to: "/reports", label: "Reports", icon: FileBarChart, code: "rpt" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, code: "anl" },
   { to: "/settings", label: "Settings", icon: Settings, code: "cfg" },
@@ -69,7 +71,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <div className="mx-5 mb-3 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-1.5 text-[11px] text-muted-foreground">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#4d7c0f] animate-pulse" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[#86b26f] animate-pulse" />
         <span>
           gethsemane-ym <span className="opacity-60">// connected</span>
         </span>
@@ -222,7 +224,7 @@ export function AppShell() {
                       markAllRead();
                     }}
                   >
-                    <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", n.read ? "bg-border" : "bg-[#b45309]")} />
+                    <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", n.read ? "bg-border" : "bg-[#fbbf24]")} />
                     <span>
                       <span className="block text-xs font-semibold">{n.title}</span>
                       <span className="block text-[11px] text-muted-foreground">{n.message}</span>

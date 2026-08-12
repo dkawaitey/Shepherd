@@ -118,11 +118,12 @@ export const FOLLOWUP_STATUS_LABELS: Record<FollowupStatus, string> = {
 };
 
 // Status color coding: pending -> amber, completed -> green, missed -> red, cancelled -> grey
+// Brightened for the dark terminal palette.
 export const FOLLOWUP_STATUS_COLORS: Record<FollowupStatus, string> = {
-  [FOLLOWUP_STATUS.PENDING]: "#D97706",
-  [FOLLOWUP_STATUS.COMPLETED]: "#4D7C0F",
-  [FOLLOWUP_STATUS.MISSED]: "#DC2626",
-  [FOLLOWUP_STATUS.CANCELLED]: "#6B7280",
+  [FOLLOWUP_STATUS.PENDING]: "#f59e0b",
+  [FOLLOWUP_STATUS.COMPLETED]: "#86efac",
+  [FOLLOWUP_STATUS.MISSED]: "#f87171",
+  [FOLLOWUP_STATUS.CANCELLED]: "#9ca3af",
 };
 
 export const CLASSES = {

@@ -107,7 +107,7 @@ function ContactCard({
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
               title="Open WhatsApp"
-              className="flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:border-[#4d7c0f]/50 hover:text-[#4d7c0f]"
+              className="flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:border-[#86efac]/50 hover:text-[#86efac]"
             >
               <MessageCircle className="h-3.5 w-3.5" />
             </a>
@@ -128,7 +128,7 @@ function ContactCard({
         <StagePill stage={contact.status} />
         {events.slice(0, 2).map((label) => (
           <div key={label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="text-[#4d7c0f]">✓</span>
+            <span className="text-[#86efac]">✓</span>
             <span className="truncate">{label}</span>
           </div>
         ))}
@@ -612,7 +612,7 @@ export function ContactFormDialog({
           </section>
 
           {dupes.length > 0 && (
-            <div className="rounded-md border border-[#b45309]/40 bg-[#FEF3C7] px-3 py-2 text-xs text-[#92400E]">
+            <div className="rounded-md border border-[#f59e0b]/40 bg-[#2e2408] px-3 py-2 text-xs text-[#fbbf24]">
               <span className="font-semibold">Possible duplicates:</span>{" "}
               {dupes.map((d) => d.fullName).join(", ")} — check before adding.
             </div>

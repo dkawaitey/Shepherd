@@ -109,8 +109,8 @@ export default function Discipleship() {
                     className={cn(
                       "mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px]",
                       ev.source === "auto"
-                        ? "border-[#4d7c0f]/40 bg-[#ECFCCB] text-[#3F6212]"
-                        : "border-[#b45309]/40 bg-[#FEF3C7] text-[#92400E]",
+                        ? "border-[#86efac]/40 bg-[#15291c] text-[#86efac]"
+                        : "border-[#f59e0b]/40 bg-[#2e2408] text-[#fbbf24]",
                     )}
                   >
                     {ev.source === "auto" ? "✓" : "✎"}

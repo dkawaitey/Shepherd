@@ -44,76 +44,76 @@
     Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-/* Light Terminal theme — off-white surfaces, sage/moss green + amber accents.
-   A deliberately light palette: no dark terminal surfaces. */
+/* Premium dark terminal theme — near-black green surfaces, sage/moss green
+   and amber accents, monospace throughout. Clean, minimal, developer-facing. */
 :root {
   --radius: 0.5rem;
-  --background: #f7f6f2; /* light cream */
-  --foreground: #2e3329; /* deep moss grey-green */
-  --card: #fdfdfb;
-  --card-foreground: #2e3329;
-  --popover: #ffffff;
-  --popover-foreground: #2e3329;
-  --primary: #5f7a52; /* deep sage — readable on cream */
-  --primary-foreground: #fbfaf6;
-  --secondary: #efece2;
-  --secondary-foreground: #3c4436;
-  --muted: #efede4;
-  --muted-foreground: #6d7368;
-  --accent: #e7ede0; /* pale sage tint */
-  --accent-foreground: #3c4436;
-  --destructive: #b3261e;
-  --border: #e0dcd0;
-  --input: #dcd8cb;
-  --ring: #9caf88; /* moss green */
-  --chart-1: #7a9470; /* sage */
-  --chart-2: #b45309; /* amber (pending) */
-  --chart-3: #9caf88; /* moss */
-  --chart-4: #a8b98e; /* muted olive */
-  --chart-5: #4d7c0f; /* status green */
-  --sidebar: #fbfaf6;
-  --sidebar-foreground: #3c4436;
-  --sidebar-primary: #5f7a52;
-  --sidebar-primary-foreground: #fbfaf6;
-  --sidebar-accent: #e7ede0;
-  --sidebar-accent-foreground: #3c4436;
-  --sidebar-border: #e4e0d4;
-  --sidebar-ring: #9caf88;
+  --background: #0e110c; /* deep green-black */
+  --foreground: #e7ece1;
+  --card: #141813;
+  --card-foreground: #e7ece1;
+  --popover: #171b13;
+  --popover-foreground: #e7ece1;
+  --primary: #9db392; /* sage — reads on near-black */
+  --primary-foreground: #0d100b;
+  --secondary: #1b2118;
+  --secondary-foreground: #d8dfd1;
+  --muted: #191f16;
+  --muted-foreground: #93a08a;
+  --accent: #20271b;
+  --accent-foreground: #dbe3d5;
+  --destructive: #e5484d;
+  --border: #262d21;
+  --input: #2b3327;
+  --ring: #9db392;
+  --chart-1: #8faf8a; /* sage */
+  --chart-2: #d9a441; /* amber */
+  --chart-3: #a8b98e; /* muted olive */
+  --chart-4: #6f8f6a; /* moss */
+  --chart-5: #86b26f; /* status green */
+  --sidebar: #0c0f0a;
+  --sidebar-foreground: #d5dccd;
+  --sidebar-primary: #9db392;
+  --sidebar-primary-foreground: #0d100b;
+  --sidebar-accent: #1a2117;
+  --sidebar-accent-foreground: #e7ece1;
+  --sidebar-border: #22291d;
+  --sidebar-ring: #9db392;
 }
 
-/* Dark mode stays light — the product is a light terminal theme by design. */
+/* Dark mode mirrors the default — the product is dark by design. */
 .dark {
-  --background: #f7f6f2;
-  --foreground: #2e3329;
-  --card: #fdfdfb;
-  --card-foreground: #2e3329;
-  --popover: #ffffff;
-  --popover-foreground: #2e3329;
-  --primary: #5f7a52;
-  --primary-foreground: #fbfaf6;
-  --secondary: #efece2;
-  --secondary-foreground: #3c4436;
-  --muted: #efede4;
-  --muted-foreground: #6d7368;
-  --accent: #e7ede0;
-  --accent-foreground: #3c4436;
-  --destructive: #b3261e;
-  --border: #e0dcd0;
-  --input: #dcd8cb;
-  --ring: #9caf88;
-  --chart-1: #7a9470;
-  --chart-2: #b45309;
-  --chart-3: #9caf88;
-  --chart-4: #a8b98e;
-  --chart-5: #4d7c0f;
-  --sidebar: #fbfaf6;
-  --sidebar-foreground: #3c4436;
-  --sidebar-primary: #5f7a52;
-  --sidebar-primary-foreground: #fbfaf6;
-  --sidebar-accent: #e7ede0;
-  --sidebar-accent-foreground: #3c4436;
-  --sidebar-border: #e4e0d4;
-  --sidebar-ring: #9caf88;
+  --background: #0e110c;
+  --foreground: #e7ece1;
+  --card: #141813;
+  --card-foreground: #e7ece1;
+  --popover: #171b13;
+  --popover-foreground: #e7ece1;
+  --primary: #9db392;
+  --primary-foreground: #0d100b;
+  --secondary: #1b2118;
+  --secondary-foreground: #d8dfd1;
+  --muted: #191f16;
+  --muted-foreground: #93a08a;
+  --accent: #20271b;
+  --accent-foreground: #dbe3d5;
+  --destructive: #e5484d;
+  --border: #262d21;
+  --input: #2b3327;
+  --ring: #9db392;
+  --chart-1: #8faf8a;
+  --chart-2: #d9a441;
+  --chart-3: #a8b98e;
+  --chart-4: #6f8f6a;
+  --chart-5: #86b26f;
+  --sidebar: #0c0f0a;
+  --sidebar-foreground: #d5dccd;
+  --sidebar-primary: #9db392;
+  --sidebar-primary-foreground: #0d100b;
+  --sidebar-accent: #1a2117;
+  --sidebar-accent-foreground: #e7ece1;
+  --sidebar-border: #22291d;
+  --sidebar-ring: #9db392;
 }
 
 @layer base {
@@ -129,8 +129,8 @@
     cursor: pointer;
   }
   ::selection {
-    background: #9caf88;
-    color: #fbfaf6;
+    background: #8faf8a;
+    color: #0d100b;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -140,12 +140,12 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #d5d1c3;
+    background: #2b3327;
     border-radius: 6px;
-    border: 2px solid #f7f6f2;
+    border: 2px solid #0e110c;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #9caf88;
+    background: #8faf8a;
   }
 }
 
@@ -153,7 +153,7 @@
   /* Terminal prompt styling */
   .term-prompt::before {
     content: "❯ ";
-    color: #7a9470;
+    color: #8faf8a;
   }
   .term-label {
     @apply text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground;
@@ -169,20 +169,20 @@
     @apply h-2.5 w-2.5 rounded-full;
   }
   .term-grid {
-    background-image: linear-gradient(#e7ede0 1px, transparent 1px),
-      linear-gradient(90deg, #e7ede0 1px, transparent 1px);
+    background-image: linear-gradient(#1a2016 1px, transparent 1px),
+      linear-gradient(90deg, #1a2016 1px, transparent 1px);
     background-size: 22px 22px;
   }
   .text-status-green {
-    color: #4d7c0f;
+    color: #86efac;
   }
   .text-status-amber {
-    color: #b45309;
+    color: #fbbf24;
   }
   .text-status-red {
-    color: #b3261e;
+    color: #f87171;
   }
   .text-status-grey {
-    color: #6b7280;
+    color: #9ca3af;
   }
 }

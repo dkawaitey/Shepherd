@@ -57,9 +57,9 @@ export default function PrayerJournal() {
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         {[
-          { label: "Active", value: counts.active, color: "#b45309", bg: "bg-[#FEF3C7]" },
-          { label: "Answered", value: counts.answered, color: "#4d7c0f", bg: "bg-[#ECFCCB]" },
-          { label: "Closed", value: counts.closed, color: "#6b7280", bg: "bg-[#F3F4F6]" },
+          { label: "Active", value: counts.active, color: "#fbbf24", bg: "bg-[#2e2408]" },
+          { label: "Answered", value: counts.answered, color: "#86efac", bg: "bg-[#15291c]" },
+          { label: "Closed", value: counts.closed, color: "#9ca3af", bg: "bg-[#1f251d]" },
         ].map((c) => (
           <button
             key={c.label}
@@ -132,7 +132,7 @@ export default function PrayerJournal() {
                   {p.contactName} →
                 </Link>
                 {p.answer && (
-                  <span className="rounded bg-[#ECFCCB]/60 px-2 py-0.5 text-[10px] text-[#3F6212]">
+                  <span className="rounded bg-[#15291c]/80 px-2 py-0.5 text-[10px] text-[#86efac]">
                     ✓ {p.answer}
                   </span>
                 )}
