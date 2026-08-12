@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
-import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,14 +32,16 @@ import {
 import { PageHeader, fmtDateTime, downloadCsv, formatRoles } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
+  Calendar as CalendarIcon,
   Download,
   KeyRound,
+  Mail,
+  MailCheck,
+  MapPin,
   MessageCircle,
   MessageSquareText,
-  Mail,
-  MapPin,
-  Calendar as CalendarIcon,
   QrCode,
+  Send,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -441,13 +443,187 @@ function IntegrationsTab() {
           </Button>
         </div>
       </div>
+      <EmailRemindersSection />
       <div className="rounded-md border border-dashed p-4 text-[11px] leading-5 text-muted-foreground">
         <b className="text-foreground">How integrations work here:</b>
         <ul className="mt-1 list-inside list-disc space-y-1">
           <li>WhatsApp, SMS and phone links work instantly from every contact profile — no key needed.</li>
           <li>Google Maps directions open from profiles using the saved address / GPS.</li>
-          <li>To send real bulk SMS, email or sync Google Calendar, add the provider API key above and wire the provider in the backend.</li>
+          <li>Email reminders (follow-up schedules + class digests) go out automatically every day at 07:00 UTC once a provider key is configured.</li>
+          <li>For bulk SMS or Google Calendar sync, add the provider API key above and wire the provider in the backend.</li>
         </ul>
+      </div>
+    </div>
+  );
+}
+
+function EmailRemindersSection() {
+  const me = useQuery(api.users.currentUser);
+  const settings = useQuery(api.settings.get);
+  const setSetting = useMutation(api.settings.set);
+  const preview = useQuery(api.reminders.preview);
+  const logs = useQuery(api.settings.listEmailLogs, { limit: 8 });
+  const sendTest = useAction(api.emails.sendTest);
+  const sendNow = useAction(api.emails.sendNow);
+  const sendStatus = useAction(api.emails.status);
+
+  const [status, setStatus] = useState<{ configured: boolean; from: string } | null>(null);
+  const [testTo, setTestTo] = useState("");
+  const [sending, setSending] = useState<"test" | "now" | null>(null);
+  const [enabled, setEnabled] = useState(true);
+
+  useEffect(() => {
+    sendStatus().then(setStatus).catch(() => undefined);
+  }, [sendStatus]);
+
+  useEffect(() => {
+    if (settings && settings.reminder_email_enabled !== undefined) {
+      setEnabled(settings.reminder_email_enabled !== "false");
+    }
+  }, [settings]);
+
+  const c = preview?.counts;
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <MailCheck className="h-4 w-4 text-primary" />
+        <p className="term-label">// email notifications</p>
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
+          <div>
+            <div className="text-xs font-semibold">Provider</div>
+            <div className="text-[10px] text-muted-foreground">
+              {status === null
+                ? "Checking connection…"
+                : status.configured
+                  ? `Connected — sends from ${status.from}`
+                  : "Not connected — add RESEND_API_KEY in the Keys tab"}
+            </div>
+          </div>
+          <span
+            className={cn(
+              "h-2 w-2 shrink-0 rounded-full",
+              status?.configured ? "bg-[#86efac]" : "bg-[#fbbf24]",
+            )}
+          />
+        </div>
+
+        <div className="flex items-center justify-between border-b border-dashed pb-3">
+          <div>
+            <div className="text-[13px] font-medium">Daily reminder emails</div>
+            <div className="text-[10px] text-muted-foreground">
+              Auto-sent at 07:00 UTC · follow-up schedules + class digests
+            </div>
+          </div>
+          <Switch
+            checked={enabled}
+            onCheckedChange={async (v) => {
+              setEnabled(v);
+              await setSetting({ key: "reminder_email_enabled", value: String(v) });
+              toast.success(v ? "Daily emails enabled" : "Daily emails paused");
+            }}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: "worker emails", value: c?.workerEmails ?? 0 },
+            { label: "class digests", value: c?.classEmails ?? 0 },
+            { label: "upcoming follow-ups", value: c?.upcoming ?? 0 },
+            { label: "overdue", value: c?.overdue ?? 0 },
+            { label: "birthdays this week", value: c?.birthdays ?? 0 },
+            { label: "low attendance", value: c?.lowAttendance ?? 0 },
+            { label: "new contacts", value: c?.newContacts ?? 0 },
+            { label: "skipped (no email)", value: c?.skippedWorkers ?? 0 },
+          ].map((it) => (
+            <div key={it.label} className="rounded-md border bg-muted/40 px-2.5 py-2">
+              <div className="font-mono text-sm font-bold">{it.value}</div>
+              <div className="text-[9px] leading-3 text-muted-foreground">{it.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-40 flex-1">
+            <Label className="text-[10px]">Test recipient (defaults to your email)</Label>
+            <Input
+              className="mt-1"
+              placeholder={me?.email ?? "you@example.com"}
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!status?.configured || sending !== null}
+            onClick={async () => {
+              setSending("test");
+              try {
+                const res = await sendTest({ to: testTo || undefined });
+                if (res.ok) toast.success("Test email sent — check your inbox");
+                else toast.error(res.error ?? "Test email failed");
+              } finally {
+                setSending(null);
+              }
+            }}
+          >
+            {sending === "test" ? "Sending…" : "Send test email"}
+          </Button>
+          <Button
+            size="sm"
+            disabled={!status?.configured || sending !== null}
+            onClick={async () => {
+              setSending("now");
+              try {
+                const res = await sendNow();
+                if (res.ok) toast.success(`Sent ${res.sent} reminder email${res.sent === 1 ? "" : "s"}`);
+                else toast.error(res.reason ?? "Could not send reminders");
+              } finally {
+                setSending(null);
+              }
+            }}
+          >
+            <Send className="mr-1.5 h-3.5 w-3.5" />
+            {sending === "now" ? "Sending…" : "Send reminders now"}
+          </Button>
+        </div>
+
+        <div>
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">recent sends</p>
+          {logs && logs.length > 0 ? (
+            <div className="divide-y divide-dashed rounded-md border">
+              {logs.map((l) => (
+                <div key={l._id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11px]">
+                  <span className="truncate">
+                    {l.subject}
+                    <span className="text-muted-foreground"> → {l.to}</span>
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0",
+                      l.status === "sent" ? "text-[#86efac]" : "text-[#f87171]",
+                    )}
+                    title={l.error ?? ""}
+                  >
+                    {l.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground">Nothing sent yet.</p>
+          )}
+        </div>
+
+        <p className="text-[10px] leading-4 text-muted-foreground">
+          Paste <b className="text-foreground">RESEND_API_KEY</b> into the Keys tab to enable sending (an optional{" "}
+          <b className="text-foreground">EMAIL_FROM</b> overrides the sender address). Workers receive their follow-up
+          schedule; class leaders receive birthdays, low-attendance alerts, new contacts and follow-up highlights
+          for their class.
+        </p>
       </div>
     </div>
   );
