@@ -70,7 +70,7 @@ function SidebarContent({
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
         {/* Light mode: ministry logo image */}
-        <div className="h-8 w-8 shrink-0 overflow-hidden rounded-md bg-white p-0.5 shadow-sm dark:hidden">
+        <div className="h-8 w-8 shrink-0 overflow-hidden rounded-md dark:hidden">
           <img
             src="/sidebar-logo.png"
             alt="Shepherd logo"
