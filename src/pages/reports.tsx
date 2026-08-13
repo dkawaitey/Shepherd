@@ -6,15 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { BIBLE_LESSONS } from "@/convex/constants";
-import { PageHeader, downloadCsv } from "@/components/shared";
+import { PageHeader, downloadCsv, downloadPdf } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
   Award,
   Baby,
   Download,
+  FileText,
   Flame,
   HandHeart,
-  Printer,
   Target,
   TrendingDown,
   TrendingUp,
@@ -58,6 +58,36 @@ export default function Reports() {
     );
   };
 
+  const exportPdf = () => {
+    if (!report) return;
+    downloadPdf("shepherd-report.pdf", [
+      {
+        heading: `Ministry Report — ${from} → ${to}`,
+        rows: [
+          { metric: "People reached", count: report.counts.reached },
+          { metric: "Accepted Christ", count: report.counts.accepted },
+          { metric: "Baptized", count: report.counts.baptized },
+          { metric: "Follow-ups completed", count: report.counts.completed },
+          { metric: "Follow-ups missed", count: report.counts.missed },
+          { metric: "Follow-ups cancelled", count: report.counts.cancelled },
+          { metric: "Active follow-ups", count: report.counts.pending },
+          { metric: "Active prayer requests", count: report.counts.prayers },
+          { metric: "Answered prayers", count: report.counts.answeredPrayers },
+        ],
+      },
+      {
+        heading: "Worker Activity",
+        rows: report.workers.map((w) => ({
+          worker: w.name,
+          assigned: w.assigned,
+          completed: w.completed,
+          missed: w.missed,
+          pending: w.pending,
+        })),
+      },
+    ]);
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
@@ -71,8 +101,8 @@ export default function Reports() {
             <Button variant="outline" onClick={exportWorkers} disabled={!report}>
               <Download className="mr-1.5 h-4 w-4" /> Workers CSV
             </Button>
-            <Button variant="outline" onClick={() => window.print()}>
-              <Printer className="mr-1.5 h-4 w-4" /> Print (PDF)
+            <Button variant="outline" onClick={exportPdf} disabled={!report}>
+              <FileText className="mr-1.5 h-4 w-4" /> Export PDF
             </Button>
           </>
         }

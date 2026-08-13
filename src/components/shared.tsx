@@ -232,6 +232,76 @@ export function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Generate a styled PDF file from one or more tables.
+ * Each section gets its own heading and table; long text wraps and pages break automatically.
+ */
+export function downloadPdf(
+  filename: string,
+  sections: { heading: string; rows: Record<string, unknown>[] }[],
+) {
+  const sectionsWithRows = sections.filter((s) => s.rows.length > 0);
+  if (!sectionsWithRows.length) return;
+
+  // Lazy-import so the heavy jsPDF bundle only loads when actually exporting.
+  void import("jspdf").then(async ({ default: jsPDF }) => {
+    const { default: autoTable } = await import("jspdf-autotable");
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+
+    // Header band
+    doc.setFillColor(143, 175, 138); // sage green
+    doc.rect(0, 0, doc.internal.pageSize.getWidth(), 44, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Shepherd — Discipleship Management", 28, 20);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(
+      `Generated ${new Date().toLocaleString()} · Gethsemane Ministry Youth Ministry`,
+      28,
+      33,
+    );
+
+    let startY = 60;
+    sectionsWithRows.forEach((section, i) => {
+      const headers = Object.keys(section.rows[0]!);
+      const body = section.rows.map((r) => headers.map((h) => (r[h] == null ? "" : String(r[h]))));
+      doc.setTextColor(60, 72, 60);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(section.heading, 28, startY + 4);
+      startY += 10;
+      autoTable(doc, {
+        head: [headers.map((h) => h.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()))],
+        body,
+        startY,
+        margin: { left: 28, right: 28 },
+        styles: { fontSize: 8, cellPadding: 3, textColor: [40, 50, 40] },
+        headStyles: { fillColor: [143, 175, 138], textColor: [255, 255, 255], fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [247, 246, 242] },
+        columnStyles: { 0: { cellWidth: "auto" } },
+        didDrawPage: () => {
+          // Footer page numbers
+          const page = doc.getCurrentPageInfo().pageNumber;
+          doc.setFontSize(8);
+          doc.setTextColor(120, 130, 120);
+          doc.text(`Page ${page}`, doc.internal.pageSize.getWidth() - 28, doc.internal.pageSize.getHeight() - 18, {
+            align: "right",
+          });
+        },
+      });
+      startY = (doc as any).lastAutoTable.finalY + 24;
+      if (i < sectionsWithRows.length - 1 && startY > doc.internal.pageSize.getHeight() - 60) {
+        doc.addPage();
+        startY = 60;
+      }
+    });
+
+    doc.save(filename);
+  });
+}
+
 export function progressColor(pct: number) {
   if (pct >= 75) return "#86efac";
   if (pct >= 40) return "#fbbf24";

@@ -32,11 +32,12 @@ import {
   Role,
   effectivePosition,
 } from "@/convex/constants";
-import { PageHeader, fmtDateTime, downloadCsv, formatRoles } from "@/components/shared";
+import { PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
   Calendar as CalendarIcon,
   Download,
+  FileText,
   KeyRound,
   Mail,
   MailCheck,
@@ -826,7 +827,7 @@ function AuditTab() {
   const logs = useQuery(api.settings.listAuditLogs, {});
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -845,6 +846,27 @@ function AuditTab() {
           disabled={!logs?.length}
         >
           <Download className="mr-1.5 h-3.5 w-3.5" /> Export logs
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!logs?.length}
+          onClick={() =>
+            downloadPdf("audit-logs.pdf", [
+              {
+                heading: "Audit Logs — System Activity",
+                rows: (logs ?? []).map((l) => ({
+                  date: fmtDateTime(new Date(l.createdAt).toISOString()),
+                  user: l.userName ?? "",
+                  action: l.action,
+                  entity: l.entityType,
+                  details: l.details ?? "",
+                })),
+              },
+            ])
+          }
+        >
+          <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
         </Button>
       </div>
       <div className="overflow-hidden rounded-lg border bg-card">

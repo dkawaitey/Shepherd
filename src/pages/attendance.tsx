@@ -28,9 +28,9 @@ import {
   ATTENDANCE_TYPE_LABELS,
   CLASS_OPTIONS,
 } from "@/convex/constants";
-import { PageHeader, StatusPill, fmtDate, downloadCsv } from "@/components/shared";
+import { PageHeader, StatusPill, fmtDate, downloadCsv, downloadPdf } from "@/components/shared";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, ClipboardCheck, Download } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, Download, FileText } from "lucide-react";
 
 export default function Attendance() {
   const [klass, setKlass] = useState("all");
@@ -92,9 +92,14 @@ export default function Attendance() {
         code="att"
         actions={
           rows.length ? (
-            <Button variant="outline" size="sm" onClick={() => downloadCsv("attendance-register.csv", rows.map((m) => ({ fullName: m.fullName, klass: m.klass ?? "", status: marks[m._id] ?? "—" })))}>
-              <Download className="mr-1.5 h-3.5 w-3.5" /> Export register
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={() => downloadCsv("attendance-register.csv", rows.map((m) => ({ fullName: m.fullName, klass: m.klass ?? "", status: marks[m._id] ?? "—" })))}>
+                <Download className="mr-1.5 h-3.5 w-3.5" /> Export CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => downloadPdf("attendance-register.pdf", [{ heading: "Attendance Register", rows: rows.map((m) => ({ fullName: m.fullName, klass: m.klass ?? "", status: marks[m._id] ?? "—" })) }])}>
+                <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
+              </Button>
+            </>
           ) : undefined
         }
       />

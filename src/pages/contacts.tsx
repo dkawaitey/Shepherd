@@ -35,10 +35,11 @@ import {
   MINISTRIES,
   STAGE_LABELS,
 } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, telLink, waLink, StagePill, downloadCsv, canAddRecords } from "@/components/shared";
+import { EmptyState, PageHeader, StatusPill, telLink, waLink, StagePill, downloadCsv, downloadPdf, canAddRecords } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import {
+  FileText,
   MapPin,
   MessageCircle,
   Phone,
@@ -720,6 +721,21 @@ export default function Contacts() {
     { value: "leading", label: "Leading Others" },
   ];
 
+  const contactRows = (contacts ?? []).map((c) => ({
+    membershipId: c.membershipId,
+    fullName: c.fullName,
+    status: (STAGE_LABELS as Record<string, string>)[c.status ?? ""] ?? c.status ?? "",
+    klass: c.klass ?? "",
+    phone: c.phone ?? "",
+    whatsapp: c.whatsapp ?? "",
+    email: c.email ?? "",
+    community: c.community ?? "",
+    area: c.area ?? "",
+    assignedWorker: c.assignedWorker ?? "",
+    decision: c.decision ? DECISION_LABELS[c.decision] : "",
+    dateMet: c.dateMet ? c.dateMet.slice(0, 10) : "",
+  }));
+
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
@@ -731,27 +747,19 @@ export default function Contacts() {
               variant="outline"
               className="hidden sm:inline-flex"
               disabled={!contacts?.length}
-              onClick={() =>
-                downloadCsv(
-                  "shepherd-contacts.csv",
-                  (contacts ?? []).map((c) => ({
-                    membershipId: c.membershipId,
-                    fullName: c.fullName,
-                    status: (STAGE_LABELS as Record<string, string>)[c.status ?? ""] ?? c.status ?? "",
-                    klass: c.klass ?? "",
-                    phone: c.phone ?? "",
-                    whatsapp: c.whatsapp ?? "",
-                    email: c.email ?? "",
-                    community: c.community ?? "",
-                    area: c.area ?? "",
-                    assignedWorker: c.assignedWorker ?? "",
-                    decision: c.decision ? DECISION_LABELS[c.decision] : "",
-                    dateMet: c.dateMet ? c.dateMet.slice(0, 10) : "",
-                  })),
-                )
-              }
+              onClick={() => downloadCsv("shepherd-contacts.csv", contactRows)}
             >
               Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              className="hidden sm:inline-flex"
+              disabled={!contacts?.length}
+              onClick={() =>
+                downloadPdf("shepherd-contacts.pdf", [{ heading: "Contacts — Discipleship Journey", rows: contactRows }])
+              }
+            >
+              <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
             </Button>
             {canAdd && (
               <Button onClick={() => setAddOpen(true)}>

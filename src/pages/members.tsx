@@ -42,6 +42,7 @@ import {
   StatusPill,
   fmtDate,
   downloadCsv,
+  downloadPdf,
   progressColor,
   canAddRecords,
 } from "@/components/shared";
@@ -54,6 +55,7 @@ import {
   ArrowLeft,
   Crown,
   Download,
+  FileText,
   Pencil,
   Plus,
   ScrollText,
@@ -268,6 +270,30 @@ export default function Members() {
             }
           >
             <Download className="mr-1.5 h-3.5 w-3.5" /> Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              downloadPdf("members.pdf", [
+                {
+                  heading: "Members Directory — Youth Ministry",
+                  rows: members.map((m) => ({
+                    membershipId: m.membershipId,
+                    fullName: m.fullName,
+                    klass: m.klass ?? "",
+                    status: m.status ?? "",
+                    phone: m.phone ?? "",
+                    whatsapp: m.whatsapp ?? "",
+                    classLeader: m.classLeader ?? "",
+                    ministryRoles: m.ministryRoles ?? "",
+                    dateJoined: m.dateJoined ?? "",
+                  })),
+                },
+              ])
+            }
+          >
+            <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
           </Button>
         </div>
       )}
