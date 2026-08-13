@@ -77,9 +77,13 @@ function SidebarContent({
             className="h-full w-full object-contain"
           />
         </div>
-        {/* Dark mode: sage mark */}
-        <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary font-bold text-primary-foreground dark:flex">
-          S
+        {/* Dark mode: transparent logo */}
+        <div className="hidden h-8 w-8 shrink-0 overflow-hidden rounded-md dark:block">
+          <img
+            src="/sidebarr-logo.png"
+            alt="Shepherd logo"
+            className="h-full w-full object-contain"
+          />
         </div>
         <div className="leading-tight">
           <div className="text-sm font-bold tracking-[0.14em]">SHEPHERD</div>
