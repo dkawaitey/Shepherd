@@ -2,7 +2,10 @@ import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { canAddRecords, formatRoles } from "@/components/shared";
+import { ROLES, ROLE_LABELS, Role } from "@/convex/constants";
+import { TestAsDialog } from "@/components/test-as-dialog";
 import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
 import {
   BarChart3,
   Bell,
@@ -22,6 +25,7 @@ import {
   Users,
   X,
   UserPlus,
+  FlaskConical,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
@@ -127,8 +131,18 @@ export function AppShell() {
   const notifications = useQuery(api.settings.listNotifications);
   const markAllRead = useMutation(api.settings.markAllRead);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [testAsOpen, setTestAsOpen] = useState(false);
+  const setTestAs = useMutation(api.users.setTestAs);
   // Keeps the offline sync queue replaying in the background (no UI needed).
   useOfflineSync();
+
+  const endTest = () => {
+    setTestAs({ role: undefined })
+      .then(() => toast.success("Test ended — back to your normal role"))
+      .catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Failed to end test"),
+      );
+  };
 
   useEffect(() => {
     if (user && !user.role) {
@@ -270,6 +284,11 @@ export function AppShell() {
                 </Badge>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {user?.realRole === "admin" && (
+                <DropdownMenuItem onClick={() => setTestAsOpen(true)}>
+                  <FlaskConical className="mr-2 h-4 w-4" /> Test as…
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => navigate("/settings")}>
                 <Settings className="mr-2 h-4 w-4" /> Settings
               </DropdownMenuItem>
@@ -287,12 +306,37 @@ export function AppShell() {
           </DropdownMenu>
         </header>
 
+        {user?.testAs && (
+          <div className="flex items-center justify-between gap-3 border-b border-[#f59e0b]/40 bg-[#2e2408] px-4 py-2 text-[11px] text-[#fbbf24] md:px-6">
+            <span className="flex min-w-0 items-center gap-2">
+              <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">
+                Testing as{" "}
+                <b>{ROLE_LABELS[user.testAs as Role] ?? user.testAs}</b>
+                {user.testAs === ROLES.CLASS_LEADER && user.classScope
+                  ? ` · ${user.classScope} Class`
+                  : ""}{" "}
+                — you have that role's permissions only.
+              </span>
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 shrink-0 px-2 text-[10px]"
+              onClick={endTest}
+            >
+              End test
+            </Button>
+          </div>
+        )}
+
         <main className="flex-1 px-4 py-6 md:px-6">
           <Outlet />
         </main>
       </div>
 
       <QuickAddContact open={quickAddOpen} onOpenChange={setQuickAddOpen} />
+      <TestAsDialog open={testAsOpen} onOpenChange={setTestAsOpen} />
     </div>
   );
 }

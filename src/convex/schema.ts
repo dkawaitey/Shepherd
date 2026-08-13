@@ -36,6 +36,8 @@ const schema = defineSchema(
       roles: v.optional(v.array(v.string())), // all assigned roles (a user may hold several)
       classScope: v.optional(v.string()), // class a Class Leader is locked to (Millison/Reuben/Jacob/Romina)
       phone: v.optional(v.string()), // contact number for workers
+      testAs: v.optional(v.string()), // admin-only role impersonation for testing
+      testClassScope: v.optional(v.string()), // class used while testing as a class leader
     }).index("email", ["email"]), // do not remove or modify
 
     // ===== Contacts (people reached during outreach) =====
@@ -204,6 +206,7 @@ const schema = defineSchema(
         v.literal(ATTENDANCE_STATUS.ABSENT),
         v.literal(ATTENDANCE_STATUS.EXCUSED),
       ),
+      remarks: v.optional(v.string()),
       recordedBy: v.optional(v.string()),
       createdAt: v.number(),
     })

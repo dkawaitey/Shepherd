@@ -6,6 +6,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -29,6 +38,9 @@ export default function Attendance() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [marks, setMarks] = useState<Record<string, string>>({});
   const [savedDate, setSavedDate] = useState<string>("");
+  const [remarks, setRemarks] = useState("");
+  const [recordedBy, setRecordedBy] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
 
   const members = useQuery(api.members.list, {
     klass: klass === "all" ? undefined : klass,
@@ -54,10 +66,14 @@ export default function Attendance() {
         type: type as any,
         programName: type === ATTENDANCE_TYPES.SPECIAL_PROGRAM ? "Register" : undefined,
         status: marks[m._id] as any,
+        remarks: remarks.trim() || undefined,
+        recordedBy: recordedBy.trim() || undefined,
       });
     }
     toast.success(`Saved ${todo.length} attendance records for ${fmtDate(date)}`);
     setSavedDate(date);
+    setModalOpen(false);
+    setRemarks("");
   };
 
   const quickMark = (id: string, s: string) => {
@@ -115,7 +131,17 @@ export default function Attendance() {
             <Input type="date" className="mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           {canRecord && (
-            <Button onClick={saveAll} className="gap-1.5">
+            <Button
+              onClick={() => {
+                if (!rows.filter((m) => marks[m._id]).length) {
+                  toast.error("Mark at least one member");
+                  return;
+                }
+                setRecordedBy((prev) => prev || me?.name || "");
+                setModalOpen(true);
+              }}
+              className="gap-1.5"
+            >
               <ClipboardCheck className="h-4 w-4" /> Save {rows.filter((m) => marks[m._id]).length} record(s)
             </Button>
           )}
@@ -218,6 +244,74 @@ export default function Attendance() {
           </div>
         )}
       </div>
+
+      {/* Record attendance modal */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Record attendance</DialogTitle>
+            <DialogDescription>
+              Confirm the register details before saving{" "}
+              {rows.filter((m) => marks[m._id]).length} record(s) for{" "}
+              {fmtDate(date)}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="att-date">Date</Label>
+              <Input
+                id="att-date"
+                type="date"
+                className="mt-1"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="att-type">Activity</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger id="att-type" className="mt-1 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="att-remarks">Remarks</Label>
+              <Textarea
+                id="att-remarks"
+                className="mt-1"
+                rows={2}
+                placeholder="e.g. Lesson 4 — the Holy Spirit; 35 members present"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="att-recorded">Recorded by</Label>
+              <Input
+                id="att-recorded"
+                className="mt-1"
+                placeholder="Your name"
+                value={recordedBy}
+                onChange={(e) => setRecordedBy(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveAll}>
+              <ClipboardCheck className="mr-1.5 h-4 w-4" /> Save records
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

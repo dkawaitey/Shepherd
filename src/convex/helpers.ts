@@ -9,6 +9,8 @@ export type CurrentUser = {
   role?: string;
   roles?: string[];
   classScope?: string;
+  testAs?: string;
+  testClassScope?: string;
   [key: string]: unknown;
 };
 
@@ -20,12 +22,19 @@ export const getCurrentUser = async (ctx: QueryCtx | MutationCtx) => {
   return { ...user, _id: userId };
 };
 
+/** Roles that take effect for permission checks. While an admin is "testing as"
+ *  another role (testAs set), only the test role applies — so the admin sees
+ *  exactly what that role can and cannot do, server-side included. */
+export const effectiveRoles = (user: CurrentUser | null | undefined): string[] => {
+  if (!user) return [];
+  if (user.testAs) return [user.testAs];
+  return user.roles?.length ? user.roles : user.role ? [user.role] : [];
+};
+
 /** True if the user holds the given role (admins implicitly hold every role). */
 export const hasRole = (user: CurrentUser | null | undefined, role: string) => {
   if (!user) return false;
-  if (user.role === ROLES.ADMIN) return true;
-  const all = user.roles?.length ? user.roles : user.role ? [user.role] : [];
-  return all.includes(role);
+  return effectiveRoles(user).includes(role);
 };
 
 /** Every role a user holds (admins count as admin only — not implicitly everything for display). */
@@ -43,7 +52,11 @@ export const isScopedClassLeader = (user: CurrentUser | null | undefined) =>
 export const classScoped = (user: CurrentUser | null | undefined): string | undefined => {
   if (!user) return undefined;
   if (hasRole(user, ROLES.ADMIN)) return undefined;
-  return hasRole(user, ROLES.CLASS_LEADER) ? user.classScope : undefined;
+  return hasRole(user, ROLES.CLASS_LEADER)
+    ? user.testAs === ROLES.CLASS_LEADER
+      ? (user.testClassScope as string | undefined)
+      : user.classScope
+    : undefined;
 };
 
 /** Throws if the user is a class leader and the record's class is outside their scope. */

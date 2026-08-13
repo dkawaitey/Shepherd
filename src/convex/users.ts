@@ -13,12 +13,78 @@ export const currentUser = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
+    if (user === null) return null;
 
-    if (user === null) {
-      return null;
+    // While an admin is testing as another role, surface the *effective* role
+    // everywhere (UI gating included), plus the real role + test flag so the
+    // app shell can show the banner and the "Test as" menu entry.
+    const roles = user.testAs
+      ? [user.testAs]
+      : user.roles?.length
+        ? user.roles
+        : user.role
+          ? [user.role]
+          : [];
+    const classScope =
+      user.testAs === ROLES.CLASS_LEADER
+        ? user.testClassScope
+        : user.testAs
+          ? undefined
+          : user.classScope;
+    return {
+      ...user,
+      role: roles[0],
+      roles,
+      classScope,
+      realRole: user.role,
+      testAs: user.testAs,
+      testClassScope: user.testClassScope,
+    };
+  },
+});
+
+/** Admin-only: impersonate another role to test the app as that role. Passing an
+ *  empty role ends the test. The real admin role is checked directly, because
+ *  while testing the admin's effective role is masked. */
+export const setTestAs = mutation({
+  args: {
+    role: v.optional(v.string()),
+    classScope: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated");
+    const user = await ctx.db.get(userId);
+    if (!user || user.role !== ROLES.ADMIN) {
+      throw new Error("Only administrators can test the app as other roles");
     }
-
-    return user;
+    const role = args.role?.trim() || undefined;
+    const valid: Role[] = [
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.LEADER,
+      ROLES.CLASS_LEADER,
+    ];
+    if (role && !valid.includes(role as Role)) {
+      throw new Error("Invalid test role");
+    }
+    let classScope: string | undefined;
+    if (role === ROLES.CLASS_LEADER) {
+      const scope = args.classScope?.trim();
+      if (!validClassScope(scope)) {
+        throw new Error("Pick one of the four classes for the class leader test");
+      }
+      classScope = scope;
+    }
+    await ctx.db.patch(userId, { testAs: role, testClassScope: classScope });
+    await logAudit(ctx, {
+      action: "role.testAs",
+      entityType: "users",
+      entityId: userId,
+      details: role
+        ? `testing as ${ROLE_LABELS[role as Role]}${classScope ? ` (${classScope} Class)` : ""}`
+        : "ended role test",
+    });
   },
 });
 

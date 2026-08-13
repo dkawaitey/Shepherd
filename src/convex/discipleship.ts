@@ -147,6 +147,8 @@ export const recordAttendance = mutation({
     type: v.string(),
     programName: v.optional(v.string()),
     status: v.union(v.literal("present"), v.literal("absent"), v.literal("excused")),
+    remarks: v.optional(v.string()),
+    recordedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
@@ -188,6 +190,8 @@ export const setAttendance = mutation({
     type: v.string(),
     programName: v.optional(v.string()),
     status: v.union(v.literal("present"), v.literal("absent"), v.literal("excused")),
+    remarks: v.optional(v.string()),
+    recordedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
@@ -209,11 +213,13 @@ export const setAttendance = mutation({
         ),
       )
       .first();
+    const recordedBy = args.recordedBy?.trim() || user.name;
     if (existing) {
       await ctx.db.patch(existing._id, {
         status: args.status,
         programName: args.programName,
-        recordedBy: user.name,
+        remarks: args.remarks?.trim() || undefined,
+        recordedBy,
       });
       return existing._id;
     }
@@ -225,7 +231,8 @@ export const setAttendance = mutation({
       type: args.type as any,
       programName: args.programName,
       status: args.status,
-      recordedBy: user.name,
+      remarks: args.remarks?.trim() || undefined,
+      recordedBy,
       createdAt: Date.now(),
     });
   },
