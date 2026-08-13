@@ -50,7 +50,6 @@ export default function Announcements() {
       <PageHeader
         title="Announcements"
         code="ann"
-        description="Team updates, testimonies and ministry content. Anyone on the team can post, and every post has a comment thread."
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-1.5 h-4 w-4" /> New post

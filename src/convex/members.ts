@@ -78,7 +78,7 @@ export const create = mutation({
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, []);
+    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const klass = args.klass || CLASS_OPTIONS[0];
     // Same ID format as contacts (AREA-DDMM-YYYY-SEQ) so promoted contacts
     // keep a consistent, non-class-based identifier. Shares the counter with

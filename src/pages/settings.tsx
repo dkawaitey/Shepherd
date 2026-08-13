@@ -75,11 +75,7 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader
-        title="Settings"
-        code="cfg"
-        description="Users, roles, ministry configuration, notification channels and integrations."
-      />
+      <PageHeader title="Settings" code="cfg" />
 
       <div className="mb-5 flex gap-1.5 overflow-x-auto rounded-lg border bg-card p-1.5">
         {tabs.map((t) => (

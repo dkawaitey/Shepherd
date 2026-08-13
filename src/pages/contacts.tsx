@@ -35,7 +35,7 @@ import {
   MINISTRIES,
   STAGE_LABELS,
 } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, telLink, waLink, StagePill, downloadCsv } from "@/components/shared";
+import { EmptyState, PageHeader, StatusPill, telLink, waLink, StagePill, downloadCsv, canAddRecords } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import {
@@ -670,6 +670,8 @@ export default function Contacts() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
+  const me = useQuery(api.users.currentUser);
+  const canAdd = canAddRecords(me);
 
   const status = searchParams.get("status") ?? "";
   const klass = searchParams.get("klass") ?? "";
@@ -721,9 +723,8 @@ export default function Contacts() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
-        title="People / Contacts"
+        title="Contacts"
         code="ppl"
-        description="Everyone reached during outreach, with their discipleship journey, assignments and contact details."
         actions={
           <>
             <Button
@@ -752,9 +753,11 @@ export default function Contacts() {
             >
               Export CSV
             </Button>
-            <Button onClick={() => setAddOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" /> Add Contact
-            </Button>
+            {canAdd && (
+              <Button onClick={() => setAddOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" /> Add Contact
+              </Button>
+            )}
           </>
         }
       />

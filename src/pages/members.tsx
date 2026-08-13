@@ -35,6 +35,7 @@ import {
   fmtDate,
   downloadCsv,
   progressColor,
+  canAddRecords,
 } from "@/components/shared";
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
@@ -63,6 +64,7 @@ export default function Members() {
   const [addOpen, setAddOpen] = useState(false);
   const me = useQuery(api.users.currentUser);
   const isAdmin = me?.role === "admin";
+  const canAdd = canAddRecords(me);
 
   const members = useQuery(api.members.list, {
     klass: klass === "all" ? undefined : klass,
@@ -76,9 +78,8 @@ export default function Members() {
       <PageHeader
         title="Members"
         code="mem"
-        description="Youth Ministry member directory for attendance tracking and participation monitoring — separate from evangelism contacts."
         actions={
-          isAdmin ? (
+          canAdd ? (
             <Button onClick={() => setAddOpen(true)}>
               <UserRoundPlus className="mr-1.5 h-4 w-4" /> Add member
             </Button>
@@ -173,7 +174,7 @@ export default function Members() {
       ) : members.length === 0 ? (
         <EmptyState
           title="No members found"
-          message={isAdmin ? "Add your first Youth Ministry member to begin attendance tracking." : "Ask an administrator to add members."}
+          message={canAdd ? "Add your first Youth Ministry member to begin attendance tracking." : "Ask an administrator or class leader to add members."}
         />
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

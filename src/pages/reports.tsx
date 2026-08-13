@@ -63,7 +63,6 @@ export default function Reports() {
       <PageHeader
         title="Reports"
         code="rpt"
-        description="People reached, new converts, follow-up reports, bible study progress, attendance, volunteer activity and church integration."
         actions={
           <>
             <Button variant="outline" onClick={exportPeople} disabled={!report}>

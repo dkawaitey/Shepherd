@@ -25,6 +25,17 @@ export function formatRoles(user?: {
   return base;
 }
 
+/** True when the user may add contacts/members: administrators and class leaders. */
+export function canAddRecords(user?: {
+  role?: string;
+  roles?: string[];
+} | null) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  const roles = user.roles?.length ? user.roles : user.role ? [user.role] : [];
+  return roles.includes("classLeader");
+}
+
 export function StatusPill({
   status,
   className,

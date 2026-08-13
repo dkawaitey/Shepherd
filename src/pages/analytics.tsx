@@ -28,7 +28,7 @@ export default function Analytics() {
   if (!report) {
     return (
       <div className="mx-auto max-w-6xl">
-        <PageHeader title="Analytics" code="anl" description="Deep-dive metrics on the discipleship pipeline." />
+        <PageHeader title="Analytics" code="anl" />
         <div className="h-64 animate-pulse rounded-lg border bg-card" />
       </div>
     );
@@ -84,11 +84,7 @@ export default function Analytics() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageHeader
-        title="Analytics"
-        code="anl"
-        description="Average follow-up time, response and retention rates, productive teams, drop-offs, and volunteer performance."
-      />
+      <PageHeader title="Analytics" code="anl" />
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-3">
         <div>

@@ -396,7 +396,6 @@ export default function Followups() {
       <PageHeader
         title="Follow-ups"
         code="fup"
-        description="Home visits, calls, WhatsApp chats, Bible studies, prayer visits, church invitations and counselling — with a strict status workflow."
         actions={
           <Button onClick={() => setScheduleOpen(true)}>
             <CalendarPlus className="mr-1.5 h-4 w-4" /> Schedule follow-up

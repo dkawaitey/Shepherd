@@ -177,7 +177,7 @@ export const get = query({
 export const create = mutation({
   args: { ...contactFields, dateMetRequired: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const { dateMetRequired: _unused, ...data } = args;
     const scope = classScoped(user);
     if (scope) data.klass = scope; // class leaders can only create within their own class
@@ -244,7 +244,7 @@ export const quickAdd = mutation({
     dateMet: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const scope = classScoped(user);
     if (scope) {
       args.klass = scope; // class leaders can only create within their own class
@@ -290,7 +290,7 @@ export const quickAdd = mutation({
 export const update = mutation({
   args: { id: v.id("contacts"), ...contactFields },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const { id, ...data } = args;
     const existing = await ctx.db.get(id);
     if (!existing || existing.isDeleted) throw new Error("Contact not found");
@@ -336,7 +336,7 @@ export const setStage = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
     if (!contact) throw new Error("Contact not found");
     assertClassScope(user, contact.klass);
@@ -401,7 +401,7 @@ export const addJourneyEvent = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
     if (!contact) throw new Error("Contact not found");
     assertClassScope(user, contact.klass);

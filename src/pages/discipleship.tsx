@@ -33,11 +33,7 @@ export default function Discipleship() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageHeader
-        title="Discipleship"
-        code="disc"
-        description="Every person's journey from first encounter to leading others — stage distribution, Bible study progress and recent milestones."
-      />
+      <PageHeader title="Discipleship" code="disc" />
 
       {/* Stage distribution */}
       <div>

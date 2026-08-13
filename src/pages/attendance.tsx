@@ -74,7 +74,6 @@ export default function Attendance() {
       <PageHeader
         title="Attendance"
         code="att"
-        description="Track youth meetings, church services and special programs. Attendance connects to the discipleship system for engagement alerts."
         actions={
           rows.length ? (
             <Button variant="outline" size="sm" onClick={() => downloadCsv("attendance-register.csv", rows.map((m) => ({ fullName: m.fullName, klass: m.klass ?? "", status: marks[m._id] ?? "—" })))}>

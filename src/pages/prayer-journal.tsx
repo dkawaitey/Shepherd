@@ -49,11 +49,7 @@ export default function PrayerJournal() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader
-        title="Prayer Journal"
-        code="pray"
-        description="Every prayer request, answer and update across all the people you shepherd."
-      />
+      <PageHeader title="Prayer Journal" code="pray" />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         {[

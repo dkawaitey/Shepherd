@@ -40,11 +40,7 @@ export default function BibleStudies() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader
-        title="Bible Studies"
-        code="bs"
-        description="The 8-lesson discipleship curriculum: Salvation, Prayer, Bible Study, The Holy Spirit, Christian Living, Church Fellowship, Evangelism, Stewardship."
-      />
+      <PageHeader title="Bible Studies" code="bs" />
 
       <div className="mb-5 max-w-md">
         <Label htmlFor="bs-contact">Select a contact</Label>
