@@ -76,11 +76,13 @@ export const create = mutation({
     ministryRoles: v.optional(v.string()),
     occupation: v.optional(v.string()),
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
+    isClassLeader: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     // Only administrators may assign the class leader on a member record.
     const classLeader = hasRole(user, ROLES.ADMIN) ? args.classLeader : undefined;
+    const isClassLeader = hasRole(user, ROLES.ADMIN) ? !!args.isClassLeader : false;
     const klass = args.klass || CLASS_OPTIONS[0];
     // Same ID format as contacts (AREA-DDMM-YYYY-SEQ) so promoted contacts
     // keep a consistent, non-class-based identifier. Shares the counter with
@@ -102,6 +104,7 @@ export const create = mutation({
       ministryRoles: args.ministryRoles,
       occupation: args.occupation,
       status: args.status ?? "active",
+      isClassLeader,
       isDeleted: false,
       createdAt: now,
       updatedAt: now,
@@ -133,6 +136,7 @@ export const update = mutation({
     ministryRoles: v.optional(v.string()),
     occupation: v.optional(v.string()),
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
+    isClassLeader: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
@@ -144,7 +148,10 @@ export const update = mutation({
       if (val !== undefined) cleaned[k] = val;
     }
     // Only administrators may change the class leader on a member record.
-    if (!hasRole(user, ROLES.ADMIN)) delete cleaned.classLeader;
+    if (!hasRole(user, ROLES.ADMIN)) {
+      delete cleaned.classLeader;
+      delete cleaned.isClassLeader;
+    }
     await ctx.db.patch(id, cleaned);
     await logAudit(ctx, {
       action: "member.update",

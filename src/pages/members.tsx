@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,7 @@ const deriveShortcut = (area: string) =>
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
+  Crown,
   Download,
   Plus,
   ScrollText,
@@ -194,6 +196,11 @@ export default function Members() {
                 <StatusPill status={m.status === "active" ? "activeMember" : "inactive"} />
               </div>
               <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                {m.isClassLeader && (
+                  <span className="inline-flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#fbbf24]">
+                    <Crown className="h-2.5 w-2.5" /> Class Leader
+                  </span>
+                )}
                 {m.sourceContactId && (
                   <span className="inline-flex items-center gap-1 rounded border border-[#4ade80]/40 bg-[#15291c] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#86efac]">
                     Promoted from contacts
@@ -256,6 +263,7 @@ function AddMemberDialog({
   const leaders = useQuery(api.users.classLeaders);
   const isAdmin = me?.role === ROLES.ADMIN;
   const [form, setForm] = useState<Record<string, string>>({});
+  const [isClassLeader, setIsClassLeader] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -302,6 +310,7 @@ function AddMemberDialog({
                 ministryRoles: form.ministryRoles || undefined,
                 occupation: form.occupation || undefined,
                 status: "active",
+                isClassLeader,
               } as any);
               toast.success(`Member added · ${res.membershipId}`);
               onOpenChange(false);
@@ -388,6 +397,26 @@ function AddMemberDialog({
               </Select>
             </div>
           )}
+          {isAdmin && (
+            <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2.5">
+              <div className="min-w-0">
+                <Label className="text-[12px] font-semibold">
+                  This member is a class leader
+                </Label>
+                <p className="text-[10px] leading-4 text-muted-foreground">
+                  They lead the{" "}
+                  <span className="font-semibold text-foreground">
+                    {form.klass || CLASS_OPTIONS[0]} Class
+                  </span>
+                </p>
+              </div>
+              <Switch
+                checked={isClassLeader}
+                onCheckedChange={setIsClassLeader}
+                aria-label="Mark as class leader"
+              />
+            </div>
+          )}
           <div>
             <Label htmlFor="m-roles">Ministry roles</Label>
             <Input id="m-roles" className="mt-1" value={form.ministryRoles ?? ""} onChange={(e) => set("ministryRoles", e.target.value)} placeholder="Choir, Ushering..." />
@@ -450,6 +479,11 @@ export function MemberProfile() {
             <div className="flex items-center gap-2">
               <ScrollText className="h-5 w-5 text-primary" />
               <h1 className="text-xl font-bold">{member.fullName}</h1>
+              {member.isClassLeader && (
+                <span className="inline-flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-2 py-0.5 text-[10px] font-semibold text-[#fbbf24]">
+                  <Crown className="h-3 w-3" /> Class Leader
+                </span>
+              )}
               <StatusPill status={member.status === "active" ? "activeMember" : "inactive"} />
             </div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">

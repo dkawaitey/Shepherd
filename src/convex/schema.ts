@@ -263,6 +263,7 @@ const schema = defineSchema(
       ministryRoles: v.optional(v.string()),
       status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
       occupation: v.optional(v.string()),
+      isClassLeader: v.optional(v.boolean()), // member leads their own class
       sourceContactId: v.optional(v.id("contacts")), // set when promoted from a contact
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),
