@@ -870,8 +870,8 @@ function AttendanceTab({
             </Select>
           </div>
           <div>
-            <Label>Program (if special)</Label>
-            <Input className="mt-1 w-40" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="Youth Camp" />
+            <Label>Program / Session</Label>
+            <Input className="mt-1 w-56" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Youth Camp, Morning session" />
           </div>
           <Button type="submit" size="sm">Record</Button>
         </form>

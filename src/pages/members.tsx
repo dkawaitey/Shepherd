@@ -730,8 +730,11 @@ export function MemberProfile() {
               </Select>
             </div>
             <div>
-              <Label>Program (special)</Label>
-              <Input className="mt-1 w-40" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="Youth Camp" />
+              <Label>Program / Session</Label>
+              <Input className="mt-1 w-56" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Youth Camp, Morning session" />
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Give a session name to record a second attendance on the same day.
+              </p>
             </div>
             <div>
               <Label>Remarks</Label>

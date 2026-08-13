@@ -40,6 +40,7 @@ export default function Attendance() {
   const [savedDate, setSavedDate] = useState<string>("");
   const [remarks, setRemarks] = useState("");
   const [recordedBy, setRecordedBy] = useState("");
+  const [session, setSession] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
 
   const members = useQuery(api.members.list, {
@@ -58,13 +59,16 @@ export default function Attendance() {
       toast.error("Mark at least one member");
       return;
     }
+    const programName =
+      session.trim() ||
+      (type === ATTENDANCE_TYPES.SPECIAL_PROGRAM ? "Register" : undefined);
     for (const m of todo) {
       await setAttendance({
         subjectType: "member",
         memberId: m._id,
         date: new Date(date).toISOString(),
         type: type as any,
-        programName: type === ATTENDANCE_TYPES.SPECIAL_PROGRAM ? "Register" : undefined,
+        programName,
         status: marks[m._id] as any,
         remarks: remarks.trim() || undefined,
         recordedBy: recordedBy.trim() || undefined,
@@ -74,6 +78,7 @@ export default function Attendance() {
     setSavedDate(date);
     setModalOpen(false);
     setRemarks("");
+    setSession("");
   };
 
   const quickMark = (id: string, s: string) => {
@@ -156,7 +161,7 @@ export default function Attendance() {
         </div>
         {savedDate === date && (
           <p className="mt-2 text-[11px] text-status-green">
-            ✓ Register saved for {fmtDate(date)} — editing overwrites records for the same date + activity.
+            ✓ Register saved for {fmtDate(date)} — re-saving edits the same session; give a Program/Session name to record a second attendance on the same day.
           </p>
         )}
       </div>
@@ -284,6 +289,20 @@ export default function Attendance() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label htmlFor="att-session">Program / Session (optional)</Label>
+              <Input
+                id="att-session"
+                className="mt-1"
+                placeholder="e.g. Morning session, Evening session, Youth Camp"
+                value={session}
+                onChange={(e) => setSession(e.target.value)}
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Leave blank to edit the register for this date + activity. Type a
+                name to record a second, separate attendance on the same day.
+              </p>
             </div>
             <div>
               <Label htmlFor="att-remarks">Remarks</Label>

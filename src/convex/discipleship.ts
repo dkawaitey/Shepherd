@@ -202,6 +202,11 @@ export const setAttendance = mutation({
       const contact = await ctx.db.get(args.contactId);
       assertClassScope(user, contact?.klass);
     }
+    // A record is uniquely identified by the person + date + activity + program
+    // session. Re-saving the same session edits it in place, while a different
+    // program/session name creates a separate record — so two attendance
+    // records can exist on the same day (e.g. Morning and Evening sessions).
+    const programName = args.programName?.trim() || undefined;
     const existing = await ctx.db
       .query("attendance")
       .filter((q) =>
@@ -210,6 +215,7 @@ export const setAttendance = mutation({
           args.memberId ? q.eq(q.field("memberId"), args.memberId!) : q.eq(q.field("memberId"), undefined),
           q.eq(q.field("date"), args.date),
           q.eq(q.field("type"), args.type),
+          q.eq(q.field("programName"), programName ?? undefined),
         ),
       )
       .first();
@@ -217,7 +223,7 @@ export const setAttendance = mutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         status: args.status,
-        programName: args.programName,
+        programName,
         remarks: args.remarks?.trim() || undefined,
         recordedBy,
       });
@@ -229,7 +235,7 @@ export const setAttendance = mutation({
       memberId: args.memberId,
       date: args.date,
       type: args.type as any,
-      programName: args.programName,
+      programName,
       status: args.status,
       remarks: args.remarks?.trim() || undefined,
       recordedBy,
