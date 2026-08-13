@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { CLASS_OPTIONS, ROLES } from "./constants";
 import { nextMembershipId } from "./contacts";
-import { getCurrentUser, logAudit, nowIso, requireRole, classScoped, assertClassScope } from "./helpers";
+import { getCurrentUser, logAudit, nowIso, requireRole, classScoped } from "./helpers";
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
 const deriveShortcut = (area?: string) =>
@@ -23,10 +23,8 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    const scope = classScoped(user);
     let members = await ctx.db.query("members").collect();
     members = members.filter((m) => !m.isDeleted);
-    if (scope) members = members.filter((m) => m.klass === scope);
     if (args.klass && args.klass !== "all") members = members.filter((m) => m.klass === args.klass);
     if (args.status && args.status !== "all") members = members.filter((m) => m.status === args.status);
     if (args.search) {
@@ -55,7 +53,6 @@ export const get = query({
     const user = await getCurrentUser(ctx);
     const member = await ctx.db.get(args.id);
     if (!member || member.isDeleted) return null;
-    assertClassScope(user, member.klass);
     const attendance = await ctx.db
       .query("attendance")
       .withIndex("memberId", (q) => q.eq("memberId", args.id))

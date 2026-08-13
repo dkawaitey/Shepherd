@@ -118,7 +118,6 @@ export default function ContactProfile() {
   }
 
   const { contact, journeyEvents, followUps, bibleStudies, attendance, prayers, notes } = data;
-  const isWorkerLimited = me?.role === "worker";
 
   const tabs = [
     { id: "overview", label: "Overview", icon: ScrollText },
@@ -234,7 +233,7 @@ export default function ContactProfile() {
         </div>
 
         <div className="p-5">
-          {tab === "overview" && <OverviewTab contact={contact} isWorkerLimited={isWorkerLimited} />}
+          {tab === "overview" && <OverviewTab contact={contact} />}
           {tab === "timeline" && (
             <TimelineTab
               contact={contact}
@@ -336,7 +335,7 @@ function Row({ label, value }: { label: string; value?: string | number | null }
   );
 }
 
-function OverviewTab({ contact, isWorkerLimited }: { contact: any; isWorkerLimited: boolean }) {
+function OverviewTab({ contact }: { contact: any }) {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <section className="space-y-3">
@@ -412,12 +411,6 @@ function OverviewTab({ contact, isWorkerLimited }: { contact: any; isWorkerLimit
           </div>
         </section>
 
-        {isWorkerLimited && (
-          <p className="rounded-md border border-[#f59e0b]/40 bg-[#2e2408] px-3 py-2 text-[11px] text-[#fbbf24]">
-            You are viewing this contact as an assigned worker. Full contact details are visible to
-            coordinators and administrators.
-          </p>
-        )}
       </div>
     </div>
   );

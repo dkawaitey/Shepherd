@@ -7,7 +7,6 @@ import {
   nowIso,
   requireRole,
   hasRole,
-  classScoped,
   assertClassScope,
   isScopedClassLeader,
 } from "./helpers";
@@ -19,8 +18,7 @@ export const bibleStudiesForContact = query({
   args: { contactId: v.id("contacts") },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    const contact = await ctx.db.get(args.contactId);
-    assertClassScope(user, contact?.klass);
+    if (!user) return [];
     const rows = await ctx.db
       .query("bibleStudies")
       .withIndex("contactId", (q) => q.eq("contactId", args.contactId))
@@ -244,25 +242,8 @@ export const listAttendance = query({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    const scope = classScoped(user);
+    if (!user) return [];
     let rows = await ctx.db.query("attendance").collect();
-    if (scope) {
-      const [contacts, members] = await Promise.all([
-        ctx.db.query("contacts").collect(),
-        ctx.db.query("members").collect(),
-      ]);
-      const contactIds = new Set(
-        contacts.filter((c) => c.klass === scope).map((c) => c._id),
-      );
-      const memberIds = new Set(
-        members.filter((m) => m.klass === scope).map((m) => m._id),
-      );
-      rows = rows.filter(
-        (r) =>
-          (r.subjectType === "contact" && r.contactId && contactIds.has(r.contactId)) ||
-          (r.subjectType === "member" && r.memberId && memberIds.has(r.memberId)),
-      );
-    }
     if (args.contactId) rows = rows.filter((r) => r.contactId === args.contactId);
     if (args.memberId) rows = rows.filter((r) => r.memberId === args.memberId);
     if (args.from) rows = rows.filter((r) => r.date >= args.from!);
@@ -343,15 +324,8 @@ export const prayerFeed = query({
   args: { status: v.optional(v.string()), search: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    const scope = classScoped(user);
+    if (!user) return [];
     let prayers = await ctx.db.query("prayerRequests").collect();
-    if (scope) {
-      const contacts = await ctx.db.query("contacts").collect();
-      const ids = new Set(
-        contacts.filter((c) => c.klass === scope).map((c) => c._id),
-      );
-      prayers = prayers.filter((p) => ids.has(p.contactId));
-    }
     if (args.status) prayers = prayers.filter((p) => p.status === args.status);
     if (args.search) {
       const q = args.search.toLowerCase();

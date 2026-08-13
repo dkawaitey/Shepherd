@@ -7,7 +7,7 @@ import {
   STAGE_LABELS,
   ROLES,
 } from "./constants";
-import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, classScoped, assertClassScope } from "./helpers";
+import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, assertClassScope } from "./helpers";
 
 /** List follow-ups (optionally joined with contact name). Workers see their assigned contacts' follow-ups. */
 export const list = query({
@@ -22,30 +22,9 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
-    const scope = classScoped(user);
 
     let all = await ctx.db.query("followUps").collect();
     all = all.filter((f) => !f.isDeleted);
-
-    // Class leaders see follow-ups for contacts in their class only
-    if (scope) {
-      const contacts = await ctx.db.query("contacts").collect();
-      const mine = new Set(
-        contacts.filter((c) => c.klass === scope).map((c) => c._id),
-      );
-      all = all.filter((f) => mine.has(f.contactId));
-    }
-
-    // Workers see follow-ups for their assigned contacts only
-    if (hasRole(user, ROLES.WORKER)) {
-      const contacts = await ctx.db.query("contacts").collect();
-      const mine = new Set(
-        contacts
-          .filter((c) => c.assignedWorkerId === user._id)
-          .map((c) => c._id),
-      );
-      all = all.filter((f) => mine.has(f.contactId));
-    }
 
     if (args.status) all = all.filter((f) => f.status === args.status);
     if (args.worker) all = all.filter((f) => f.assignedWorker === args.worker);

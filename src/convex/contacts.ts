@@ -83,7 +83,7 @@ export const defaultStageForDecision = (decision?: string) => {
   return STAGES.REACHED;
 };
 
-/** List contacts with filters + search. Workers only see their assigned contacts. */
+/** List contacts with filters + search. Any signed-in user can view all contacts. */
 export const list = query({
   args: {
     status: v.optional(v.string()),
@@ -99,21 +99,9 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
-    const isWorker = hasRole(user, ROLES.WORKER);
-    const scope = classScoped(user);
 
     let contacts = await ctx.db.query("contacts").collect();
     contacts = contacts.filter((c) => !c.isDeleted);
-
-    if (scope) {
-      contacts = contacts.filter((c) => c.klass === scope);
-    }
-
-    if (isWorker) {
-      contacts = contacts.filter(
-        (c) => c.assignedWorkerId === user._id || !c.assignedWorkerId,
-      );
-    }
 
     const q = (args.search || "").toLowerCase().trim();
     if (q) {
@@ -160,10 +148,6 @@ export const get = query({
     if (!user) return null;
     const contact = await ctx.db.get(args.id);
     if (!contact || contact.isDeleted) return null;
-    assertClassScope(user, contact.klass);
-    if (hasRole(user, ROLES.WORKER) && contact.assignedWorkerId !== user._id) {
-      throw new Error("You can only view contacts assigned to you");
-    }
 
     const [journeyEvents, followUps, bibleStudies, attendance, prayers, notes] =
       await Promise.all([
