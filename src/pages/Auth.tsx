@@ -112,8 +112,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         <header className="border-b bg-background/80 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
             <Link to="/" className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary font-bold text-primary-foreground">
-                S
+              {/* Light mode: ministry logo image */}
+              <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md dark:hidden">
+                <img
+                  src="/sidebar-logo.png"
+                  alt="Shepherd logo"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              {/* Dark mode: transparent logo */}
+              <div className="hidden h-7 w-7 shrink-0 overflow-hidden rounded-md dark:block">
+                <img
+                  src="/sidebarr-logo.png"
+                  alt="Shepherd logo"
+                  className="h-full w-full object-contain"
+                />
               </div>
               <span className="text-sm font-bold tracking-[0.16em]">SHEPHERD</span>
             </Link>
