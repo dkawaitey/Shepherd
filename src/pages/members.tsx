@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CLASS_OPTIONS } from "@/convex/constants";
+import { CLASS_OPTIONS, ROLES } from "@/convex/constants";
 import {
   ATTENDANCE_TYPE_LABELS,
   ATTENDANCE_STATUS_LABELS,
@@ -252,6 +252,9 @@ function AddMemberDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const create = useMutation(api.members.create);
+  const me = useQuery(api.users.currentUser);
+  const leaders = useQuery(api.users.classLeaders);
+  const isAdmin = me?.role === ROLES.ADMIN;
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -367,10 +370,24 @@ function AddMemberDialog({
               </span>
             </div>
           </div>
-          <div>
-            <Label htmlFor="m-leader">Class leader</Label>
-            <Input id="m-leader" className="mt-1" value={form.classLeader ?? ""} onChange={(e) => set("classLeader", e.target.value)} />
-          </div>
+          {isAdmin && (
+            <div>
+              <Label htmlFor="m-leader">Class leader</Label>
+              <Select value={form.classLeader || undefined} onValueChange={(v) => set("classLeader", v)}>
+                <SelectTrigger id="m-leader" className="mt-1 w-full">
+                  <SelectValue placeholder="Select class leader" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(leaders ?? []).map((l) => (
+                    <SelectItem key={l._id} value={l.name}>
+                      {l.name}
+                      {l.classScope ? ` · ${l.classScope} Class` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div>
             <Label htmlFor="m-roles">Ministry roles</Label>
             <Input id="m-roles" className="mt-1" value={form.ministryRoles ?? ""} onChange={(e) => set("ministryRoles", e.target.value)} placeholder="Choir, Ushering..." />

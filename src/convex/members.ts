@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { CLASS_OPTIONS, ROLES } from "./constants";
 import { nextMembershipId } from "./contacts";
-import { getCurrentUser, logAudit, nowIso, requireRole, classScoped } from "./helpers";
+import { getCurrentUser, hasRole, logAudit, nowIso, requireRole, classScoped } from "./helpers";
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
 const deriveShortcut = (area?: string) =>
@@ -79,6 +79,8 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    // Only administrators may assign the class leader on a member record.
+    const classLeader = hasRole(user, ROLES.ADMIN) ? args.classLeader : undefined;
     const klass = args.klass || CLASS_OPTIONS[0];
     // Same ID format as contacts (AREA-DDMM-YYYY-SEQ) so promoted contacts
     // keep a consistent, non-class-based identifier. Shares the counter with
@@ -96,7 +98,7 @@ export const create = mutation({
       klass,
       area: args.area,
       dateJoined: args.dateJoined,
-      classLeader: args.classLeader,
+      classLeader,
       ministryRoles: args.ministryRoles,
       occupation: args.occupation,
       status: args.status ?? "active",
@@ -141,6 +143,8 @@ export const update = mutation({
     for (const [k, val] of Object.entries(data)) {
       if (val !== undefined) cleaned[k] = val;
     }
+    // Only administrators may change the class leader on a member record.
+    if (!hasRole(user, ROLES.ADMIN)) delete cleaned.classLeader;
     await ctx.db.patch(id, cleaned);
     await logAudit(ctx, {
       action: "member.update",

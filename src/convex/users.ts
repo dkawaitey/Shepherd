@@ -62,6 +62,27 @@ export const list = query({
   },
 });
 
+/** Class leader users, for selecting a class leader when creating a member. */
+export const classLeaders = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+    const users = await ctx.db.query("users").collect();
+    return users
+      .filter(
+        (u) =>
+          !u.isAnonymous &&
+          (u.roles?.includes(ROLES.CLASS_LEADER) || u.role === ROLES.CLASS_LEADER),
+      )
+      .map((u) => ({
+        _id: u._id,
+        name: u.name ?? u.email ?? "Unnamed",
+        classScope: u.classScope,
+      }));
+  },
+});
+
 /**
  * Assign a user's roles (a user may hold several, e.g. Administrator + Class
  * Leader). A Class Leader must also be given a classScope to be locked to.
