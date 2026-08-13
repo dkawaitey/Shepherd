@@ -614,7 +614,7 @@ function IntegrationsTab() {
           <li>WhatsApp, SMS and phone links work instantly from every contact profile — no key needed.</li>
           <li>Google Maps directions open from profiles using the saved address / GPS.</li>
           <li>Email reminders (follow-up schedules + class digests) go out automatically every day at 07:00 UTC once a provider key is configured.</li>
-          <li>Member details sync automatically with the Steward app every hour (two-way), or on demand with Sync now.</li>
+          <li>Member details push automatically to the Steward app every hour (one-way, outbound), or on demand with Sync now.</li>
           <li>For bulk SMS or Google Calendar sync, add the provider API key above and wire the provider in the backend.</li>
         </ul>
       </div>
@@ -826,19 +826,8 @@ function StewardSyncSection() {
   let lastResultText = "Never synced yet — run a sync or wait for the hourly job.";
   if (status?.lastResult) {
     try {
-      const r = JSON.parse(status.lastResult) as {
-        direction?: string;
-        sent?: number;
-        matched?: number;
-        received?: number;
-        created?: number;
-        updated?: number;
-        skipped?: number;
-      };
-      lastResultText =
-        r.direction === "push"
-          ? `Last push sent ${r.sent ?? 0} members and linked ${r.matched ?? 0} Steward records.`
-          : `Last pull received ${r.received ?? 0} members (${r.created ?? 0} new, ${r.updated ?? 0} updated, ${r.skipped ?? 0} unchanged).`;
+      const r = JSON.parse(status.lastResult) as { sent?: number; matched?: number };
+      lastResultText = `Last push sent ${r.sent ?? 0} members and linked ${r.matched ?? 0} Steward records.`;
     } catch {
       // keep the default text if the stored result is unreadable
     }
@@ -858,7 +847,7 @@ function StewardSyncSection() {
               {status === null
                 ? "Checking connection…"
                 : status.configured
-                  ? `Connected — syncing with ${status.baseUrl}`
+                  ? `Connected — pushing to ${status.baseUrl}`
                   : "Not connected — add STEWARD_API_URL + STEWARD_SYNC_KEY in the Keys tab"}
             </div>
           </div>
@@ -874,7 +863,7 @@ function StewardSyncSection() {
           <div>
             <div className="text-[13px] font-medium">Automatic background sync</div>
             <div className="text-[10px] text-muted-foreground">
-              Runs hourly · pulls Steward's members in and pushes Shepherd's members out
+              Runs hourly · pushes Shepherd's members out to Steward (one-way)
             </div>
           </div>
           <Switch
@@ -908,9 +897,9 @@ function StewardSyncSection() {
             try {
               const res = await runSync();
               if (res.ok) {
-                toast.success("Sync complete — members up to date in both apps");
+                toast.success("Sync complete — members pushed to Steward");
               } else {
-                toast.error(res.pull?.reason || res.push?.reason || "Sync failed");
+                toast.error(res.push?.reason || "Sync failed");
               }
               const s = await getStatus();
               setStatus(s);
@@ -934,8 +923,9 @@ function StewardSyncSection() {
         <p className="text-[10px] leading-4 text-muted-foreground">
           Add <b className="text-foreground">STEWARD_API_URL</b> (the Steward app's public URL) and a shared{" "}
           <b className="text-foreground">STEWARD_SYNC_KEY</b> in the Keys tab, and set the same two variables on the
-          Steward app. Members are matched by Steward ID, membership ID, email, phone or name + class; conflicts
-          resolve to the most recent update. Ministry positions stay managed inside each app.
+          Steward app — it must accept <b className="text-foreground">POST /api/sync/members</b>. Members are matched
+          on the Steward side by membership ID, email, phone or name + class, so edits stay on the same record. Sync is
+          one-way: Shepherd pushes out and never imports Steward data. Ministry positions stay managed inside Shepherd.
         </p>
       </div>
     </div>

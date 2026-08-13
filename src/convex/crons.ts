@@ -11,13 +11,13 @@ crons.daily(
   internal.emails.dailyDigest,
 );
 
-// Hourly background sync with the Steward app: pulls Steward's members into
-// Shepherd and pushes Shepherd's members to Steward (respects the enable
-// toggle in Settings → Integrations).
+// Hourly background push to the Steward app: pushes Shepherd's members out to
+// Steward (respects the enable toggle in Settings → Integrations). Sync is
+// one-way — nothing is ever pulled from Steward into Shepherd.
 crons.hourly(
   "steward-member-sync",
   { minuteUTC: 17 },
-  internal.steward.syncAll,
+  internal.steward.pushMembers,
 );
 
 export default crons;
