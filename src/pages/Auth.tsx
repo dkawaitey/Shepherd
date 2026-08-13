@@ -140,8 +140,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               {step === "signIn" ? (
                 <>
                   <CardHeader className="text-center">
-                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-md border border-primary/30 bg-accent">
-                      <span className="text-lg font-bold text-primary">❯_</span>
+                    {/* Light mode: ministry logo image */}
+                    <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-primary/20 bg-card dark:hidden">
+                      <img
+                        src="/sidebar-logo.png"
+                        alt="Shepherd logo"
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                    {/* Dark mode: transparent logo */}
+                    <div className="mx-auto mb-3 hidden h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-primary/20 bg-card dark:flex">
+                      <img
+                        src="/sidebarr-logo.png"
+                        alt="Shepherd logo"
+                        className="h-full w-full object-contain"
+                      />
                     </div>
                     <CardTitle className="text-xl">Get Started</CardTitle>
                     <CardDescription>
