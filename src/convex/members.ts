@@ -126,7 +126,7 @@ export const create = mutation({
     // keep a consistent, non-class-based identifier. Shares the counter with
     // contacts, so sequences never collide across the two tables.
     const dateJoined = args.dateJoined || nowIso();
-    const shortcut = (args.areaShortcut || deriveShortcut(args.area) || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2);
+    const shortcut = deriveShortcut(args.area);
     const membershipId = await nextMembershipId(ctx, shortcut, dateJoined);
     const now = Date.now();
     const id = await ctx.db.insert("members", {

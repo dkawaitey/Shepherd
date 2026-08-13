@@ -54,6 +54,10 @@ const contactFields = {
   tags: v.optional(v.array(v.string())),
 };
 
+/** First two letters of the area name (e.g. "Adjikpo" → "AD"). */
+const deriveShortcut = (area?: string) =>
+  (area || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
+
 /** Generate next membership ID: AREA-DDMM-YYYY-SEQ (seq per area + day). */
 export const nextMembershipId = async (
   ctx: MutationCtx,
@@ -182,7 +186,7 @@ export const create = mutation({
     const scope = classScoped(user);
     if (scope) data.klass = scope; // class leaders can only create within their own class
     const dateMet = data.dateMet || nowIso();
-    const membershipId = await nextMembershipId(ctx, data.areaShortcut || "", dateMet);
+    const membershipId = await nextMembershipId(ctx, deriveShortcut(data.area), dateMet);
 
     const status = defaultStageForDecision(data.decision);
 
@@ -250,7 +254,7 @@ export const quickAdd = mutation({
       args.klass = scope; // class leaders can only create within their own class
     }
     const dateMet = args.dateMet || nowIso();
-    const membershipId = await nextMembershipId(ctx, args.areaShortcut || "", dateMet);
+    const membershipId = await nextMembershipId(ctx, deriveShortcut(args.area), dateMet);
     const id = await ctx.db.insert("contacts", {
       fullName: args.fullName,
       phone: args.phone,
@@ -484,12 +488,7 @@ export const promoteToMember = mutation({
     if (contact.promotedToMemberId) throw new Error("Contact already promoted");
 
     const dateJoined = nowIso();
-    const derived = (contact.area || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2);
-    const shortcut = (contact.areaShortcut || derived || "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 2);
-    const membershipId = await nextMembershipId(ctx, shortcut, dateJoined);
+    const membershipId = await nextMembershipId(ctx, deriveShortcut(contact.area), dateJoined);
     const now = Date.now();
     const memberId = await ctx.db.insert("members", {
       fullName: contact.fullName,

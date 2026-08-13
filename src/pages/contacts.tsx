@@ -263,8 +263,10 @@ export function QuickAddContact({
               <Input id="qa-area" value={form.area} onChange={(e) => set("area", e.target.value)} placeholder="e.g. Adjikpo" className="mt-1" />
             </div>
             <div>
-              <Label htmlFor="qa-shortcut">Area code</Label>
-              <Input id="qa-shortcut" value={form.areaShortcut} onChange={(e) => set("areaShortcut", e.target.value.toUpperCase())} placeholder="AD" className="mt-1 uppercase" maxLength={2} />
+              <Label>Area code</Label>
+              <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">
+                {form.area ? deriveShortcut(form.area) : "…"}
+              </p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -535,13 +537,13 @@ export function ContactFormDialog({
                 <Input id="c-area" value={field("area")} onChange={(e) => set("area", e.target.value)} className="mt-1" placeholder="e.g. Adjikpo" />
               </div>
               <div>
-                <Label htmlFor="c-shortcut">Area code (Membership ID)</Label>
-                <div className="mt-1 flex items-center gap-2">
-                  <Input id="c-shortcut" value={field("areaShortcut")} onChange={(e) => set("areaShortcut", e.target.value.toUpperCase())} placeholder="AD" maxLength={2} className="w-16 uppercase" />
-                  <span className="text-[10px] text-muted-foreground">
-                    → {form.areaShortcut || (form.area ? deriveShortcut(form.area) : "GN")}-{form.dateMet ? `${new Date(form.dateMet).getDate().toString().padStart(2, "0")}${(new Date(form.dateMet).getMonth() + 1).toString().padStart(2, "0")}` : "DDMM"}-{form.dateMet ? new Date(form.dateMet).getFullYear() : "YYYY"}-001
-                  </span>
-                </div>
+                <Label>Area code (Membership ID)</Label>
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                  → {form.area ? deriveShortcut(form.area) : "…"}-{form.dateMet ? `${new Date(form.dateMet).getDate().toString().padStart(2, "0")}${(new Date(form.dateMet).getMonth() + 1).toString().padStart(2, "0")}` : "DDMM"}-{form.dateMet ? new Date(form.dateMet).getFullYear() : "YYYY"}-001
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Auto-derived from the first two letters of the Area name.
+                </p>
               </div>
               <div>
                 <Label htmlFor="c-team">Evangelism team</Label>

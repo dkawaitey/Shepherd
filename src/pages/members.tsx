@@ -334,7 +334,7 @@ function AddMemberDialog({
         <DialogHeader>
           <DialogTitle>Add member</DialogTitle>
           <DialogDescription>
-            Membership IDs use the same format as contacts (e.g. AD-0104-2026-001), generated from the area code and join date. Only administrators can edit member records.
+Membership IDs use the first two letters of the Area name and the join date (e.g. AD-0104-2026-001). Only administrators can edit member records.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -419,19 +419,19 @@ function AddMemberDialog({
             <Input id="m-area" className="mt-1" placeholder="e.g. Adjikpo" value={form.area ?? ""} onChange={(e) => set("area", e.target.value)} />
           </div>
           <div>
-            <Label htmlFor="m-shortcut">Area code (Membership ID)</Label>
-            <div className="mt-1 flex items-center gap-2">
-              <Input id="m-shortcut" className="w-20 uppercase" maxLength={2} placeholder="AD" value={(form.areaShortcut ?? "").toUpperCase()} onChange={(e) => set("areaShortcut", e.target.value.toUpperCase())} />
-              <span className="text-[10px] text-muted-foreground">
-                → {(form.areaShortcut || "GN").toUpperCase()}-
-                {form.dateJoined
-                  ? `${new Date(form.dateJoined).getDate().toString().padStart(2, "0")}${(new Date(form.dateJoined).getMonth() + 1).toString().padStart(2, "0")}`
-                  : "DDMM"}
-                -
-                {form.dateJoined ? new Date(form.dateJoined).getFullYear() : "YYYY"}
-                -001
-              </span>
-            </div>
+            <Label>Area code (Membership ID)</Label>
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              → {form.area ? deriveShortcut(form.area) : "…"}-
+              {form.dateJoined
+                ? `${new Date(form.dateJoined).getDate().toString().padStart(2, "0")}${(new Date(form.dateJoined).getMonth() + 1).toString().padStart(2, "0")}`
+                : "DDMM"}
+              -
+              {form.dateJoined ? new Date(form.dateJoined).getFullYear() : "YYYY"}
+              -001
+            </p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Auto-derived from the first two letters of the Area name.
+            </p>
           </div>
           {isAdmin && (
             <div>
