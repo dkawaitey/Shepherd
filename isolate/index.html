@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c0f0c" />
+  <meta name="description" content="Shepherd — discipleship management for Gethsemane Ministry Youth Ministry." />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Shepherd" />
+  <link rel="apple-touch-icon" href="/sidebar-logo.png" />
+  <title>Shepherd — Discipleship Management</title>
+  <script>
+    /* Apply the saved theme before first paint to avoid a flash. Dark is the
+       default; only an explicit "light" choice switches modes. */
+    (function () {
+      try {
+        var t = localStorage.getItem("shepherd.theme");
+        if (t !== "light") document.documentElement.classList.add("dark");
+      } catch (e) {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
+  <script type="module" crossorigin src="/assets/index-Bmy0XmWv.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/react-vendor-bNlN7yUm.js">
+  <link rel="modulepreload" crossorigin href="/assets/radix-ui-DXrfEION.js">
+  <link rel="modulepreload" crossorigin href="/assets/charts-Dkp_A3mg.js">
+  <link rel="modulepreload" crossorigin href="/assets/framer-motion-BfipYjCT.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-DrKsT7KY.css">
+</head>
+
+
+<body>
+  <div id="root"></div>
+</body>
+
+</html>
