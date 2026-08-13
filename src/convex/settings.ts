@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, internalMutation, query } from "./_generated/server";
+import { mutation, internalMutation, internalQuery, query } from "./_generated/server";
 import { getCurrentUser, requireAdmin, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
@@ -36,6 +36,33 @@ export const set = mutation({
     }
     return { ok: true };
   },
+});
+
+/** Same as `set`, but callable from crons/actions (no auth check). */
+export const setInternal = internalMutation({
+  args: { key: v.string(), value: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("settings")
+      .withIndex("key", (q) => q.eq("key", args.key))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { value: args.value, updatedAt: Date.now() });
+    } else {
+      await ctx.db.insert("settings", {
+        key: args.key,
+        value: args.value,
+        updatedAt: Date.now(),
+      });
+    }
+    return { ok: true };
+  },
+});
+
+/** All settings rows, for crons/actions that need to read the enable toggles. */
+export const getAllInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => ctx.db.query("settings").collect(),
 });
 
 // ================= Audit logs =================

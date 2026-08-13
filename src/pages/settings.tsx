@@ -39,12 +39,14 @@ import {
   Download,
   FileText,
   KeyRound,
+  Link2,
   Mail,
   MailCheck,
   MapPin,
   MessageCircle,
   MessageSquareText,
   QrCode,
+  RefreshCw,
   Send,
   ShieldCheck,
   Users,
@@ -605,12 +607,14 @@ function IntegrationsTab() {
         </div>
       </div>
       <EmailRemindersSection />
+      <StewardSyncSection />
       <div className="rounded-md border border-dashed p-4 text-[11px] leading-5 text-muted-foreground">
         <b className="text-foreground">How integrations work here:</b>
         <ul className="mt-1 list-inside list-disc space-y-1">
           <li>WhatsApp, SMS and phone links work instantly from every contact profile — no key needed.</li>
           <li>Google Maps directions open from profiles using the saved address / GPS.</li>
           <li>Email reminders (follow-up schedules + class digests) go out automatically every day at 07:00 UTC once a provider key is configured.</li>
+          <li>Member details sync automatically with the Steward app every hour (two-way), or on demand with Sync now.</li>
           <li>For bulk SMS or Google Calendar sync, add the provider API key above and wire the provider in the backend.</li>
         </ul>
       </div>
@@ -784,6 +788,154 @@ function EmailRemindersSection() {
           <b className="text-foreground">EMAIL_FROM</b> overrides the sender address). Workers receive their follow-up
           schedule; class leaders receive birthdays, low-attendance alerts, new contacts and follow-up highlights
           for their class.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function StewardSyncSection() {
+  const settings = useQuery(api.settings.get);
+  const setSetting = useMutation(api.settings.set);
+  const getStatus = useAction(api.steward.status);
+  const runSync = useAction(api.steward.syncNow);
+
+  const [status, setStatus] = useState<{
+    configured: boolean;
+    baseUrl?: string;
+    enabled: boolean;
+    lastSync?: string;
+    lastResult?: string;
+    total: number;
+    synced: number;
+    unsynced: number;
+  } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+
+  useEffect(() => {
+    getStatus().then(setStatus).catch(() => undefined);
+  }, [getStatus]);
+
+  useEffect(() => {
+    if (settings && settings["steward.enabled"] !== undefined) {
+      setEnabled(settings["steward.enabled"] !== "false");
+    }
+  }, [settings]);
+
+  let lastResultText = "Never synced yet — run a sync or wait for the hourly job.";
+  if (status?.lastResult) {
+    try {
+      const r = JSON.parse(status.lastResult) as {
+        direction?: string;
+        sent?: number;
+        matched?: number;
+        received?: number;
+        created?: number;
+        updated?: number;
+        skipped?: number;
+      };
+      lastResultText =
+        r.direction === "push"
+          ? `Last push sent ${r.sent ?? 0} members and linked ${r.matched ?? 0} Steward records.`
+          : `Last pull received ${r.received ?? 0} members (${r.created ?? 0} new, ${r.updated ?? 0} updated, ${r.skipped ?? 0} unchanged).`;
+    } catch {
+      // keep the default text if the stored result is unreadable
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Link2 className="h-4 w-4 text-primary" />
+        <p className="term-label">// steward member sync</p>
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
+          <div>
+            <div className="text-xs font-semibold">Steward connection</div>
+            <div className="text-[10px] text-muted-foreground">
+              {status === null
+                ? "Checking connection…"
+                : status.configured
+                  ? `Connected — syncing with ${status.baseUrl}`
+                  : "Not connected — add STEWARD_API_URL + STEWARD_SYNC_KEY in the Keys tab"}
+            </div>
+          </div>
+          <span
+            className={cn(
+              "h-2 w-2 shrink-0 rounded-full",
+              status?.configured ? "bg-[#86efac]" : "bg-[#fbbf24]",
+            )}
+          />
+        </div>
+
+        <div className="flex items-center justify-between border-b border-dashed pb-3">
+          <div>
+            <div className="text-[13px] font-medium">Automatic background sync</div>
+            <div className="text-[10px] text-muted-foreground">
+              Runs hourly · pulls Steward's members in and pushes Shepherd's members out
+            </div>
+          </div>
+          <Switch
+            checked={enabled}
+            onCheckedChange={async (v) => {
+              setEnabled(v);
+              await setSetting({ key: "steward.enabled", value: String(v) });
+              toast.success(v ? "Automatic sync enabled" : "Automatic sync paused");
+            }}
+          />
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "total members", value: status?.total ?? 0 },
+            { label: "synced", value: status?.synced ?? 0 },
+            { label: "not yet synced", value: status?.unsynced ?? 0 },
+          ].map((it) => (
+            <div key={it.label} className="rounded-md border bg-muted/40 px-2.5 py-2">
+              <div className="font-mono text-sm font-bold">{it.value}</div>
+              <div className="text-[9px] leading-3 text-muted-foreground">{it.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <Button
+          size="sm"
+          disabled={!status?.configured || syncing}
+          onClick={async () => {
+            setSyncing(true);
+            try {
+              const res = await runSync();
+              if (res.ok) {
+                toast.success("Sync complete — members up to date in both apps");
+              } else {
+                toast.error(res.pull?.reason || res.push?.reason || "Sync failed");
+              }
+              const s = await getStatus();
+              setStatus(s);
+            } finally {
+              setSyncing(false);
+            }
+          }}
+        >
+          <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", syncing && "animate-spin")} />
+          {syncing ? "Syncing…" : "Sync now"}
+        </Button>
+
+        <div>
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">last sync</p>
+          <p className="text-[11px] leading-4 text-muted-foreground">
+            {status?.lastSync ? fmtDateTime(new Date(Number(status.lastSync)).toISOString()) : "Never"} ·{" "}
+            {lastResultText}
+          </p>
+        </div>
+
+        <p className="text-[10px] leading-4 text-muted-foreground">
+          Add <b className="text-foreground">STEWARD_API_URL</b> (the Steward app's public URL) and a shared{" "}
+          <b className="text-foreground">STEWARD_SYNC_KEY</b> in the Keys tab, and set the same two variables on the
+          Steward app. Members are matched by Steward ID, membership ID, email, phone or name + class; conflicts
+          resolve to the most recent update. Ministry positions stay managed inside each app.
         </p>
       </div>
     </div>
