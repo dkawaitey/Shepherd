@@ -201,8 +201,14 @@ function FollowupCalendar({ events }: { events: any[] }) {
 // ---------- Page ----------
 export default function Dashboard() {
   const navigate = useNavigate();
+  const me = useQuery(api.users.currentUser);
   const stats = useQuery(api.dashboard.stats);
   const posts = useQuery(api.posts.list, {});
+
+  const rawName = (me?.name || me?.email || "").split(/[\s@.]/).filter(Boolean)[0];
+  const firstName = rawName
+    ? rawName[0]!.toUpperCase() + rawName.slice(1)
+    : "friend";
 
   if (!stats) {
     return (
@@ -225,10 +231,9 @@ export default function Dashboard() {
       <div>
         <div className="flex items-center gap-2">
           <span className="text-lg font-bold text-primary">❯</span>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Dashboard</h1>
-          <span className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline">
-            dash
-          </span>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+            Serve Your Creator Now, {firstName}
+          </h1>
         </div>
         <p className="mt-1 text-[13px] text-muted-foreground">
           <span className="text-primary">$</span> shepherd status --live{" "}
