@@ -839,9 +839,6 @@ export default function Contacts() {
         />
       ) : (
         <>
-          <p className="mb-3 text-[11px] text-muted-foreground">
-            <span className="text-primary">$</span> find contacts --count <span className="text-foreground">{contacts.length}</span>
-          </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {contacts.map((c) => (
               <ContactCard key={c._id} contact={c} milestones={milestones} />
