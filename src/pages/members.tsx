@@ -194,6 +194,11 @@ export default function Members() {
                 <StatusPill status={m.status === "active" ? "activeMember" : "inactive"} />
               </div>
               <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                {m.sourceContactId && (
+                  <span className="inline-flex items-center gap-1 rounded border border-[#4ade80]/40 bg-[#15291c] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#86efac]">
+                    Promoted from contacts
+                  </span>
+                )}
                 <span>{m.klass} Class</span>
                 {m.area && <span>Area: {m.area}</span>}
                 {m.classLeader && <span>Leader: {m.classLeader}</span>}

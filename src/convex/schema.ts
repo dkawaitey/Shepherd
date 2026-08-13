@@ -107,6 +107,7 @@ const schema = defineSchema(
       mentor: v.optional(v.string()),
       ministry: v.optional(v.string()),
       tags: v.optional(v.array(v.string())),
+      promotedToMemberId: v.optional(v.id("members")), // set when promoted
 
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),
@@ -259,6 +260,7 @@ const schema = defineSchema(
       ministryRoles: v.optional(v.string()),
       status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
       occupation: v.optional(v.string()),
+      sourceContactId: v.optional(v.id("contacts")), // set when promoted from a contact
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),
       updatedAt: v.number(),

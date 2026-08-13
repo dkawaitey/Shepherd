@@ -235,10 +235,6 @@ export default function Dashboard() {
             Serve Your Creator Now, {firstName}
           </h1>
         </div>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          <span className="text-primary">$</span> shepherd status --live{" "}
-          <span className="text-status-green">// all counts from the database</span>
-        </p>
       </div>
 
       {/* Stat cards */}

@@ -43,6 +43,7 @@ import {
   EmptyState,
   StagePill,
   StatusPill,
+  canAddRecords,
   fmtDate,
   fmtDateTime,
   mapsLink,
@@ -74,6 +75,8 @@ import {
   Sparkles,
   Trash2,
   Trophy,
+  UserCheck,
+  UserPlus,
   UserRound,
 } from "lucide-react";
 
@@ -97,6 +100,9 @@ export default function ContactProfile() {
   const me = useQuery(api.users.currentUser);
   const isAdmin = me?.role === "admin";
   const canEdit = me && me.role !== "leader";
+  const canAdd = canAddRecords(me);
+  const promote = useMutation(api.contacts.promoteToMember);
+  const [promoting, setPromoting] = useState(false);
 
   const [tab, setTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
@@ -185,6 +191,36 @@ export default function ContactProfile() {
                 <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                   <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                 </Button>
+              )}
+              {contact.promotedToMemberId ? (
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-[#4ade80]/40 bg-[#15291c] px-2.5 py-1 text-[11px] font-semibold text-[#86efac]">
+                  <UserCheck className="h-3.5 w-3.5" /> Promoted to Member
+                </span>
+              ) : (
+                canAdd && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={promoting}
+                    onClick={async () => {
+                      setPromoting(true);
+                      try {
+                        const res = await promote({ id: contact._id });
+                        toast.success(
+                          `${contact.fullName} promoted to member (${res.membershipId})`,
+                        );
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error ? err.message : "Promotion failed",
+                        );
+                      } finally {
+                        setPromoting(false);
+                      }
+                    }}
+                  >
+                    <UserPlus className="mr-1 h-3.5 w-3.5" /> Promote to Member
+                  </Button>
+                )
               )}
               {isAdmin && (
                 <Button

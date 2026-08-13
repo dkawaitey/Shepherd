@@ -44,6 +44,7 @@ import {
   Phone,
   Plus,
   Search,
+  UserCheck,
   UserRound,
 } from "lucide-react";
 
@@ -126,6 +127,11 @@ function ContactCard({
 
       <div className="mt-3 space-y-1">
         <StagePill stage={contact.status} />
+        {contact.promotedToMemberId && (
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-status-green">
+            <UserCheck className="h-3.5 w-3.5" /> Promoted to Member
+          </div>
+        )}
         {events.slice(0, 2).map((label) => (
           <div key={label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="text-status-green">✓</span>

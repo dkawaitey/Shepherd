@@ -472,3 +472,56 @@ export const merge = mutation({
   },
 });
 
+/** Promote a contact to a Youth Ministry member. Creates a member record from
+ *  the contact's data (same ID format as contacts) and marks the contact. */
+export const promoteToMember = mutation({
+  args: { id: v.id("contacts") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    const contact = await ctx.db.get(args.id);
+    if (!contact || contact.isDeleted) throw new Error("Contact not found");
+    assertClassScope(user, contact.klass);
+    if (contact.promotedToMemberId) throw new Error("Contact already promoted");
+
+    const dateJoined = nowIso();
+    const derived = (contact.area || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w[0])
+      .join("");
+    const shortcut = (contact.areaShortcut || derived || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 2);
+    const membershipId = await nextMembershipId(ctx, shortcut, dateJoined);
+    const now = Date.now();
+    const memberId = await ctx.db.insert("members", {
+      fullName: contact.fullName,
+      gender: contact.gender,
+      phone: contact.phone,
+      whatsapp: contact.whatsapp,
+      email: contact.email,
+      klass: contact.klass,
+      area: contact.area,
+      dateJoined,
+      classLeader: contact.assignedWorker ?? contact.mentor,
+      ministryRoles: contact.ministry,
+      occupation: contact.occupation,
+      status: "active",
+      sourceContactId: args.id,
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+      membershipId,
+    });
+    await ctx.db.patch(args.id, { promotedToMemberId: memberId, updatedAt: now });
+    await logAudit(ctx, {
+      action: "contact.promote",
+      entityType: "contacts",
+      entityId: args.id,
+      details: `${contact.fullName} → member ${membershipId}`,
+    });
+    return { _id: memberId, membershipId };
+  },
+});
+
