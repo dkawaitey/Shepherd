@@ -122,6 +122,15 @@ function RouteSyncer() {
   return null;
 }
 
+// Register the service worker so Shepherd works offline and is installable as a PWA.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .catch((err) => console.warn("[PWA] Service worker registration failed:", err));
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
