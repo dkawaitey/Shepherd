@@ -2,7 +2,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, internalQuery, query, QueryCtx } from "./_generated/server";
 import { logAudit, requireAdmin, requireRole, hasRole, validClassScope } from "./helpers";
-import { ROLES, ROLE_LABELS, Role } from "./constants";
+import {
+  ROLES,
+  ROLE_LABELS,
+  Role,
+  deriveMemberClassScope,
+  deriveMemberRoles,
+} from "./constants";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -128,14 +134,22 @@ export const list = query({
           classScope: u.classScope,
           phone: u.phone,
           memberId: u.memberId,
+          rolesOverridden: !!u.rolesOverridden,
           member: linked
             ? {
                 _id: linked._id,
                 fullName: linked.fullName,
                 klass: linked.klass,
                 membershipId: linked.membershipId,
+                position: linked.position,
                 isClassLeader: linked.isClassLeader,
               }
+            : undefined,
+          derivedRoles: linked
+            ? deriveMemberRoles(linked.position, linked.isClassLeader)
+            : undefined,
+          derivedClassScope: linked
+            ? deriveMemberClassScope(linked.position, linked.isClassLeader, linked.klass)
             : undefined,
           createdAt: (u as { createdAt?: number }).createdAt ?? 0,
         };
@@ -168,9 +182,10 @@ export const classLeaders = query({
  * Link a user account to a member record from the Members module (one-to-one).
  * Admin only.
  *
- * If the member is marked as a class leader (isClassLeader), the linked user is
- * granted the Class Leader role scoped to the member's class — the responsibility
- * follows the member record. Pass memberId: undefined to unlink.
+ * The account's system roles are derived from the member's ministry position
+ * (Member Directory is the source of truth) — e.g. a Class Leader member gets
+ * the Class Leader role scoped to their class. An explicit administrator
+ * override (rolesOverridden) is respected. Pass memberId: undefined to unlink.
  */
 export const linkMember = mutation({
   args: {
@@ -195,32 +210,29 @@ export const linkMember = mutation({
       }
       await ctx.db.patch(args.userId, { memberId: args.memberId });
 
-      // A member marked as a class leader carries that responsibility: the
-      // linked account becomes a Class Leader for the member's class.
-      if (member.isClassLeader && member.klass) {
-        const roles = target.roles?.length ? [...target.roles] : target.role ? [target.role] : [];
-        if (!roles.includes(ROLES.CLASS_LEADER)) roles.push(ROLES.CLASS_LEADER);
+      const overridden = !!target.rolesOverridden;
+      if (!overridden) {
+        const roles = deriveMemberRoles(member.position, member.isClassLeader);
+        const classScope = deriveMemberClassScope(
+          member.position,
+          member.isClassLeader,
+          member.klass,
+        );
         await ctx.db.patch(args.userId, {
-          roles,
-          role: roles[0] as Role,
-          classScope: member.klass,
+          roles: roles.length ? roles : undefined,
+          role: roles[0],
+          classScope,
         });
-        await logAudit(ctx, {
-          action: "user.linkMember",
-          entityType: "users",
-          entityId: args.userId,
-          details: `${target.email ?? "user"} linked to ${member.fullName} (${member.membershipId}) — Class Leader of ${member.klass} Class`,
-        });
-        return { linked: true, grantedClassLeader: true, klass: member.klass };
       }
-
       await logAudit(ctx, {
         action: "user.linkMember",
         entityType: "users",
         entityId: args.userId,
-        details: `${target.email ?? "user"} linked to ${member.fullName} (${member.membershipId})`,
+        details: overridden
+          ? `${target.email ?? "user"} linked to ${member.fullName} (${member.membershipId}) — roles kept as overridden`
+          : `${target.email ?? "user"} linked to ${member.fullName} (${member.membershipId}) — role ${deriveMemberRoles(member.position, member.isClassLeader).map((r) => ROLE_LABELS[r]).join(" + ") || "none"}`,
       });
-      return { linked: true, grantedClassLeader: false };
+      return { linked: true, overridden };
     }
 
     await ctx.db.patch(args.userId, { memberId: undefined });
@@ -231,6 +243,99 @@ export const linkMember = mutation({
       details: `${target.email ?? "user"} unlinked from member record`,
     });
     return { linked: false };
+  },
+});
+
+/**
+ * Runs after a user signs in: links the account to their existing member record
+ * by verified email, then inherits permissions from the member's ministry
+ * position. Never creates duplicate member records. The administrator-approved
+ * alternative is linkMember from Settings → User Management.
+ */
+export const autoLinkAccount = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+    if (user.memberId) return { linked: false, reason: "alreadyLinked" };
+    const email = (user.email ?? "").trim().toLowerCase();
+    if (!email) return { linked: false, reason: "noEmail" };
+
+    const members = await ctx.db.query("members").collect();
+    const users = await ctx.db.query("users").collect();
+    const linkedMemberIds = new Set(
+      users.map((u) => u.memberId).filter((m): m is NonNullable<typeof m> => !!m),
+    );
+    const match = members.find(
+      (m) =>
+        !m.isDeleted &&
+        !linkedMemberIds.has(m._id) &&
+        (m.email ?? "").trim().toLowerCase() === email,
+    );
+    if (!match) return { linked: false, reason: "noMatch" };
+
+    await ctx.db.patch(user._id, { memberId: match._id });
+    if (!user.rolesOverridden) {
+      const roles = deriveMemberRoles(match.position, match.isClassLeader);
+      const classScope = deriveMemberClassScope(
+        match.position,
+        match.isClassLeader,
+        match.klass,
+      );
+      await ctx.db.patch(user._id, {
+        roles: roles.length ? roles : undefined,
+        role: roles[0],
+        classScope,
+      });
+    }
+    await logAudit(ctx, {
+      action: "user.autoLink",
+      entityType: "users",
+      entityId: user._id,
+      details: `${user.email} auto-linked to ${match.fullName} (${match.membershipId})`,
+    });
+    return { linked: true, memberId: match._id };
+  },
+});
+
+/** Revert a manual role override: the account's roles are re-derived from the
+ *  linked member's ministry position. Admin only. */
+export const revertRoleOverride = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new Error("User not found");
+
+    let details = "role override cleared";
+    if (target.memberId) {
+      const member = await ctx.db.get(target.memberId);
+      if (member && !member.isDeleted) {
+        const roles = deriveMemberRoles(member.position, member.isClassLeader);
+        const classScope = deriveMemberClassScope(
+          member.position,
+          member.isClassLeader,
+          member.klass,
+        );
+        await ctx.db.patch(args.userId, {
+          roles: roles.length ? roles : undefined,
+          role: roles[0],
+          classScope,
+          rolesOverridden: false,
+        });
+        details = `roles re-derived from ${member.fullName}: ${roles.map((r) => ROLE_LABELS[r]).join(" + ") || "none"}`;
+      } else {
+        await ctx.db.patch(args.userId, { rolesOverridden: false });
+      }
+    } else {
+      await ctx.db.patch(args.userId, { rolesOverridden: false });
+    }
+    await logAudit(ctx, {
+      action: "user.revertRoleOverride",
+      entityType: "users",
+      entityId: args.userId,
+      details,
+    });
   },
 });
 
@@ -271,6 +376,7 @@ export const setRoles = mutation({
       role: unique[0] as Role, // primary role for display / back-compat
       classScope: isClassLeader ? scope : undefined,
       name: target.name,
+      rolesOverridden: true, // manual assignment always marks an override
     });
     await logAudit(ctx, {
       action: "role.change",
@@ -302,6 +408,7 @@ export const setRole = mutation({
       role: args.role as Role,
       roles: [args.role as Role],
       name: target.name,
+      rolesOverridden: true,
     });
     await logAudit(ctx, {
       action: "role.change",

@@ -133,8 +133,17 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [testAsOpen, setTestAsOpen] = useState(false);
   const setTestAs = useMutation(api.users.setTestAs);
+  const autoLink = useMutation(api.users.autoLinkAccount);
   // Keeps the offline sync queue replaying in the background (no UI needed).
   useOfflineSync();
+
+  // Link the signed-in account to their existing member record by verified
+  // email, so permissions are inherited from the member's ministry position.
+  useEffect(() => {
+    if (user && !user.memberId) {
+      autoLink().catch(() => undefined);
+    }
+  }, [user, autoLink]);
 
   const endTest = () => {
     setTestAs({ role: undefined })

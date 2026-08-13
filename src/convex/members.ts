@@ -1,8 +1,47 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { CLASS_OPTIONS, ROLES, Role } from "./constants";
+import {
+  CLASS_OPTIONS,
+  POSITION_OPTIONS,
+  POSITIONS,
+  ROLES,
+  Role,
+  deriveMemberClassScope,
+  deriveMemberRoles,
+  effectivePosition,
+} from "./constants";
 import { nextMembershipId } from "./contacts";
 import { getCurrentUser, hasRole, logAudit, nowIso, requireRole, classScoped } from "./helpers";
+
+/** Validate + normalize a member's position / class-leader flag (admin-only
+ *  values). Prevents contradictory combinations, e.g. Read-only Leader + Class
+ *  Leader, or Ordinary Member holding class leadership. */
+const normalizePosition = (
+  position: string | undefined,
+  requestedClassLeader: boolean,
+) => {
+  const pos = position?.trim() || undefined;
+  if (pos && !POSITION_OPTIONS.includes(pos as (typeof POSITION_OPTIONS)[number])) {
+    throw new Error("Invalid ministry position");
+  }
+  if (pos === POSITIONS.LEADER && requestedClassLeader) {
+    throw new Error("A Read-only Leader cannot also be a Class Leader");
+  }
+  if (
+    requestedClassLeader &&
+    pos &&
+    pos !== POSITIONS.CLASS_LEADER &&
+    pos !== POSITIONS.ADMIN
+  ) {
+    throw new Error(
+      "Only a Class Leader or Administrator position can include class leadership",
+    );
+  }
+  let isClassLeader = requestedClassLeader;
+  if (pos === POSITIONS.CLASS_LEADER) isClassLeader = true;
+  else if (pos && pos !== POSITIONS.ADMIN) isClassLeader = false;
+  return { position: pos, isClassLeader };
+};
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
 const deriveShortcut = (area?: string) =>
@@ -76,13 +115,17 @@ export const create = mutation({
     ministryRoles: v.optional(v.string()),
     occupation: v.optional(v.string()),
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
+    position: v.optional(v.string()),
     isClassLeader: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
-    // Only administrators may assign the class leader on a member record.
-    const classLeader = hasRole(user, ROLES.ADMIN) ? args.classLeader : undefined;
-    const isClassLeader = hasRole(user, ROLES.ADMIN) ? !!args.isClassLeader : false;
+    const isAdminCaller = hasRole(user, ROLES.ADMIN);
+    // Only administrators may appoint ministry positions / class leadership.
+    const classLeader = isAdminCaller ? args.classLeader : undefined;
+    const { position, isClassLeader } = isAdminCaller
+      ? normalizePosition(args.position, !!args.isClassLeader)
+      : { position: undefined, isClassLeader: false };
     const klass = args.klass || CLASS_OPTIONS[0];
     // Same ID format as contacts (AREA-DDMM-YYYY-SEQ) so promoted contacts
     // keep a consistent, non-class-based identifier. Shares the counter with
@@ -104,6 +147,7 @@ export const create = mutation({
       ministryRoles: args.ministryRoles,
       occupation: args.occupation,
       status: args.status ?? "active",
+      position: position as any,
       isClassLeader,
       isDeleted: false,
       createdAt: now,
@@ -136,10 +180,12 @@ export const update = mutation({
     ministryRoles: v.optional(v.string()),
     occupation: v.optional(v.string()),
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
+    position: v.optional(v.string()),
     isClassLeader: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
+    const isAdminCaller = hasRole(user, ROLES.ADMIN);
     const { id, ...data } = args;
     const member = await ctx.db.get(id);
     if (!member) throw new Error("Member not found");
@@ -147,38 +193,43 @@ export const update = mutation({
     for (const [k, val] of Object.entries(data)) {
       if (val !== undefined) cleaned[k] = val;
     }
-    // Only administrators may change the class leader on a member record.
-    if (!hasRole(user, ROLES.ADMIN)) {
+    // Only administrators may change positions / class leadership on a member.
+    if (!isAdminCaller) {
       delete cleaned.classLeader;
       delete cleaned.isClassLeader;
+      delete cleaned.position;
+    } else if (cleaned.position !== undefined || cleaned.isClassLeader !== undefined) {
+      const pos = (cleaned.position as string | undefined) ?? member.position;
+      const requestedCL =
+        cleaned.isClassLeader !== undefined
+          ? !!cleaned.isClassLeader
+          : !!member.isClassLeader;
+      const normalized = normalizePosition(pos, requestedCL);
+      cleaned.position = normalized.position;
+      cleaned.isClassLeader = normalized.isClassLeader;
     }
     await ctx.db.patch(id, cleaned);
 
-    // Keep a linked user account's class-leader responsibility in sync with the
-    // member record: toggling isClassLeader (or changing the class) on a linked
-    // member grants / revokes the Class Leader role for the linked account.
-    if (cleaned.isClassLeader !== undefined || cleaned.klass !== undefined) {
-      const linkedUser = (await ctx.db.query("users").collect()).find((u) => u.memberId === id);
-      if (linkedUser) {
-        const isCL =
-          cleaned.isClassLeader !== undefined ? !!cleaned.isClassLeader : !!member.isClassLeader;
-        const klass = (cleaned.klass as string | undefined) ?? member.klass;
-        if (isCL && klass) {
-          const roles = linkedUser.roles?.length ? [...linkedUser.roles] : linkedUser.role ? [linkedUser.role] : [];
-          if (!roles.includes(ROLES.CLASS_LEADER)) roles.push(ROLES.CLASS_LEADER);
-          await ctx.db.patch(linkedUser._id, {
-            roles,
-            role: roles[0] as Role,
-            classScope: klass,
-          });
-        } else if (!isCL) {
-          const roles = (linkedUser.roles?.length ? [...linkedUser.roles] : linkedUser.role ? [linkedUser.role] : []).filter(
-            (r) => r !== ROLES.CLASS_LEADER,
+    // The member's ministry position is the source of truth for system roles:
+    // keep the linked user account's roles + access scope in sync whenever the
+    // position, class-leader flag or class changes. Respects manual overrides.
+    if (cleaned.position !== undefined || cleaned.isClassLeader !== undefined || cleaned.klass !== undefined) {
+      const linkedUser = (await ctx.db.query("users").collect()).find(
+        (u) => u.memberId === id,
+      );
+      if (linkedUser && !linkedUser.rolesOverridden) {
+        const updated = await ctx.db.get(id);
+        if (updated) {
+          const roles = deriveMemberRoles(updated.position, updated.isClassLeader);
+          const classScope = deriveMemberClassScope(
+            updated.position,
+            updated.isClassLeader,
+            updated.klass,
           );
           await ctx.db.patch(linkedUser._id, {
             roles: roles.length ? roles : undefined,
             role: roles[0] as Role,
-            classScope: undefined,
+            classScope,
           });
         }
       }
@@ -207,6 +258,39 @@ export const remove = mutation({
       entityId: args.id,
       details: member.fullName,
     });
+  },
+});
+
+/** Class leaders from the Member Directory — the ministry-position source of
+ *  truth. Includes members who don't have a login account yet (they appear with
+ *  hasAccount: false and inherit permissions the moment an account is linked).
+ */
+export const classLeaders = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
+    const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
+    const users = await ctx.db.query("users").collect();
+    const userByMember = new Map(
+      users.filter((u) => u.memberId).map((u) => [u.memberId, u]),
+    );
+    return members
+      .filter((m) => {
+        const pos = effectivePosition(m.position, m.isClassLeader);
+        return pos === POSITIONS.CLASS_LEADER || (pos === POSITIONS.ADMIN && !!m.isClassLeader);
+      })
+      .map((m) => {
+        const account = userByMember.get(m._id);
+        return {
+          _id: m._id,
+          name: m.fullName,
+          klass: m.klass,
+          membershipId: m.membershipId,
+          hasAccount: !!account,
+          linkedUserId: account?._id,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 

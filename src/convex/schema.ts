@@ -39,6 +39,7 @@ const schema = defineSchema(
       testAs: v.optional(v.string()), // admin-only role impersonation for testing
       testClassScope: v.optional(v.string()), // class used while testing as a class leader
       memberId: v.optional(v.id("members")), // linked member record from the Members module (one-to-one)
+      rolesOverridden: v.optional(v.boolean()), // admin manually overrode the roles derived from the member's position
     }).index("email", ["email"]), // do not remove or modify
 
     // ===== Contacts (people reached during outreach) =====
@@ -264,7 +265,17 @@ const schema = defineSchema(
       ministryRoles: v.optional(v.string()),
       status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
       occupation: v.optional(v.string()),
-      isClassLeader: v.optional(v.boolean()), // member leads their own class
+      position: v.optional(
+        v.union(
+          v.literal("admin"),
+          v.literal("coordinator"),
+          v.literal("classLeader"),
+          v.literal("worker"),
+          v.literal("leader"),
+          v.literal("member"),
+        ),
+      ), // ministry position — the source of truth for system roles
+      isClassLeader: v.optional(v.boolean()), // legacy: class-leader flag (kept in sync with position)
       sourceContactId: v.optional(v.id("contacts")), // set when promoted from a contact
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),

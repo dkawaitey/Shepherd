@@ -23,7 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CLASS_OPTIONS, ROLES } from "@/convex/constants";
+import {
+  CLASS_OPTIONS,
+  POSITION_LABELS,
+  POSITION_OPTIONS,
+  POSITIONS,
+  ROLES,
+  effectivePosition,
+} from "@/convex/constants";
 import {
   ATTENDANCE_TYPE_LABELS,
   ATTENDANCE_STATUS_LABELS,
@@ -53,11 +60,27 @@ import {
   ArrowLeft,
   Crown,
   Download,
+  Pencil,
   Plus,
   ScrollText,
   Search,
   UserRoundPlus,
 } from "lucide-react";
+
+/** Dark terminal chips for each ministry position. */
+const POSITION_CHIP: Record<string, string> = {
+  admin: "border-[#f87171]/40 bg-[#2a1515] text-[#f87171]",
+  coordinator: "border-[#60a5fa]/40 bg-[#14212c] text-[#60a5fa]",
+  classLeader: "border-[#f59e0b]/40 bg-[#2e2408] text-[#fbbf24]",
+  worker: "border-[#4ade80]/40 bg-[#15291c] text-[#86efac]",
+  leader: "border-[#9ca3af]/40 bg-[#1c1f24] text-[#9ca3af]",
+};
+
+const positionChip = (m: any) => {
+  const pos = effectivePosition(m.position, m.isClassLeader);
+  if (pos === POSITIONS.MEMBER) return null;
+  return { pos, cls: POSITION_CHIP[pos], label: POSITION_LABELS[pos] };
+};
 
 export default function Members() {
   const [klass, setKlass] = useState("all");
@@ -196,11 +219,20 @@ export default function Members() {
                 <StatusPill status={m.status === "active" ? "activeMember" : "inactive"} />
               </div>
               <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                {m.isClassLeader && (
-                  <span className="inline-flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#fbbf24]">
-                    <Crown className="h-2.5 w-2.5" /> Class Leader
-                  </span>
-                )}
+                {(() => {
+                  const chip = positionChip(m);
+                  return chip ? (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                        chip.cls,
+                      )}
+                    >
+                      {chip.pos === POSITIONS.CLASS_LEADER && <Crown className="h-2.5 w-2.5" />}
+                      {chip.label}
+                    </span>
+                  ) : null;
+                })()}
                 {m.sourceContactId && (
                   <span className="inline-flex items-center gap-1 rounded border border-[#4ade80]/40 bg-[#15291c] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#86efac]">
                     Promoted from contacts
@@ -260,12 +292,13 @@ function AddMemberDialog({
 }) {
   const create = useMutation(api.members.create);
   const me = useQuery(api.users.currentUser);
-  const leaders = useQuery(api.users.classLeaders);
+  const leaders = useQuery(api.members.classLeaders);
   const isAdmin = me?.role === ROLES.ADMIN;
   const [form, setForm] = useState<Record<string, string>>({});
   const [isClassLeader, setIsClassLeader] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const position = effectivePosition(form.position, isClassLeader);
 
   // Auto-derive the area code from the area name until it's edited manually.
   const set = (k: string, v: string) =>
@@ -310,6 +343,7 @@ function AddMemberDialog({
                 ministryRoles: form.ministryRoles || undefined,
                 occupation: form.occupation || undefined,
                 status: "active",
+                position: form.position || undefined,
                 isClassLeader,
               } as any);
               toast.success(`Member added · ${res.membershipId}`);
@@ -381,20 +415,59 @@ function AddMemberDialog({
           </div>
           {isAdmin && (
             <div>
+              <Label htmlFor="m-position">Ministry position</Label>
+              <Select
+                value={form.position || undefined}
+                onValueChange={(v) => {
+                  set("position", v);
+                  if (v === POSITIONS.CLASS_LEADER) setIsClassLeader(true);
+                  else if (v !== POSITIONS.ADMIN) setIsClassLeader(false);
+                }}
+              >
+                <SelectTrigger id="m-position" className="mt-1 w-full">
+                  <SelectValue placeholder="Ordinary Member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {POSITION_OPTIONS.map((p) => (
+                    <SelectItem key={p} value={p}>{POSITION_LABELS[p]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-[9px] text-muted-foreground">
+                The position determines the system role when an account is linked to this member.
+              </p>
+            </div>
+          )}
+          {isAdmin && (
+            <div>
               <Label htmlFor="m-leader">Class leader</Label>
-              <Select value={form.classLeader || undefined} onValueChange={(v) => set("classLeader", v)}>
+              <Select
+                value={form.classLeaderId || undefined}
+                onValueChange={(v) => {
+                  const leader = (leaders ?? []).find((l) => l._id === v);
+                  setForm((f) => ({
+                    ...f,
+                    classLeaderId: v,
+                    classLeader: leader?.name ?? "",
+                  }));
+                }}
+              >
                 <SelectTrigger id="m-leader" className="mt-1 w-full">
                   <SelectValue placeholder="Select class leader" />
                 </SelectTrigger>
                 <SelectContent>
                   {(leaders ?? []).map((l) => (
-                    <SelectItem key={l._id} value={l.name}>
+                    <SelectItem key={l._id} value={l._id}>
                       {l.name}
-                      {l.classScope ? ` · ${l.classScope} Class` : ""}
+                      {l.klass ? ` · ${l.klass} Class` : ""}
+                      {l.hasAccount ? "" : " · no account"}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="mt-1 text-[9px] text-muted-foreground">
+                Members whose ministry position is Class Leader appear here — a login account is not required.
+              </p>
             </div>
           )}
           {isAdmin && (
@@ -404,15 +477,19 @@ function AddMemberDialog({
                   This member is a class leader
                 </Label>
                 <p className="text-[10px] leading-4 text-muted-foreground">
-                  They lead the{" "}
-                  <span className="font-semibold text-foreground">
-                    {form.klass || CLASS_OPTIONS[0]} Class
-                  </span>
+                  {position === POSITIONS.CLASS_LEADER
+                    ? `They lead the ${form.klass || CLASS_OPTIONS[0]} Class (from their position).`
+                    : position === POSITIONS.ADMIN
+                      ? `Administrators may also lead the ${form.klass || CLASS_OPTIONS[0]} Class.`
+                      : "Only Class Leader or Administrator positions can include class leadership."}
                 </p>
               </div>
               <Switch
                 checked={isClassLeader}
-                onCheckedChange={setIsClassLeader}
+                onCheckedChange={(v) => {
+                  if (position === POSITIONS.ADMIN) setIsClassLeader(v);
+                }}
+                disabled={position !== POSITIONS.ADMIN && position !== POSITIONS.CLASS_LEADER}
                 aria-label="Mark as class leader"
               />
             </div>
@@ -442,6 +519,7 @@ export function MemberProfile() {
   const linkMember = useMutation(api.users.linkMember);
   const isAdmin = me?.role === "admin";
   const setAttendance = useMutation(api.discipleship.setAttendance);
+  const [editOpen, setEditOpen] = useState(false);
 
   const [type, setType] = useState<string>(ATTENDANCE_TYPES.YOUTH_MEETING);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -453,6 +531,7 @@ export function MemberProfile() {
   }
   const { member, attendance } = data;
   const linked = (accounts ?? []).find((a) => a.memberId === member._id);
+  const chip = positionChip(member);
 
   const youthRows = attendance.filter((a) => a.type === ATTENDANCE_TYPES.YOUTH_MEETING);
   const churchRows = attendance.filter((a) => a.type === ATTENDANCE_TYPES.SUNDAY_SERVICE || a.type === ATTENDANCE_TYPES.MIDWEEK);
@@ -479,12 +558,18 @@ export function MemberProfile() {
       <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-muted/40 px-5 py-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <ScrollText className="h-5 w-5 text-primary" />
               <h1 className="text-xl font-bold">{member.fullName}</h1>
-              {member.isClassLeader && (
-                <span className="inline-flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-2 py-0.5 text-[10px] font-semibold text-[#fbbf24]">
-                  <Crown className="h-3 w-3" /> Class Leader
+              {chip && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold",
+                    chip.cls,
+                  )}
+                >
+                  {chip.pos === POSITIONS.CLASS_LEADER && <Crown className="h-3 w-3" />}
+                  {chip.label}
                 </span>
               )}
               <StatusPill status={member.status === "active" ? "activeMember" : "inactive"} />
@@ -497,9 +582,16 @@ export function MemberProfile() {
               {member.dateJoined && <span>Joined {fmtDate(member.dateJoined)}</span>}
             </div>
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            {member.ministryRoles && <div>Ministry: {member.ministryRoles}</div>}
-            {member.occupation && <div>Occupation: {member.occupation}</div>}
+          <div className="flex flex-col items-end gap-2 text-[11px] text-muted-foreground">
+            <div className="text-right">
+              {member.ministryRoles && <div>Ministry: {member.ministryRoles}</div>}
+              {member.occupation && <div>Occupation: {member.occupation}</div>}
+            </div>
+            {isAdmin && (
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                <Pencil className="mr-1 h-3.5 w-3.5" /> Edit member
+              </Button>
+            )}
           </div>
         </div>
 
@@ -520,6 +612,10 @@ export function MemberProfile() {
             </div>
           ))}
         </div>
+
+        {editOpen && (
+          <EditMemberDialog member={member} open={editOpen} onOpenChange={setEditOpen} />
+        )}
 
         {/* Linked user account (admin only) */}
         {isAdmin && (
@@ -652,5 +748,163 @@ export function MemberProfile() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ============ Edit Member (admin only) ============
+function EditMemberDialog({
+  member,
+  open,
+  onOpenChange,
+}: {
+  member: any;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const update = useMutation(api.members.update);
+  const me = useQuery(api.users.currentUser);
+  const isAdmin = me?.role === ROLES.ADMIN;
+  const [form, setForm] = useState<Record<string, string>>({
+    fullName: member.fullName ?? "",
+    klass: member.klass ?? "",
+    position: member.position ?? effectivePosition(member.position, member.isClassLeader),
+    status: member.status ?? "active",
+  });
+  const [isClassLeader, setIsClassLeader] = useState(!!member.isClassLeader);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const position = effectivePosition(form.position, isClassLeader);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.fullName?.trim()) {
+      setError("Full name is required");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await update({
+        id: member._id,
+        fullName: form.fullName.trim(),
+        klass: form.klass || undefined,
+        position: form.position || undefined,
+        status: form.status === "active" ? "active" : "inactive",
+        isClassLeader,
+      } as any);
+      toast.success("Member updated — linked account permissions synced");
+      onOpenChange(false);
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to update member");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit member — {member.fullName}</DialogTitle>
+          <DialogDescription>
+            Changing the ministry position or class automatically updates the linked
+            account's system permissions and access scope.
+          </DialogDescription>
+        </DialogHeader>
+        <form className="space-y-3" onSubmit={save}>
+          <div>
+            <Label htmlFor="e-name">Full name *</Label>
+            <Input
+              id="e-name"
+              className="mt-1"
+              value={form.fullName ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="e-class">Class</Label>
+              <Select
+                value={form.klass || undefined}
+                onValueChange={(v) => setForm((f) => ({ ...f, klass: v }))}
+              >
+                <SelectTrigger id="e-class" className="mt-1 w-full">
+                  <SelectValue placeholder="Select class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLASS_OPTIONS.map((c) => (
+                    <SelectItem key={c} value={c}>{c} Class</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="e-status">Status</Label>
+              <Select
+                value={form.status || "active"}
+                onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
+              >
+                <SelectTrigger id="e-status" className="mt-1 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {isAdmin && (
+            <div>
+              <Label htmlFor="e-position">Ministry position</Label>
+              <Select
+                value={form.position || undefined}
+                onValueChange={(v) => {
+                  setForm((f) => ({ ...f, position: v }));
+                  if (v === POSITIONS.CLASS_LEADER) setIsClassLeader(true);
+                  else if (v !== POSITIONS.ADMIN) setIsClassLeader(false);
+                }}
+              >
+                <SelectTrigger id="e-position" className="mt-1 w-full">
+                  <SelectValue placeholder="Ordinary Member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {POSITION_OPTIONS.map((p) => (
+                    <SelectItem key={p} value={p}>{POSITION_LABELS[p]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2.5">
+              <div className="min-w-0">
+                <Label className="text-[12px] font-semibold">Also leads this class</Label>
+                <p className="text-[10px] leading-4 text-muted-foreground">
+                  {position === POSITIONS.CLASS_LEADER
+                    ? "Class leadership comes from the Class Leader position."
+                    : position === POSITIONS.ADMIN
+                      ? "Administrators may also lead their class."
+                      : "Only Class Leader or Administrator positions can include class leadership."}
+                </p>
+              </div>
+              <Switch
+                checked={isClassLeader}
+                onCheckedChange={(v) => {
+                  if (position === POSITIONS.ADMIN) setIsClassLeader(v);
+                }}
+                disabled={position !== POSITIONS.ADMIN && position !== POSITIONS.CLASS_LEADER}
+                aria-label="Class leadership"
+              />
+            </div>
+          )}
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Saving..." : "Save changes"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

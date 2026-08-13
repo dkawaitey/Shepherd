@@ -25,10 +25,12 @@ import {
 } from "@/components/ui/select";
 import {
   CLASS_OPTIONS,
+  POSITION_LABELS,
   ROLE_LABELS,
   ROLE_NOTES,
   ROLES,
   Role,
+  effectivePosition,
 } from "@/convex/constants";
 import { PageHeader, fmtDateTime, downloadCsv, formatRoles } from "@/components/shared";
 import { cn } from "@/lib/utils";
@@ -108,6 +110,7 @@ function UsersTab() {
   const members = useQuery(api.members.list, {});
   const setRoles = useMutation(api.users.setRoles);
   const linkMember = useMutation(api.users.linkMember);
+  const revertOverride = useMutation(api.users.revertRoleOverride);
   const removeUser = useMutation(api.users.removeUser);
   const me = useQuery(api.users.currentUser);
   const [editing, setEditing] = useState<{
@@ -115,11 +118,18 @@ function UsersTab() {
     roles: string[];
     classScope: string;
     memberId: string;
+    override: boolean;
   } | null>(null);
 
   const openEditor = (u: NonNullable<typeof users>[number]) => {
     const current = u.roles?.length ? [...u.roles] : u.role ? [u.role] : [];
-    setEditing({ user: u, roles: current, classScope: u.classScope ?? "", memberId: u.memberId ?? "" });
+    setEditing({
+      user: u,
+      roles: current,
+      classScope: u.classScope ?? "",
+      memberId: u.memberId ?? "",
+      override: !!u.rolesOverridden,
+    });
   };
 
   const saveRoles = async () => {
@@ -129,7 +139,7 @@ function UsersTab() {
       roles: editing.roles,
       classScope: editing.classScope || undefined,
     });
-    toast.success("Roles updated");
+    toast.success("Roles saved");
     setEditing(null);
   };
 
@@ -142,6 +152,8 @@ function UsersTab() {
     });
   };
 
+  const rolesEditable = !editing || editing.override || !editing.user.member;
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-card p-4">
@@ -150,9 +162,10 @@ function UsersTab() {
           <p className="term-label">create & manage ministry users</p>
         </div>
         <p className="text-[11px] leading-5 text-muted-foreground">
-          Users sign up with their email from the sign-in page, then an administrator assigns roles here.
-          A user may hold several roles — for example Administrator plus Class Leader. A Class Leader is
-          locked to a single class and can manage contacts, workers, follow-ups, prayers and notes there.
+          Each account's system role is derived from the linked member's ministry position in the Member
+          Directory — the ministry structure is the source of truth. Members can hold a position before they
+          have an account; once an account is linked (automatically by email, or here by an administrator)
+          the permissions follow. Manual role overrides are possible but always flagged.
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           {Object.entries(ROLE_LABELS).map(([k, v]) => (
@@ -166,12 +179,17 @@ function UsersTab() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <table className="w-full text-left text-[12px]">
-          <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <table className="w-full text-left text-[11px]">
+          <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">User</th>
-              <th className="px-3 py-2">Roles</th>
+              <th className="px-3 py-2">Linked Member</th>
+              <th className="px-3 py-2">Ministry Position</th>
+              <th className="px-3 py-2">Class</th>
+              <th className="px-3 py-2">System Role</th>
+              <th className="px-3 py-2">Account Status</th>
+              <th className="px-3 py-2">Permission Scope</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
@@ -179,58 +197,98 @@ function UsersTab() {
             {users === undefined
               ? Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} className="border-t">
-                    <td colSpan={3} className="px-3 py-3">
+                    <td colSpan={8} className="px-3 py-3">
                       <div className="h-4 animate-pulse rounded bg-muted" />
                     </td>
                   </tr>
                 ))
               : users.map((u) => {
                   const roleList = u.roles?.length ? u.roles : u.role ? [u.role] : [];
+                  const derived = u.member ? (u.derivedRoles ?? []) : [];
+                  const overridden = !!u.rolesOverridden && !!u.member;
+                  const shown = u.member ? (overridden ? roleList : derived) : roleList;
+                  const pos = u.member
+                    ? effectivePosition(u.member.position, u.member.isClassLeader)
+                    : undefined;
+                  const scope = overridden
+                    ? (u.classScope ?? (roleList.includes(ROLES.ADMIN) ? "All ministry" : "—"))
+                    : u.member
+                      ? (u.derivedClassScope ?? (derived.includes(ROLES.ADMIN) ? "All ministry" : "—"))
+                      : (u.classScope ?? (roleList.includes(ROLES.ADMIN) ? "All ministry" : "—"));
                   return (
-                    <tr key={u._id} className="border-t">
+                    <tr key={u._id} className="border-t align-top">
                       <td className="px-3 py-2.5">
                         <div className="font-semibold">{u.name || "—"}</div>
                         <div className="text-[10px] text-muted-foreground">{u.email}</div>
                       </td>
                       <td className="px-3 py-2.5">
+                        {u.member ? (
+                          <Link
+                            to={`/members/${u.member._id}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {u.member.fullName}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {pos ? POSITION_LABELS[pos] : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5">{u.member?.klass ?? "—"}</td>
+                      <td className="px-3 py-2.5">
                         <div className="flex flex-wrap items-center gap-1">
-                          {roleList.length === 0 ? (
-                            <span className="text-[11px] text-muted-foreground">Pending role</span>
+                          {shown.length === 0 ? (
+                            <span className="text-[10px] text-muted-foreground">
+                              {u.member ? "None" : "Pending role"}
+                            </span>
                           ) : (
-                            roleList.map((r) => (
-                              <Badge key={r} variant="secondary" className="text-[10px]">
+                            shown.map((r) => (
+                              <Badge
+                                key={r}
+                                variant={overridden ? "outline" : "secondary"}
+                                className="text-[9px]"
+                              >
                                 {ROLE_LABELS[r as Role] ?? r}
                               </Badge>
                             ))
                           )}
-                          {u.classScope && (
-                            <Badge variant="outline" className="text-[10px]">
-                              {u.classScope} Class
+                          {overridden && (
+                            <Badge
+                              variant="outline"
+                              className="border-[#f59e0b]/50 text-[9px] text-status-amber"
+                            >
+                              overridden
                             </Badge>
                           )}
+                          {!u.member && roleList.length > 0 && (
+                            <span className="text-[9px] text-muted-foreground">manually assigned</span>
+                          )}
                         </div>
-                        {u.member && (
-                          <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <Users className="h-3 w-3" />
-                            Member:{" "}
-                            <Link
-                              to={`/members/${u.member._id}`}
-                              className="font-semibold text-primary hover:underline"
-                            >
-                              {u.member.fullName}
-                            </Link>
-                            {u.member.klass && <> · {u.member.klass} Class</>}
-                            {u.member.isClassLeader && (
-                              <span className="text-status-amber"> · Class Leader</span>
-                            )}
-                          </div>
-                        )}
                       </td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 text-[10px]",
+                            u.memberId ? "text-status-green" : "text-muted-foreground",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              u.memberId ? "bg-[#86efac]" : "bg-border",
+                            )}
+                          />
+                          {u.memberId ? "Linked" : "Not linked"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">{scope}</td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {u._id !== me?._id && (
                             <Button variant="ghost" size="sm" onClick={() => openEditor(u)}>
-                              Edit roles
+                              Edit
                             </Button>
                           )}
                           {u._id === me?._id && (
@@ -267,51 +325,13 @@ function UsersTab() {
           <DialogHeader>
             <DialogTitle>Roles — {editing?.user.name ?? editing?.user.email}</DialogTitle>
             <DialogDescription>
-              A user may hold several roles. A Class Leader is locked to the class you assign here.
+              {editing?.user.member
+                ? `System role is derived from ${editing.user.member.fullName}'s ministry position (${POSITION_LABELS[effectivePosition(editing.user.member.position, editing.user.member.isClassLeader)]}).`
+                : "This account has no linked member record, so roles are assigned manually."}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            {Object.entries(ROLE_LABELS).map(([k, v]) => {
-              const active = editing?.roles.includes(k) ?? false;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => toggleRole(k)}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-xs transition-colors",
-                    active
-                      ? "border-primary/60 bg-primary/10"
-                      : "hover:bg-muted",
-                  )}
-                >
-                  <span>
-                    <span className="block font-semibold">{v}</span>
-                    <span className="block text-[10px] text-muted-foreground">{ROLE_NOTES[k as Role]}</span>
-                  </span>
-                  <span className={cn("h-2 w-2 shrink-0 rounded-full", active ? "bg-primary" : "bg-border")} />
-                </button>
-              );
-            })}
-            {editing?.roles.includes(ROLES.CLASS_LEADER) && (
-              <div className="pt-1">
-                <Label className="text-[11px]">Class scope</Label>
-                <Select
-                  value={editing.classScope}
-                  onValueChange={(v) => setEditing((e) => (e ? { ...e, classScope: v } : e))}
-                >
-                  <SelectTrigger className="mt-1 w-full">
-                    <SelectValue placeholder="Select class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CLASS_OPTIONS.map((c) => (
-                      <SelectItem key={c} value={c}>{c} Class</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="pt-1">
+          <div className="space-y-3">
+            <div>
               <Label className="text-[11px]">Linked member record</Label>
               <Select
                 value={editing?.memberId ?? "none"}
@@ -320,7 +340,7 @@ function UsersTab() {
                   const memberId = v === "none" ? undefined : (v as any);
                   try {
                     await linkMember({ userId: editing.user._id, memberId });
-                    toast.success(memberId ? "Member linked to this account" : "Account unlinked from member");
+                    toast.success(memberId ? "Member linked — permissions inherited" : "Account unlinked from member");
                     setEditing((e) => (e ? { ...e, memberId: memberId ?? "" } : e));
                   } catch (err: any) {
                     toast.error(err?.message ?? "Could not link member");
@@ -332,23 +352,113 @@ function UsersTab() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">— No member —</SelectItem>
-                  {(members ?? []).map((m) => (
-                    <SelectItem key={m._id} value={m._id}>
-                      {m.fullName} · {m.klass} Class
-                      {m.isClassLeader ? " · Class Leader" : ""}
-                    </SelectItem>
-                  ))}
+                  {(members ?? []).map((m) => {
+                    const pos = effectivePosition(m.position, m.isClassLeader);
+                    return (
+                      <SelectItem key={m._id} value={m._id}>
+                        {m.fullName} · {m.klass} Class · {POSITION_LABELS[pos]}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
-              <p className="mt-1 text-[9px] leading-4 text-muted-foreground">
-                Links this account to a member record from the Members module. If that member is marked as a
-                class leader, the Class Leader role is granted automatically for their class.
-              </p>
+            </div>
+
+            {editing?.user.member && (
+              <div className="rounded-md border bg-muted/40 p-2.5 text-[11px]">
+                <span className="text-muted-foreground">Derived from position: </span>
+                {(editing.user.derivedRoles ?? []).length === 0 ? (
+                  <b>no system role</b>
+                ) : (
+                  (editing.user.derivedRoles ?? []).map((r, i) => (
+                    <b key={r}>
+                      {i > 0 ? " + " : ""}
+                      {ROLE_LABELS[r as Role] ?? r}
+                    </b>
+                  ))
+                )}
+                {editing.user.derivedClassScope && (
+                  <span className="text-muted-foreground"> · {editing.user.derivedClassScope} Class</span>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2.5">
+              <div className="min-w-0">
+                <Label className="text-[12px] font-semibold">Override roles manually</Label>
+                <p className="text-[10px] leading-4 text-muted-foreground">
+                  {editing?.user.member
+                    ? "Roles stop following the member's ministry position and are flagged as overridden."
+                    : "Assign roles directly (no member record to derive from)."}
+                </p>
+              </div>
+              <Switch
+                checked={editing?.override ?? false}
+                onCheckedChange={(v) => setEditing((e) => (e ? { ...e, override: v } : e))}
+              />
+            </div>
+
+            <div
+              className={cn("space-y-2", !rolesEditable && "pointer-events-none opacity-50")}
+            >
+              {Object.entries(ROLE_LABELS).map(([k, v]) => {
+                const active = editing?.roles.includes(k) ?? false;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => toggleRole(k)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                      active
+                        ? "border-primary/60 bg-primary/10"
+                        : "hover:bg-muted",
+                    )}
+                  >
+                    <span>
+                      <span className="block font-semibold">{v}</span>
+                      <span className="block text-[10px] text-muted-foreground">{ROLE_NOTES[k as Role]}</span>
+                    </span>
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", active ? "bg-primary" : "bg-border")} />
+                  </button>
+                );
+              })}
+              {editing?.roles.includes(ROLES.CLASS_LEADER) && (
+                <div className="pt-1">
+                  <Label className="text-[11px]">Class scope</Label>
+                  <Select
+                    value={editing.classScope}
+                    onValueChange={(v) => setEditing((e) => (e ? { ...e, classScope: v } : e))}
+                  >
+                    <SelectTrigger className="mt-1 w-full">
+                      <SelectValue placeholder="Select class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CLASS_OPTIONS.map((c) => (
+                        <SelectItem key={c} value={c}>{c} Class</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
+            {editing?.user.member && editing?.user.rolesOverridden && (
+              <Button
+                variant="ghost"
+                className="text-status-amber"
+                onClick={async () => {
+                  await revertOverride({ userId: editing.user._id });
+                  toast.success("Roles re-derived from ministry position");
+                  setEditing(null);
+                }}
+              >
+                Revert to member position
+              </Button>
+            )}
             <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-            <Button onClick={saveRoles} disabled={!editing?.roles.length}>
+            <Button onClick={saveRoles} disabled={!editing?.roles.length || !rolesEditable}>
               Save roles
             </Button>
           </DialogFooter>

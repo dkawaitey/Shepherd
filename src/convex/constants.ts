@@ -26,6 +26,89 @@ export const ROLE_NOTES: Record<Role, string> = {
   [ROLES.CLASS_LEADER]: "Manage one class: contacts, workers, follow-ups, prayers, notes",
 };
 
+// ===== Ministry positions (Member Directory) =====
+// The member's ministry position is the source of truth for system permissions:
+// the linked user account inherits the corresponding system roles automatically.
+export const POSITIONS = {
+  ADMIN: "admin",
+  COORDINATOR: "coordinator",
+  CLASS_LEADER: "classLeader",
+  WORKER: "worker",
+  LEADER: "leader",
+  MEMBER: "member",
+} as const;
+export type Position = (typeof POSITIONS)[keyof typeof POSITIONS];
+
+export const POSITION_LABELS: Record<string, string> = {
+  [POSITIONS.ADMIN]: "Administrator",
+  [POSITIONS.COORDINATOR]: "Evangelism Coordinator",
+  [POSITIONS.CLASS_LEADER]: "Class Leader",
+  [POSITIONS.WORKER]: "Follow-up Worker",
+  [POSITIONS.LEADER]: "Read-only Leader",
+  [POSITIONS.MEMBER]: "Ordinary Member",
+};
+
+export const POSITION_OPTIONS: Position[] = [
+  POSITIONS.ADMIN,
+  POSITIONS.COORDINATOR,
+  POSITIONS.CLASS_LEADER,
+  POSITIONS.WORKER,
+  POSITIONS.LEADER,
+  POSITIONS.MEMBER,
+];
+
+/** Effective ministry position, treating pre-position records (isClassLeader
+ *  only) as Class Leader so existing data maps cleanly. */
+export const effectivePosition = (
+  position?: string,
+  isClassLeader?: boolean,
+): Position => {
+  if (position && POSITION_OPTIONS.includes(position as Position)) {
+    return position as Position;
+  }
+  return isClassLeader ? POSITIONS.CLASS_LEADER : POSITIONS.MEMBER;
+};
+
+/**
+ * System roles derived from a member's ministry position. This is the single
+ * mapping between the Member Directory and User Management:
+ *   position -> system role(s)
+ * An Administrator may additionally lead a class (isClassLeader) and then
+ * holds both Administrator and Class Leader roles.
+ */
+export const deriveMemberRoles = (
+  position?: string,
+  isClassLeader?: boolean,
+): Role[] => {
+  const pos = effectivePosition(position, isClassLeader);
+  switch (pos) {
+    case POSITIONS.ADMIN:
+      return isClassLeader ? [ROLES.ADMIN, ROLES.CLASS_LEADER] : [ROLES.ADMIN];
+    case POSITIONS.CLASS_LEADER:
+      return [ROLES.CLASS_LEADER];
+    case POSITIONS.COORDINATOR:
+      return [ROLES.COORDINATOR];
+    case POSITIONS.WORKER:
+      return [ROLES.WORKER];
+    case POSITIONS.LEADER:
+      return [ROLES.LEADER];
+    default:
+      return [];
+  }
+};
+
+/** Access scope derived from a member's position + class. */
+export const deriveMemberClassScope = (
+  position?: string,
+  isClassLeader?: boolean,
+  klass?: string,
+): string | undefined => {
+  const pos = effectivePosition(position, isClassLeader);
+  if (pos === POSITIONS.CLASS_LEADER) return klass;
+  if (pos === POSITIONS.ADMIN && isClassLeader) return klass;
+  return undefined;
+};
+
 // Spiritual journey stages (contact.status = furthest stage reached)
 export const STAGES = {
   REACHED: "reached", // Met during outreach
