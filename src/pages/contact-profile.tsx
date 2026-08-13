@@ -815,10 +815,13 @@ function AttendanceTab({
   canEdit: boolean;
 }) {
   const setAttendance = useMutation(api.discipleship.setAttendance);
+  const me = useQuery(api.users.currentUser);
   const [type, setType] = useState<string>(ATTENDANCE_TYPES.YOUTH_MEETING);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [status, setStatus] = useState("present");
   const [program, setProgram] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [recordedBy, setRecordedBy] = useState(me?.name || me?.email || "");
 
   const counts = {
     present: rows.filter((r) => r.status === "present").length,
@@ -829,7 +832,7 @@ function AttendanceTab({
     <div className="space-y-4">
       {canEdit && (
         <form
-          className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-3.5"
+          className="rounded-lg border bg-card p-3.5"
           onSubmit={async (e) => {
             e.preventDefault();
             await setAttendance({
@@ -837,43 +840,59 @@ function AttendanceTab({
               contactId: contactId as any,
               date: new Date(date).toISOString(),
               type: type as any,
-              programName: program || undefined,
+              programName: program.trim() || undefined,
               status: status as any,
+              remarks: remarks.trim() || undefined,
+              recordedBy: recordedBy.trim() || me?.name || undefined,
             });
             toast.success("Attendance recorded");
+            setRemarks("");
           }}
         >
-          <div>
-            <Label>Activity</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="mt-1 w-44"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <p className="term-label mb-3">// record attendance</p>
+          <div className="overflow-x-auto pb-1">
+            <div className="flex min-w-max items-end gap-2">
+              <div>
+                <Label>Activity</Label>
+                <Select value={type} onValueChange={setType}>
+                  <SelectTrigger className="mt-1 w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input type="date" className="mt-1 w-36" value={date} onChange={(e) => setDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="mt-1 w-28"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Program / Session</Label>
+                <Input className="mt-1 w-44" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Morning session" />
+              </div>
+              <div>
+                <Label>Remarks</Label>
+                <Input className="mt-1 w-48" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Brought a friend…" />
+              </div>
+              <div>
+                <Label>Recorded by</Label>
+                <Input className="mt-1 w-40" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
+              </div>
+              <Button type="submit" size="sm" className="shrink-0">Record</Button>
+            </div>
           </div>
-          <div>
-            <Label>Date</Label>
-            <Input type="date" className="mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div>
-            <Label>Status</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="mt-1 w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Program / Session</Label>
-            <Input className="mt-1 w-56" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Youth Camp, Morning session" />
-          </div>
-          <Button type="submit" size="sm">Record</Button>
         </form>
       )}
 
@@ -893,6 +912,8 @@ function AttendanceTab({
                 <th className="px-3 py-2">Activity</th>
                 <th className="px-3 py-2">Program</th>
                 <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Recorded by</th>
+                <th className="px-3 py-2">Remarks</th>
               </tr>
             </thead>
             <tbody>
@@ -902,6 +923,8 @@ function AttendanceTab({
                   <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[r.type]}</td>
                   <td className="px-3 py-2">{r.programName || "—"}</td>
                   <td className="px-3 py-2"><StatusPill status={r.status} /></td>
+                  <td className="px-3 py-2">{r.recordedBy || "—"}</td>
+                  <td className="px-3 py-2">{r.remarks || "—"}</td>
                 </tr>
               ))}
             </tbody>

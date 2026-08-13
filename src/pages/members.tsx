@@ -685,7 +685,7 @@ export function MemberProfile() {
         {/* Record attendance */}
         {isAdmin && (
           <form
-            className="flex flex-wrap items-end gap-3 border-b p-5"
+            className="border-b p-5"
             onSubmit={async (e) => {
               e.preventDefault();
               await setAttendance({
@@ -693,60 +693,61 @@ export function MemberProfile() {
                 memberId: member._id,
                 date: new Date(date).toISOString(),
                 type: type as any,
-                programName: program || undefined,
+                programName: program.trim() || undefined,
                 status: status as any,
-                remarks: remarks || undefined,
-                recordedBy: recordedBy || me?.name || me?.email || undefined,
+                remarks: remarks.trim() || undefined,
+                recordedBy: recordedBy.trim() || me?.name || me?.email || undefined,
               });
               toast.success("Attendance recorded");
               setRemarks("");
             }}
           >
-            <p className="term-label w-full">// record attendance</p>
-            <div>
-              <Label>Activity</Label>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="mt-1 w-48"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <p className="term-label mb-3">// record attendance</p>
+            <div className="overflow-x-auto pb-1">
+              <div className="flex min-w-max items-end gap-2">
+                <div>
+                  <Label>Activity</Label>
+                  <Select value={type} onValueChange={setType}>
+                    <SelectTrigger className="mt-1 w-36"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Date</Label>
+                  <Input type="date" className="mt-1 w-36" value={date} onChange={(e) => setDate(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <Select value={status} onValueChange={setStatus}>
+                    <SelectTrigger className="mt-1 w-28"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Program / Session</Label>
+                  <Input className="mt-1 w-44" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Morning session" />
+                </div>
+                <div>
+                  <Label>Remarks</Label>
+                  <Input className="mt-1 w-48" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Late, brought a friend…" />
+                </div>
+                <div>
+                  <Label>Recorded by</Label>
+                  <Input className="mt-1 w-40" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
+                </div>
+                <Button type="submit" size="sm" className="shrink-0">
+                  <Plus className="mr-1 h-3.5 w-3.5" /> Record
+                </Button>
+              </div>
             </div>
-            <div>
-              <Label>Date</Label>
-              <Input type="date" className="mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-            <div>
-              <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="mt-1 w-32"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Program / Session</Label>
-              <Input className="mt-1 w-56" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Youth Camp, Morning session" />
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                Give a session name to record a second attendance on the same day.
-              </p>
-            </div>
-            <div>
-              <Label>Remarks</Label>
-              <Input className="mt-1 w-56" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Late, brought a friend…" />
-            </div>
-            <div>
-              <Label>Recorded by</Label>
-              <Input className="mt-1 w-44" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
-            </div>
-            <Button type="submit" size="sm">
-              <Plus className="mr-1 h-3.5 w-3.5" /> Record
-            </Button>
           </form>
         )}
 
