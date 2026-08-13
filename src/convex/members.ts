@@ -43,15 +43,10 @@ const normalizePosition = (
   return { position: pos, isClassLeader };
 };
 
-/** Derive a 2-letter area code from the area name (same rule as contacts). */
+/** Derive the 2-letter area code from the area name — the first two letters of
+ *  the area (e.g. Adjikpo → AD, Odumasi → OD). Same rule as contacts. */
 const deriveShortcut = (area?: string) =>
-  (area || "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  (area || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
 
 /** Members list, filterable by class / status / search. View-only for non-admins. */
 export const list = query({

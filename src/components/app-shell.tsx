@@ -84,7 +84,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <div className="leading-tight">
           <div className="text-sm font-bold tracking-[0.14em]">SHEPHERD</div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            discipleship · v1.0
+            discipleship
           </div>
         </div>
       </div>
@@ -197,7 +197,6 @@ export function AppShell() {
           </Button>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold">
-              <span className="mr-2 text-primary">~/shepherd</span>
               {current?.label ?? location.pathname}
             </div>
           </div>

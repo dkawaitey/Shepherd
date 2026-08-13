@@ -484,11 +484,7 @@ export const promoteToMember = mutation({
     if (contact.promotedToMemberId) throw new Error("Contact already promoted");
 
     const dateJoined = nowIso();
-    const derived = (contact.area || "")
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((w) => w[0])
-      .join("");
+    const derived = (contact.area || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2);
     const shortcut = (contact.areaShortcut || derived || "")
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, "")

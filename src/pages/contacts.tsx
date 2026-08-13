@@ -50,13 +50,7 @@ import {
 
 // ---- helpers ----
 const deriveShortcut = (area: string) =>
-  area
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  (area || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
 
 const normalizeStatus = (s: string | null) => {
   if (!s) return undefined;

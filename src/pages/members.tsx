@@ -48,13 +48,7 @@ import {
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
 const deriveShortcut = (area: string) =>
-  area
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  (area || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -525,6 +519,8 @@ export function MemberProfile() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [status, setStatus] = useState("present");
   const [program, setProgram] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [recordedBy, setRecordedBy] = useState(me?.name || me?.email || "");
 
   if (!data) {
     return <div className="h-64 animate-pulse rounded-lg border bg-card" />;
@@ -673,8 +669,11 @@ export function MemberProfile() {
                 type: type as any,
                 programName: program || undefined,
                 status: status as any,
+                remarks: remarks || undefined,
+                recordedBy: recordedBy || me?.name || me?.email || undefined,
               });
               toast.success("Attendance recorded");
+              setRemarks("");
             }}
           >
             <p className="term-label w-full">// record attendance</p>
@@ -708,6 +707,14 @@ export function MemberProfile() {
               <Label>Program (special)</Label>
               <Input className="mt-1 w-40" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="Youth Camp" />
             </div>
+            <div>
+              <Label>Remarks</Label>
+              <Input className="mt-1 w-56" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Late, brought a friend…" />
+            </div>
+            <div>
+              <Label>Recorded by</Label>
+              <Input className="mt-1 w-44" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
+            </div>
             <Button type="submit" size="sm">
               <Plus className="mr-1 h-3.5 w-3.5" /> Record
             </Button>
@@ -729,6 +736,7 @@ export function MemberProfile() {
                     <th className="px-3 py-2">Program</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Recorded by</th>
+                    <th className="px-3 py-2">Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -739,6 +747,7 @@ export function MemberProfile() {
                       <td className="px-3 py-2">{a.programName || "—"}</td>
                       <td className="px-3 py-2"><StatusPill status={a.status} /></td>
                       <td className="px-3 py-2">{a.recordedBy || "—"}</td>
+                      <td className="px-3 py-2">{a.remarks || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
