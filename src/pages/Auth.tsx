@@ -107,7 +107,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   };
 
   return (
-    <div className="term-grid min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <div className="flex min-h-screen flex-col">
         <header className="border-b bg-background/80 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
@@ -117,12 +117,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               </div>
               <span className="text-sm font-bold tracking-[0.16em]">SHEPHERD</span>
             </Link>
-            <div className="flex items-center gap-1">
-              <span className="text-[11px] text-muted-foreground">
-                <span className="text-primary">$</span> auth --method email
-              </span>
-              <ThemeToggle />
-            </div>
+            <ThemeToggle />
           </div>
         </header>
 
@@ -282,11 +277,12 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 </>
               )}
 
-              <div className="border-t bg-muted/50 px-6 py-3 text-center text-[11px] text-muted-foreground">
-                <span className="text-primary">$</span> shepherd auth --secure
-                <span className="mx-2 text-border">|</span>
-                <Link to="/" className="underline hover:text-foreground">
-                  back to home
+              <div className="border-t px-6 py-3 text-center text-[11px] text-muted-foreground">
+                <Link
+                  to="/"
+                  className="underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  ← back to home
                 </Link>
               </div>
             </Card>
