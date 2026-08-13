@@ -38,6 +38,7 @@ const schema = defineSchema(
       phone: v.optional(v.string()), // contact number for workers
       testAs: v.optional(v.string()), // admin-only role impersonation for testing
       testClassScope: v.optional(v.string()), // class used while testing as a class leader
+      memberId: v.optional(v.id("members")), // linked member record from the Members module (one-to-one)
     }).index("email", ["email"]), // do not remove or modify
 
     // ===== Contacts (people reached during outreach) =====

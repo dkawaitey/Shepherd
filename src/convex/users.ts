@@ -107,24 +107,39 @@ export const getCurrentUser = async (ctx: QueryCtx) => {
   return await ctx.db.get(userId);
 };
 
-/** All ministry users, with roles. Admins and coordinators only. */
+/** All ministry users, with roles and their linked member record. Admins and coordinators only. */
 export const list = query({
   args: {},
   handler: async (ctx) => {
     await requireRole(ctx, [ROLES.COORDINATOR]);
     const users = await ctx.db.query("users").collect();
+    const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
+    const memberById = new Map(members.map((m) => [m._id, m]));
     return users
       .filter((u) => !u.isAnonymous)
-      .map((u) => ({
-        _id: u._id,
-        name: u.name,
-        email: u.email,
-        role: u.role,
-        roles: u.roles,
-        classScope: u.classScope,
-        phone: u.phone,
-        createdAt: (u as { createdAt?: number }).createdAt ?? 0,
-      }));
+      .map((u) => {
+        const linked = u.memberId ? memberById.get(u.memberId) : undefined;
+        return {
+          _id: u._id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          roles: u.roles,
+          classScope: u.classScope,
+          phone: u.phone,
+          memberId: u.memberId,
+          member: linked
+            ? {
+                _id: linked._id,
+                fullName: linked.fullName,
+                klass: linked.klass,
+                membershipId: linked.membershipId,
+                isClassLeader: linked.isClassLeader,
+              }
+            : undefined,
+          createdAt: (u as { createdAt?: number }).createdAt ?? 0,
+        };
+      });
   },
 });
 
@@ -146,6 +161,76 @@ export const classLeaders = query({
         name: u.name ?? u.email ?? "Unnamed",
         classScope: u.classScope,
       }));
+  },
+});
+
+/**
+ * Link a user account to a member record from the Members module (one-to-one).
+ * Admin only.
+ *
+ * If the member is marked as a class leader (isClassLeader), the linked user is
+ * granted the Class Leader role scoped to the member's class — the responsibility
+ * follows the member record. Pass memberId: undefined to unlink.
+ */
+export const linkMember = mutation({
+  args: {
+    userId: v.id("users"),
+    memberId: v.optional(v.id("members")),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new Error("User not found");
+
+    if (args.memberId) {
+      const member = await ctx.db.get(args.memberId);
+      if (!member || member.isDeleted) throw new Error("Member not found");
+      const alreadyLinked = (await ctx.db.query("users").collect()).find(
+        (u) => u.memberId === args.memberId && u._id !== args.userId,
+      );
+      if (alreadyLinked) {
+        throw new Error(
+          `${member.fullName} is already linked to ${alreadyLinked.email ?? alreadyLinked.name ?? "another account"}`,
+        );
+      }
+      await ctx.db.patch(args.userId, { memberId: args.memberId });
+
+      // A member marked as a class leader carries that responsibility: the
+      // linked account becomes a Class Leader for the member's class.
+      if (member.isClassLeader && member.klass) {
+        const roles = target.roles?.length ? [...target.roles] : target.role ? [target.role] : [];
+        if (!roles.includes(ROLES.CLASS_LEADER)) roles.push(ROLES.CLASS_LEADER);
+        await ctx.db.patch(args.userId, {
+          roles,
+          role: roles[0] as Role,
+          classScope: member.klass,
+        });
+        await logAudit(ctx, {
+          action: "user.linkMember",
+          entityType: "users",
+          entityId: args.userId,
+          details: `${target.email ?? "user"} linked to ${member.fullName} (${member.membershipId}) — Class Leader of ${member.klass} Class`,
+        });
+        return { linked: true, grantedClassLeader: true, klass: member.klass };
+      }
+
+      await logAudit(ctx, {
+        action: "user.linkMember",
+        entityType: "users",
+        entityId: args.userId,
+        details: `${target.email ?? "user"} linked to ${member.fullName} (${member.membershipId})`,
+      });
+      return { linked: true, grantedClassLeader: false };
+    }
+
+    await ctx.db.patch(args.userId, { memberId: undefined });
+    await logAudit(ctx, {
+      action: "user.unlinkMember",
+      entityType: "users",
+      entityId: args.userId,
+      details: `${target.email ?? "user"} unlinked from member record`,
+    });
+    return { linked: false };
   },
 });
 

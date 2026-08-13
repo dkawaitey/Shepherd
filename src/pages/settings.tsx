@@ -1,6 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,18 +105,21 @@ export default function Settings() {
 
 function UsersTab() {
   const users = useQuery(api.users.list);
+  const members = useQuery(api.members.list, {});
   const setRoles = useMutation(api.users.setRoles);
+  const linkMember = useMutation(api.users.linkMember);
   const removeUser = useMutation(api.users.removeUser);
   const me = useQuery(api.users.currentUser);
   const [editing, setEditing] = useState<{
     user: NonNullable<typeof users>[number];
     roles: string[];
     classScope: string;
+    memberId: string;
   } | null>(null);
 
   const openEditor = (u: NonNullable<typeof users>[number]) => {
     const current = u.roles?.length ? [...u.roles] : u.role ? [u.role] : [];
-    setEditing({ user: u, roles: current, classScope: u.classScope ?? "" });
+    setEditing({ user: u, roles: current, classScope: u.classScope ?? "", memberId: u.memberId ?? "" });
   };
 
   const saveRoles = async () => {
@@ -205,6 +209,22 @@ function UsersTab() {
                             </Badge>
                           )}
                         </div>
+                        {u.member && (
+                          <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <Users className="h-3 w-3" />
+                            Member:{" "}
+                            <Link
+                              to={`/members/${u.member._id}`}
+                              className="font-semibold text-primary hover:underline"
+                            >
+                              {u.member.fullName}
+                            </Link>
+                            {u.member.klass && <> · {u.member.klass} Class</>}
+                            {u.member.isClassLeader && (
+                              <span className="text-status-amber"> · Class Leader</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -291,6 +311,40 @@ function UsersTab() {
                 </Select>
               </div>
             )}
+            <div className="pt-1">
+              <Label className="text-[11px]">Linked member record</Label>
+              <Select
+                value={editing?.memberId ?? "none"}
+                onValueChange={async (v) => {
+                  if (!editing) return;
+                  const memberId = v === "none" ? undefined : (v as any);
+                  try {
+                    await linkMember({ userId: editing.user._id, memberId });
+                    toast.success(memberId ? "Member linked to this account" : "Account unlinked from member");
+                    setEditing((e) => (e ? { ...e, memberId: memberId ?? "" } : e));
+                  } catch (err: any) {
+                    toast.error(err?.message ?? "Could not link member");
+                  }
+                }}
+              >
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue placeholder="No member linked" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— No member —</SelectItem>
+                  {(members ?? []).map((m) => (
+                    <SelectItem key={m._id} value={m._id}>
+                      {m.fullName} · {m.klass} Class
+                      {m.isClassLeader ? " · Class Leader" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-[9px] leading-4 text-muted-foreground">
+                Links this account to a member record from the Members module. If that member is marked as a
+                class leader, the Class Leader role is granted automatically for their class.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>

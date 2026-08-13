@@ -438,6 +438,8 @@ export function MemberProfile() {
   const navigate = useNavigate();
   const data = useQuery(api.members.get, { id: id as any });
   const me = useQuery(api.users.currentUser);
+  const accounts = useQuery(api.users.list);
+  const linkMember = useMutation(api.users.linkMember);
   const isAdmin = me?.role === "admin";
   const setAttendance = useMutation(api.discipleship.setAttendance);
 
@@ -450,6 +452,7 @@ export function MemberProfile() {
     return <div className="h-64 animate-pulse rounded-lg border bg-card" />;
   }
   const { member, attendance } = data;
+  const linked = (accounts ?? []).find((a) => a.memberId === member._id);
 
   const youthRows = attendance.filter((a) => a.type === ATTENDANCE_TYPES.YOUTH_MEETING);
   const churchRows = attendance.filter((a) => a.type === ATTENDANCE_TYPES.SUNDAY_SERVICE || a.type === ATTENDANCE_TYPES.MIDWEEK);
@@ -517,6 +520,49 @@ export function MemberProfile() {
             </div>
           ))}
         </div>
+
+        {/* Linked user account (admin only) */}
+        {isAdmin && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
+            <div className="min-w-0">
+              <p className="term-label">// linked account</p>
+              <p className="text-[11px] text-muted-foreground">
+                {linked
+                  ? `${linked.name || linked.email} · ${linked.email}`
+                  : "No user account is linked to this member yet. Link a volunteer's account so their responsibilities (e.g. Class Leader) follow this member record."}
+              </p>
+            </div>
+            <Select
+              value={linked?._id ?? "none"}
+              onValueChange={async (v) => {
+                try {
+                  if (v !== "none") {
+                    await linkMember({ userId: v as any, memberId: member._id as any });
+                    toast.success("Account linked to this member");
+                  } else if (linked) {
+                    await linkMember({ userId: linked._id as any, memberId: undefined });
+                    toast.success("Account link removed");
+                  }
+                } catch (err: any) {
+                  toast.error(err?.message ?? "Could not link account");
+                }
+              }}
+            >
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Select account" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— No account —</SelectItem>
+                {(accounts ?? []).map((a) => (
+                  <SelectItem key={a._id} value={a._id}>
+                    {a.name || a.email}
+                    {a.memberId && a.memberId !== member._id ? " · linked elsewhere" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {/* Record attendance */}
         {isAdmin && (

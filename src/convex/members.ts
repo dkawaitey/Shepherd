@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { CLASS_OPTIONS, ROLES } from "./constants";
+import { CLASS_OPTIONS, ROLES, Role } from "./constants";
 import { nextMembershipId } from "./contacts";
 import { getCurrentUser, hasRole, logAudit, nowIso, requireRole, classScoped } from "./helpers";
 
@@ -153,6 +153,37 @@ export const update = mutation({
       delete cleaned.isClassLeader;
     }
     await ctx.db.patch(id, cleaned);
+
+    // Keep a linked user account's class-leader responsibility in sync with the
+    // member record: toggling isClassLeader (or changing the class) on a linked
+    // member grants / revokes the Class Leader role for the linked account.
+    if (cleaned.isClassLeader !== undefined || cleaned.klass !== undefined) {
+      const linkedUser = (await ctx.db.query("users").collect()).find((u) => u.memberId === id);
+      if (linkedUser) {
+        const isCL =
+          cleaned.isClassLeader !== undefined ? !!cleaned.isClassLeader : !!member.isClassLeader;
+        const klass = (cleaned.klass as string | undefined) ?? member.klass;
+        if (isCL && klass) {
+          const roles = linkedUser.roles?.length ? [...linkedUser.roles] : linkedUser.role ? [linkedUser.role] : [];
+          if (!roles.includes(ROLES.CLASS_LEADER)) roles.push(ROLES.CLASS_LEADER);
+          await ctx.db.patch(linkedUser._id, {
+            roles,
+            role: roles[0] as Role,
+            classScope: klass,
+          });
+        } else if (!isCL) {
+          const roles = (linkedUser.roles?.length ? [...linkedUser.roles] : linkedUser.role ? [linkedUser.role] : []).filter(
+            (r) => r !== ROLES.CLASS_LEADER,
+          );
+          await ctx.db.patch(linkedUser._id, {
+            roles: roles.length ? roles : undefined,
+            role: roles[0] as Role,
+            classScope: undefined,
+          });
+        }
+      }
+    }
+
     await logAudit(ctx, {
       action: "member.update",
       entityType: "members",
