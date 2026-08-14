@@ -31,15 +31,18 @@ const normalizePosition = (
     requestedClassLeader &&
     pos &&
     pos !== POSITIONS.CLASS_LEADER &&
-    pos !== POSITIONS.ADMIN
+    pos !== POSITIONS.ADMIN &&
+    pos !== POSITIONS.COORDINATOR
   ) {
     throw new Error(
-      "Only a Class Leader or Administrator position can include class leadership",
+      "Only a Class Leader, Administrator or Evangelism Coordinator position can include class leadership",
     );
   }
   let isClassLeader = requestedClassLeader;
   if (pos === POSITIONS.CLASS_LEADER) isClassLeader = true;
-  else if (pos && pos !== POSITIONS.ADMIN) isClassLeader = false;
+  else if (pos && pos !== POSITIONS.ADMIN && pos !== POSITIONS.COORDINATOR) {
+    isClassLeader = false;
+  }
   return { position: pos, isClassLeader };
 };
 
@@ -272,7 +275,10 @@ export const classLeaders = query({
     return members
       .filter((m) => {
         const pos = effectivePosition(m.position, m.isClassLeader);
-        return pos === POSITIONS.CLASS_LEADER || (pos === POSITIONS.ADMIN && !!m.isClassLeader);
+        return (
+          pos === POSITIONS.CLASS_LEADER ||
+          ((pos === POSITIONS.ADMIN || pos === POSITIONS.COORDINATOR) && !!m.isClassLeader)
+        );
       })
       .map((m) => {
         const account = userByMember.get(m._id);

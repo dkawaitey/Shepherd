@@ -448,7 +448,9 @@ Membership IDs use the first two letters of the Area name and the join date (e.g
                 onValueChange={(v) => {
                   set("position", v);
                   if (v === POSITIONS.CLASS_LEADER) setIsClassLeader(true);
-                  else if (v !== POSITIONS.ADMIN) setIsClassLeader(false);
+                  else if (v !== POSITIONS.ADMIN && v !== POSITIONS.COORDINATOR) {
+                    setIsClassLeader(false);
+                  }
                 }}
               >
                 <SelectTrigger id="m-position" className="mt-1 w-full">
@@ -508,15 +510,23 @@ Membership IDs use the first two letters of the Area name and the join date (e.g
                     ? `They lead the ${form.klass || CLASS_OPTIONS[0]} Class (from their position).`
                     : position === POSITIONS.ADMIN
                       ? `Administrators may also lead the ${form.klass || CLASS_OPTIONS[0]} Class.`
-                      : "Only Class Leader or Administrator positions can include class leadership."}
+                      : position === POSITIONS.COORDINATOR
+                        ? `Evangelism Coordinators may also lead the ${form.klass || CLASS_OPTIONS[0]} Class (dual role).`
+                        : "Only Class Leader, Administrator or Evangelism Coordinator positions can include class leadership."}
                 </p>
               </div>
               <Switch
                 checked={isClassLeader}
                 onCheckedChange={(v) => {
-                  if (position === POSITIONS.ADMIN) setIsClassLeader(v);
+                  if (position === POSITIONS.ADMIN || position === POSITIONS.COORDINATOR) {
+                    setIsClassLeader(v);
+                  }
                 }}
-                disabled={position !== POSITIONS.ADMIN && position !== POSITIONS.CLASS_LEADER}
+                disabled={
+                  position !== POSITIONS.ADMIN &&
+                  position !== POSITIONS.CLASS_LEADER &&
+                  position !== POSITIONS.COORDINATOR
+                }
                 aria-label="Mark as class leader"
               />
             </div>
@@ -908,7 +918,9 @@ function EditMemberDialog({
                 onValueChange={(v) => {
                   setForm((f) => ({ ...f, position: v }));
                   if (v === POSITIONS.CLASS_LEADER) setIsClassLeader(true);
-                  else if (v !== POSITIONS.ADMIN) setIsClassLeader(false);
+                  else if (v !== POSITIONS.ADMIN && v !== POSITIONS.COORDINATOR) {
+                    setIsClassLeader(false);
+                  }
                 }}
               >
                 <SelectTrigger id="e-position" className="mt-1 w-full">
@@ -931,15 +943,23 @@ function EditMemberDialog({
                     ? "Class leadership comes from the Class Leader position."
                     : position === POSITIONS.ADMIN
                       ? "Administrators may also lead their class."
-                      : "Only Class Leader or Administrator positions can include class leadership."}
+                      : position === POSITIONS.COORDINATOR
+                        ? "Evangelism Coordinators may also lead their class (dual role)."
+                        : "Only Class Leader, Administrator or Evangelism Coordinator positions can include class leadership."}
                 </p>
               </div>
               <Switch
                 checked={isClassLeader}
                 onCheckedChange={(v) => {
-                  if (position === POSITIONS.ADMIN) setIsClassLeader(v);
+                  if (position === POSITIONS.ADMIN || position === POSITIONS.COORDINATOR) {
+                    setIsClassLeader(v);
+                  }
                 }}
-                disabled={position !== POSITIONS.ADMIN && position !== POSITIONS.CLASS_LEADER}
+                disabled={
+                  position !== POSITIONS.ADMIN &&
+                  position !== POSITIONS.CLASS_LEADER &&
+                  position !== POSITIONS.COORDINATOR
+                }
                 aria-label="Class leadership"
               />
             </div>

@@ -73,8 +73,9 @@ export const effectivePosition = (
  * System roles derived from a member's ministry position. This is the single
  * mapping between the Member Directory and User Management:
  *   position -> system role(s)
- * An Administrator may additionally lead a class (isClassLeader) and then
- * holds both Administrator and Class Leader roles.
+ * An Administrator or Evangelism Coordinator may additionally lead a class
+ * (isClassLeader) and then holds both their position role and the Class
+ * Leader role (a dual role, like Administrator + Class Leader).
  */
 export const deriveMemberRoles = (
   position?: string,
@@ -87,7 +88,9 @@ export const deriveMemberRoles = (
     case POSITIONS.CLASS_LEADER:
       return [ROLES.CLASS_LEADER];
     case POSITIONS.COORDINATOR:
-      return [ROLES.COORDINATOR];
+      return isClassLeader
+        ? [ROLES.COORDINATOR, ROLES.CLASS_LEADER]
+        : [ROLES.COORDINATOR];
     case POSITIONS.WORKER:
       return [ROLES.WORKER];
     case POSITIONS.LEADER:
@@ -105,7 +108,12 @@ export const deriveMemberClassScope = (
 ): string | undefined => {
   const pos = effectivePosition(position, isClassLeader);
   if (pos === POSITIONS.CLASS_LEADER) return klass;
-  if (pos === POSITIONS.ADMIN && isClassLeader) return klass;
+  if (
+    (pos === POSITIONS.ADMIN || pos === POSITIONS.COORDINATOR) &&
+    isClassLeader
+  ) {
+    return klass;
+  }
   return undefined;
 };
 
