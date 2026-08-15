@@ -15,10 +15,19 @@ export const journeyEventsAll = query({
     if (!user) return [];
     const scope = classScoped(user);
     let events = await ctx.db.query("journeyEvents").collect();
+    // Only surface timeline events whose contact still exists and hasn't been
+    // deleted — orphans from soft-deleted or removed contacts must not appear
+    // on the discipleship page or contact milestone markers.
+    const contacts = await ctx.db.query("contacts").collect();
+    const liveIds = new Set(
+      contacts.filter((c) => !c.isDeleted).map((c) => c._id),
+    );
+    events = events.filter((e) => liveIds.has(e.contactId));
     if (scope) {
-      const contacts = await ctx.db.query("contacts").collect();
       const ids = new Set(
-        contacts.filter((c) => c.klass === scope).map((c) => c._id),
+        contacts
+          .filter((c) => !c.isDeleted && c.klass === scope)
+          .map((c) => c._id),
       );
       events = events.filter((e) => ids.has(e.contactId));
     }
