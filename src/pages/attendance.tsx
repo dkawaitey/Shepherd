@@ -1,8 +1,19 @@
 import { api } from "@/convex/_generated/api";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -22,7 +33,14 @@ import {
   downloadCsv,
   downloadPdf,
 } from "@/components/shared";
-import { AlertTriangle, ClipboardList, Download, FileText } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  Download,
+  FileText,
+  HandHeart,
+} from "lucide-react";
 
 export default function Attendance() {
   const [klass, setKlass] = useState("all");
@@ -32,6 +50,29 @@ export default function Attendance() {
   });
   const history = useQuery(api.discipleship.listAttendance, {});
   const lowAttendance = useQuery(api.members.lowAttendance, {});
+  const me = useQuery(api.users.currentUser);
+  const markFollowup = useMutation(api.members.markAttendanceFollowup);
+
+  const canFollowUp = !!me && me.role !== "leader";
+  const [followupFor, setFollowupFor] = useState<any | null>(null);
+  const [outcome, setOutcome] = useState("");
+  const [followupBy, setFollowupBy] = useState(me?.name || me?.email || "");
+  const [busy, setBusy] = useState(false);
+
+  // Members followed up recently (outcome visible after the alert clears).
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const recentFollowups = (members ?? [])
+    .filter(
+      (m) =>
+        m.attendanceFollowup &&
+        m.attendanceFollowup.date >= thirtyDaysAgo,
+    )
+    .sort((a, b) =>
+      (b.attendanceFollowup?.date ?? "").localeCompare(a.attendanceFollowup?.date ?? ""),
+    )
+    .slice(0, 5);
 
   const memberById = new Map((members ?? []).map((m) => [m._id, m]));
 
@@ -171,26 +212,146 @@ export default function Attendance() {
         ) : (
           <div className="space-y-2">
             {lowAttendance.map((r) => (
-              <Link
+              <div
                 key={r.member._id}
-                to={`/members/${r.member._id}`}
-                className="flex items-center justify-between gap-3 rounded-lg border border-[#f59e0b]/40 bg-[#2e2408]/80 px-4 py-3 transition-colors hover:border-[#f59e0b]/70"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#f59e0b]/40 bg-[#2e2408]/80 px-4 py-3 transition-colors hover:border-[#f59e0b]/70"
               >
-                <div className="flex items-center gap-3">
+                <Link
+                  to={`/members/${r.member._id}`}
+                  className="flex min-w-0 flex-1 items-center gap-3"
+                >
                   <ClipboardList className="h-4 w-4 shrink-0 text-status-amber" />
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-[13px] font-semibold text-status-amber">{r.member.fullName}</div>
                     <div className="text-[10px] text-status-amber/80">
                       Has not attended a youth meeting in 4 weeks. Consider follow-up.
                     </div>
                   </div>
-                </div>
-                <StatusPill status="excused" />
-              </Link>
+                </Link>
+                {canFollowUp && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-[#f59e0b]/50 text-status-amber hover:bg-[#f59e0b]/10 hover:text-status-amber"
+                    onClick={() => {
+                      setFollowupFor(r.member);
+                      setOutcome("");
+                      setFollowupBy(me?.name || me?.email || "");
+                    }}
+                  >
+                    <HandHeart className="mr-1.5 h-3.5 w-3.5" /> Mark followed up
+                  </Button>
+                )}
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Recently followed up */}
+      {recentFollowups.length > 0 && (
+        <div className="mt-6">
+          <div className="mb-3 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-status-green" />
+            <p className="term-label">recently followed up — low attendance</p>
+          </div>
+          <div className="space-y-2">
+            {recentFollowups.map((m) => (
+              <div
+                key={m._id}
+                className="flex flex-wrap items-start justify-between gap-2 rounded-lg border bg-card px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <Link
+                    to={`/members/${m._id}`}
+                    className="text-[13px] font-semibold hover:text-primary hover:underline"
+                  >
+                    {m.fullName}
+                  </Link>
+                  <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">
+                    {m.attendanceFollowup?.outcome}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right text-[10px] text-muted-foreground">
+                  <div className="text-status-green">
+                    ✓ {m.attendanceFollowup?.date ? fmtDate(m.attendanceFollowup.date) : ""}
+                  </div>
+                  {m.attendanceFollowup?.by && <div>by {m.attendanceFollowup.by}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Mark followed-up dialog */}
+      <Dialog
+        open={!!followupFor}
+        onOpenChange={(v) => !v && setFollowupFor(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mark followed up</DialogTitle>
+            <DialogDescription>
+              Record the outcome of the follow-up with {followupFor?.fullName ?? "this member"}.
+              The low-attendance alert will be cleared.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="att-fu-outcome">
+                Outcome of the follow-up <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="att-fu-outcome"
+                className="mt-1"
+                rows={3}
+                placeholder="e.g. Spoke with the family — they will return next week; praying for them"
+                value={outcome}
+                onChange={(e) => setOutcome(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label htmlFor="att-fu-by">Followed up by</Label>
+              <input
+                id="att-fu-by"
+                className="mt-1 w-full rounded-md border bg-transparent px-3 py-2 text-[12px] outline-none focus:border-primary"
+                value={followupBy}
+                onChange={(e) => setFollowupBy(e.target.value)}
+                placeholder="Your name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFollowupFor(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!outcome.trim() || busy}
+              onClick={async () => {
+                if (!followupFor) return;
+                setBusy(true);
+                try {
+                  await markFollowup({
+                    memberId: followupFor._id,
+                    outcome: outcome.trim(),
+                    by: followupBy.trim() || undefined,
+                  });
+                  toast.success("Follow-up recorded — alert cleared");
+                  setFollowupFor(null);
+                } catch (err: any) {
+                  toast.error(err?.message ?? "Could not record follow-up");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <HandHeart className="mr-1.5 h-3.5 w-3.5" /> Save follow-up
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -282,6 +282,13 @@ const schema = defineSchema(
       ), // ministry position — the source of truth for system roles
       isClassLeader: v.optional(v.boolean()), // legacy: class-leader flag (kept in sync with position)
       sourceContactId: v.optional(v.id("contacts")), // set when promoted from a contact
+      attendanceFollowup: v.optional(
+        v.object({
+          date: v.string(), // ISO date the follow-up happened
+          outcome: v.string(),
+          by: v.optional(v.string()),
+        }),
+      ), // last low-attendance follow-up (recorded from the Attendance page)
       isDeleted: v.optional(v.boolean()),
 
       // Steward member sync (cross-app member exchange)

@@ -427,7 +427,46 @@ export const lowAttendance = query({
         const youthRows = rows.filter((a) => a.type === "youthMeeting");
         return { member: m, youthMeetingCount: youthRows.length, recentCount: rows.length };
       })
-      .filter((r) => r.youthMeetingCount === 0 || (r.recentCount > 0 && r.recentCount < 2))
+      .filter((r) => {
+        // A follow-up recorded within the last 4 weeks clears the alert; it
+        // reappears only if the member still doesn't attend for another 4 weeks.
+        const fu = r.member.attendanceFollowup;
+        if (fu && fu.date >= fourWeeksAgo) return false;
+        return r.youthMeetingCount === 0 || (r.recentCount > 0 && r.recentCount < 2);
+      })
       .sort((a, b) => a.youthMeetingCount - b.youthMeetingCount);
+  },
+});
+
+/** Record the outcome of a low-attendance follow-up and clear the alert. */
+export const markAttendanceFollowup = mutation({
+  args: {
+    memberId: v.id("members"),
+    outcome: v.string(),
+    by: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.CLASS_LEADER,
+    ]);
+    const member = await ctx.db.get(args.memberId);
+    if (!member || member.isDeleted) throw new Error("Member not found");
+    if (!args.outcome.trim()) throw new Error("Outcome is required");
+    const now = nowIso();
+    await ctx.db.patch(args.memberId, {
+      attendanceFollowup: {
+        date: now.slice(0, 10),
+        outcome: args.outcome.trim(),
+        by: args.by?.trim() || user.name || user.email || "",
+      },
+    });
+    await logAudit(ctx, {
+      action: "member.attendanceFollowup",
+      entityType: "members",
+      entityId: args.memberId,
+      details: `${member.fullName}: ${args.outcome.trim()}`,
+    });
   },
 });

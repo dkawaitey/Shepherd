@@ -927,6 +927,22 @@ function AttendanceTab({
         </div>
       )}
 
+      {member.attendanceFollowup && (
+        <div className="flex items-start gap-2 rounded-lg border border-[#86efac]/40 bg-[#15291c]/80 p-3 text-[11px] text-[#86efac]">
+          <HandHeart className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div>
+            <p className="font-semibold">Last low-attendance follow-up</p>
+            <p className="mt-0.5 leading-5">
+              {member.attendanceFollowup.outcome}{" "}
+              <span className="text-[#86efac]/70">
+                · {fmtDate(member.attendanceFollowup.date)}
+                {member.attendanceFollowup.by ? ` · by ${member.attendanceFollowup.by}` : ""}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Record attendance */}
       {canRecord && (
         <form className="rounded-lg border bg-card p-4" onSubmit={submit}>
