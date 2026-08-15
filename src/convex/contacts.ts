@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { STAGE_ORDER, STAGES, STAGE_LABELS, ROLES } from "./constants";
 import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, classScoped, assertClassScope } from "./helpers";
 
@@ -230,6 +231,25 @@ export const create = mutation({
       entityId: id,
       details: `${data.fullName} (${membershipId})`,
     });
+
+    // Fire-and-forget Customer.io event (never blocks or breaks the mutation).
+    await ctx.scheduler.runAfter(0, internal.customerio.track, {
+      identifier: membershipId,
+      event: "contact_created",
+      attributes: {
+        fullName: data.fullName,
+        email: data.email ?? "",
+        phone: data.phone ?? "",
+        klass: data.klass ?? "",
+        area: data.area ?? "",
+        status: status ?? "",
+      },
+      data: {
+        klass: data.klass ?? "",
+        area: data.area ?? "",
+        decision: data.decision ?? "",
+      },
+    });
     return { _id: id, membershipId };
   },
 });
@@ -285,6 +305,24 @@ export const quickAdd = mutation({
       entityType: "contacts",
       entityId: id,
       details: args.fullName,
+    });
+
+    // Fire-and-forget Customer.io event (never blocks or breaks the mutation).
+    await ctx.scheduler.runAfter(0, internal.customerio.track, {
+      identifier: membershipId,
+      event: "contact_created",
+      attributes: {
+        fullName: args.fullName,
+        phone: args.phone ?? "",
+        klass: args.klass ?? "",
+        area: args.area ?? "",
+        status: "reached",
+      },
+      data: {
+        klass: args.klass ?? "",
+        area: args.area ?? "",
+        quickAdd: true,
+      },
     });
     return { _id: id, membershipId };
   },
@@ -391,6 +429,24 @@ export const setStage = mutation({
       entityType: "contacts",
       entityId: args.id,
       details: `${contact.fullName}: ${STAGE_LABELS[stage]}`,
+    });
+
+    // Fire-and-forget Customer.io event (never blocks or breaks the mutation).
+    await ctx.scheduler.runAfter(0, internal.customerio.track, {
+      identifier: contact.membershipId,
+      event: "contact_stage_changed",
+      attributes: {
+        fullName: contact.fullName,
+        email: contact.email ?? "",
+        phone: contact.phone ?? "",
+        klass: contact.klass ?? "",
+        status: stage,
+      },
+      data: {
+        from: contact.status ?? "",
+        to: stage,
+        stageLabel: STAGE_LABELS[stage],
+      },
     });
   },
 });

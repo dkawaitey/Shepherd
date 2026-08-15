@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import {
   FOLLOWUP_STATUS,
   FOLLOWUP_TYPE_LABELS,
@@ -95,6 +96,25 @@ export const create = mutation({
       entityType: "followUps",
       entityId: id,
       details: `${contact.fullName}: ${FOLLOWUP_TYPE_LABELS[args.type]} on ${args.date.slice(0, 10)}`,
+    });
+
+    // Fire-and-forget Customer.io event (never blocks or breaks the mutation).
+    await ctx.scheduler.runAfter(0, internal.customerio.track, {
+      identifier: contact.membershipId,
+      event: "followup_scheduled",
+      attributes: {
+        fullName: contact.fullName,
+        email: contact.email ?? "",
+        phone: contact.phone ?? "",
+        klass: contact.klass ?? "",
+        status: contact.status ?? "",
+      },
+      data: {
+        type: args.type,
+        typeLabel: FOLLOWUP_TYPE_LABELS[args.type] ?? args.type,
+        date: args.date.slice(0, 10),
+        assignedWorker: args.assignedWorker ?? "",
+      },
     });
     return id;
   },
@@ -223,6 +243,27 @@ export const changeStatus = mutation({
       entityId: args.id,
       details: `${contact?.fullName ?? ""}: ${FOLLOWUP_TYPE_LABELS[f.type]} -> ${args.status}`,
     });
+
+    // Fire-and-forget Customer.io event (never blocks or breaks the mutation).
+    if (contact) {
+      await ctx.scheduler.runAfter(0, internal.customerio.track, {
+        identifier: contact.membershipId,
+        event: `followup_${args.status}`,
+        attributes: {
+          fullName: contact.fullName,
+          email: contact.email ?? "",
+          phone: contact.phone ?? "",
+          klass: contact.klass ?? "",
+          status: contact.status ?? "",
+        },
+        data: {
+          type: f.type,
+          typeLabel: FOLLOWUP_TYPE_LABELS[f.type] ?? f.type,
+          outcome: args.outcome ?? args.reasonMissed ?? args.reasonCancelled ?? "",
+          assignedWorker: f.assignedWorker ?? "",
+        },
+      });
+    }
   },
 });
 

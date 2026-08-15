@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import {
   CLASS_OPTIONS,
   POSITION_OPTIONS,
@@ -163,6 +164,25 @@ export const create = mutation({
       entityType: "members",
       entityId: id,
       details: `${args.fullName} (${membershipId})`,
+    });
+
+    // Fire-and-forget Customer.io event (never blocks or breaks the mutation).
+    await ctx.scheduler.runAfter(0, internal.customerio.track, {
+      identifier: membershipId,
+      event: "member_added",
+      attributes: {
+        fullName: args.fullName,
+        email: args.email ?? "",
+        phone: args.phone ?? "",
+        klass,
+        area: args.area ?? "",
+        status: args.status ?? "active",
+      },
+      data: {
+        klass,
+        area: args.area ?? "",
+        gender: args.gender ?? "",
+      },
     });
     return { _id: id, membershipId };
   },
