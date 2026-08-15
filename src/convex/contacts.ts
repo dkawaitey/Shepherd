@@ -352,19 +352,36 @@ export const update = mutation({
   },
 });
 
-/** Soft delete a contact. Admin only (incl. outreach record cleanup). */
+/** Permanently delete a contact and every record attached to it. Admin only. */
 export const remove = mutation({
   args: { id: v.id("contacts") },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Contact not found");
-    await ctx.db.patch(args.id, { isDeleted: true, updatedAt: Date.now() });
+
+    // Clear every record attached to this contact: journey, follow-ups, bible
+    // studies, attendance, prayer requests and notes.
+    for (const table of ["journeyEvents", "followUps", "bibleStudies", "attendance", "prayerRequests", "notes"] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("contactId", (q) => q.eq("contactId", args.id))
+        .collect();
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+      }
+    }
+    // If this contact was promoted to a member, keep the member record but
+    // break the link so it no longer points at a deleted contact.
+    if (existing.promotedToMemberId) {
+      await ctx.db.patch(existing.promotedToMemberId, { sourceContactId: undefined });
+    }
+    await ctx.db.delete(args.id);
     await logAudit(ctx, {
       action: "contact.delete",
       entityType: "contacts",
       entityId: args.id,
-      details: existing.fullName,
+      details: `${existing.fullName} (${existing.membershipId}) — permanently deleted with all records`,
     });
   },
 });

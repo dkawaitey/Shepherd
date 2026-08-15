@@ -337,8 +337,9 @@ export default function ContactProfile() {
           <DialogHeader>
             <DialogTitle>Delete contact?</DialogTitle>
             <DialogDescription>
-              {contact.fullName} ({contact.membershipId}) will be removed from the system. This is a soft
-              delete — the record can be restored by an administrator.
+              {contact.fullName} ({contact.membershipId}) and every record attached
+              to them — timeline, follow-ups, Bible studies, attendance, prayers
+              and notes — will be permanently removed. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

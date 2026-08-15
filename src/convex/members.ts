@@ -268,19 +268,51 @@ export const update = mutation({
   },
 });
 
-/** Admin-only delete (soft). */
+/** Permanently delete a member and every record attached to it. Admin only. */
 export const remove = mutation({
   args: { id: v.id("members") },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
     const member = await ctx.db.get(args.id);
     if (!member) throw new Error("Member not found");
-    await ctx.db.patch(args.id, { isDeleted: true, updatedAt: Date.now() });
+
+    // Clear every record attached to this member: attendance, prayer requests
+    // and notes.
+    for (const table of ["attendance", "prayerRequests", "notes"] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("memberId", (q) => q.eq("memberId", args.id))
+        .collect();
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+      }
+    }
+    // If this member was promoted from a contact, keep the contact record but
+    // break the link so it no longer points at a deleted member.
+    if (member.sourceContactId) {
+      await ctx.db.patch(member.sourceContactId, { promotedToMemberId: undefined });
+    }
+    // Unlink any user account linked to this member. The account's roles were
+    // derived from the member's ministry position, so clear them too unless an
+    // administrator explicitly overrode them.
+    const linked = (await ctx.db.query("users").collect()).find(
+      (u) => u.memberId === args.id,
+    );
+    if (linked) {
+      const patch: Record<string, unknown> = { memberId: undefined };
+      if (!linked.rolesOverridden) {
+        patch.roles = undefined;
+        patch.role = undefined;
+        patch.classScope = undefined;
+      }
+      await ctx.db.patch(linked._id, patch);
+    }
+    await ctx.db.delete(args.id);
     await logAudit(ctx, {
       action: "member.delete",
       entityType: "members",
       entityId: args.id,
-      details: member.fullName,
+      details: `${member.fullName} (${member.membershipId}) — permanently deleted with all records`,
     });
   },
 });

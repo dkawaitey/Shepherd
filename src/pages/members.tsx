@@ -563,6 +563,8 @@ export function MemberProfile() {
     me?.role === ROLES.CLASS_LEADER;
   const [tab, setTab] = useState("profile");
   const [editOpen, setEditOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const removeMember = useMutation(api.members.remove);
 
   if (!data) {
     return <div className="h-64 animate-pulse rounded-lg border bg-card" />;
@@ -600,9 +602,19 @@ export function MemberProfile() {
           <ArrowLeft className="mr-1 h-4 w-4" /> Members
         </Button>
         {isAdmin && (
-          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-            <Pencil className="mr-1 h-3.5 w-3.5" /> Edit member
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+              <Pencil className="mr-1 h-3.5 w-3.5" /> Edit member
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+            </Button>
+          </>
         )}
       </div>
 
@@ -691,6 +703,38 @@ export function MemberProfile() {
         {editOpen && (
           <EditMemberDialog member={member} open={editOpen} onOpenChange={setEditOpen} />
         )}
+
+        <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete member?</DialogTitle>
+              <DialogDescription>
+                {member.fullName} ({member.membershipId}) and every record attached
+                to them — attendance history, prayer journal and notes — will be
+                permanently removed. This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  try {
+                    await removeMember({ id: member._id });
+                    toast.success("Member deleted");
+                    navigate("/members");
+                  } catch (err: any) {
+                    toast.error(err?.message ?? "Could not delete member");
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ============ Profile tab ============ */}
         {tab === "profile" && (
