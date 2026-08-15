@@ -65,16 +65,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
-        {/* Light mode: ministry logo image */}
-        <div className="h-8 w-8 shrink-0 overflow-hidden rounded-md dark:hidden">
-          <img
-            src="/sidebar-logo.png"
-            alt="Shepherd logo"
-            className="h-full w-full object-contain mix-blend-multiply"
-          />
-        </div>
-        {/* Dark mode: transparent logo */}
-        <div className="hidden h-8 w-8 shrink-0 overflow-hidden rounded-md dark:block">
+        <div className="h-8 w-8 shrink-0 overflow-hidden rounded-md">
           <img
             src="/sidebarr-logo.png"
             alt="Shepherd logo"

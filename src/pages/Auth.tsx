@@ -112,16 +112,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         <header className="border-b bg-background/80 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
             <Link to="/" className="flex items-center gap-2">
-              {/* Light mode: ministry logo image */}
-              <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md dark:hidden">
-                <img
-                  src="/sidebar-logo.png"
-                  alt="Shepherd logo"
-                  className="h-full w-full object-contain mix-blend-multiply"
-                />
-              </div>
-              {/* Dark mode: transparent logo */}
-              <div className="hidden h-7 w-7 shrink-0 overflow-hidden rounded-md dark:block">
+              <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md">
                 <img
                   src="/sidebarr-logo.png"
                   alt="Shepherd logo"
@@ -140,16 +131,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               {step === "signIn" ? (
                 <>
                   <CardHeader className="text-center">
-                    {/* Light mode: ministry logo image */}
-                    <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-primary/20 bg-card dark:hidden">
-                      <img
-                        src="/sidebar-logo.png"
-                        alt="Shepherd logo"
-                        className="h-full w-full object-contain mix-blend-multiply"
-                      />
-                    </div>
-                    {/* Dark mode: transparent logo */}
-                    <div className="mx-auto mb-3 hidden h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-primary/20 bg-card dark:flex">
+                    <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-primary/20 bg-card">
                       <img
                         src="/sidebarr-logo.png"
                         alt="Shepherd logo"

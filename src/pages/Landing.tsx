@@ -17,16 +17,7 @@ export default function Landing() {
       <header className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5">
-            {/* Light mode: ministry logo image */}
-            <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md dark:hidden">
-              <img
-                src="/sidebar-logo.png"
-                alt="Shepherd logo"
-                className="h-full w-full object-contain mix-blend-multiply"
-              />
-            </div>
-            {/* Dark mode: transparent logo */}
-            <div className="hidden h-7 w-7 shrink-0 overflow-hidden rounded-md dark:block">
+            <div className="h-7 w-7 shrink-0 overflow-hidden rounded-md">
               <img
                 src="/sidebarr-logo.png"
                 alt="Shepherd logo"
@@ -63,16 +54,7 @@ export default function Landing() {
           transition={{ duration: 0.5 }}
           className="text-center"
         >
-          {/* Light mode: ministry logo image */}
-          <div className="mx-auto mb-8 h-20 w-20 overflow-hidden rounded-2xl dark:hidden">
-            <img
-              src="/sidebar-logo.png"
-              alt="Shepherd logo"
-              className="h-full w-full object-contain mix-blend-multiply"
-            />
-          </div>
-          {/* Dark mode: transparent logo */}
-          <div className="mx-auto mb-8 hidden h-20 w-20 overflow-hidden rounded-2xl dark:block">
+          <div className="mx-auto mb-8 h-20 w-20 overflow-hidden rounded-2xl">
             <img
               src="/sidebarr-logo.png"
               alt="Shepherd logo"
