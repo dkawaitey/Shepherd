@@ -5,13 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
   BIBLE_LESSONS,
-  STAGES,
   STAGE_ORDER,
   STAGE_LABELS,
 } from "@/convex/constants";
 import { PageHeader, fmtDate } from "@/components/shared";
 import { cn } from "@/lib/utils";
-import { ArrowRight, BookOpen, Sparkles } from "lucide-react";
+import { BookOpen, Sparkles } from "lucide-react";
 
 export default function Discipleship() {
   const contacts = useQuery(api.contacts.list, {});
@@ -126,28 +125,6 @@ export default function Discipleship() {
         </div>
       </div>
 
-      {/* CTA */}
-      <div className="rounded-lg border border-dashed bg-card p-4">
-        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-          <div>
-            <p className="text-[13px] font-semibold">Manual stage updates</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Open any contact profile → Timeline to record baptisms, church membership, service and more — or let follow-ups update it automatically.
-            </p>
-          </div>
-          <Button asChild>
-            <Link to="/contacts">
-              Open a profile <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      <p className="text-[10px] text-muted-foreground">
-        <span className="text-primary">$</span> shepherd discipleship --status · journey:{" "}
-        {STAGES.REACHED} → {STAGES.FOLLOWUP_STARTED} → {STAGES.ACCEPTED_CHRIST} → {STAGES.BIBLE_STUDY} →{" "}
-        {STAGES.BAPTIZED} → {STAGES.JOINED_CHURCH} → {STAGES.SERVING} → {STAGES.LEADING}
-      </p>
     </div>
   );
 }

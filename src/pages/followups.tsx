@@ -290,9 +290,6 @@ export function ScheduleDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Schedule follow-up</DialogTitle>
-          <DialogDescription>
-            The follow-up starts as <b>Pending</b>. Outcomes are only recorded when the status changes.
-          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <div>

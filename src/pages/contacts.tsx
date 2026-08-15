@@ -415,11 +415,11 @@ export function ContactFormDialog({
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{contact ? "Edit Contact" : "Add Contact"}</DialogTitle>
-          <DialogDescription>
-            {contact
-              ? `Updating ${contact.fullName} · ${contact.membershipId}`
-              : "A membership ID is generated automatically from the area and date of first encounter."}
-          </DialogDescription>
+          {contact && (
+            <DialogDescription>
+              Updating {contact.fullName} · {contact.membershipId}
+            </DialogDescription>
+          )}
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-5">
@@ -465,10 +465,6 @@ export function ContactFormDialog({
               <div>
                 <Label htmlFor="c-landmark">Landmark</Label>
                 <Input id="c-landmark" value={field("landmark")} onChange={(e) => set("landmark", e.target.value)} className="mt-1" />
-              </div>
-              <div>
-                <Label htmlFor="c-gps">GPS location</Label>
-                <Input id="c-gps" value={field("gpsLocation")} onChange={(e) => set("gpsLocation", e.target.value)} placeholder="5.6037, -0.1870" className="mt-1" />
               </div>
               <div>
                 <Label htmlFor="c-region">Region</Label>
@@ -535,15 +531,6 @@ export function ContactFormDialog({
               <div>
                 <Label htmlFor="c-area">Area</Label>
                 <Input id="c-area" value={field("area")} onChange={(e) => set("area", e.target.value)} className="mt-1" placeholder="e.g. Adjikpo" />
-              </div>
-              <div>
-                <Label>Area code (Membership ID)</Label>
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                  → {form.area ? deriveShortcut(form.area) : "…"}-{form.dateMet ? `${new Date(form.dateMet).getDate().toString().padStart(2, "0")}${(new Date(form.dateMet).getMonth() + 1).toString().padStart(2, "0")}` : "DDMM"}-{form.dateMet ? new Date(form.dateMet).getFullYear() : "YYYY"}-001
-                </p>
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  Auto-derived from the first two letters of the Area name.
-                </p>
               </div>
               <div>
                 <Label htmlFor="c-team">Evangelism team</Label>

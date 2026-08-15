@@ -1097,7 +1097,7 @@ function NotesTab({
                 onCheckedChange={(v) => setIsPrivate(!!v)}
                 disabled={type === NOTE_TYPES.PRIVATE}
               />
-              Private (leaders only)
+              Confidential
             </label>
           </div>
           <Textarea rows={2} placeholder="Family situation, employment needs, counselling notes..." value={content} onChange={(e) => setContent(e.target.value)} />
@@ -1119,7 +1119,7 @@ function NotesTab({
                 </span>
                 {n.isPrivate && (
                   <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Lock className="h-3 w-3" /> private
+                    <Lock className="h-3 w-3" /> confidential
                   </span>
                 )}
                 <span className="ml-auto text-[10px] text-muted-foreground">

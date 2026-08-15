@@ -22,7 +22,7 @@ export default function Landing() {
               <img
                 src="/sidebar-logo.png"
                 alt="Shepherd logo"
-                className="h-full w-full object-contain"
+                className="h-full w-full object-contain mix-blend-multiply"
               />
             </div>
             {/* Dark mode: transparent logo */}
@@ -68,7 +68,7 @@ export default function Landing() {
             <img
               src="/sidebar-logo.png"
               alt="Shepherd logo"
-              className="h-full w-full object-contain"
+              className="h-full w-full object-contain mix-blend-multiply"
             />
           </div>
           {/* Dark mode: transparent logo */}

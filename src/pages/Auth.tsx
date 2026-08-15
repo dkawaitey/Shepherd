@@ -117,7 +117,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <img
                   src="/sidebar-logo.png"
                   alt="Shepherd logo"
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-contain mix-blend-multiply"
                 />
               </div>
               {/* Dark mode: transparent logo */}
@@ -145,7 +145,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       <img
                         src="/sidebar-logo.png"
                         alt="Shepherd logo"
-                        className="h-full w-full object-contain"
+                        className="h-full w-full object-contain mix-blend-multiply"
                       />
                     </div>
                     {/* Dark mode: transparent logo */}

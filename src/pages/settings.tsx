@@ -48,7 +48,6 @@ import {
   QrCode,
   RefreshCw,
   Send,
-  ShieldCheck,
   Users,
 } from "lucide-react";
 
@@ -164,12 +163,6 @@ function UsersTab() {
           <Users className="h-4 w-4 text-primary" />
           <p className="term-label">create & manage ministry users</p>
         </div>
-        <p className="text-[11px] leading-5 text-muted-foreground">
-          Each account's system role is derived from the linked member's ministry position in the Member
-          Directory — the ministry structure is the source of truth. Members can hold a position before they
-          have an account; once an account is linked (automatically by email, or here by an administrator)
-          the permissions follow. Manual role overrides are possible but always flagged.
-        </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           {Object.entries(ROLE_LABELS).map(([k, v]) => (
             <div key={k} className="rounded-md border bg-muted/40 p-2.5">
@@ -318,10 +311,6 @@ function UsersTab() {
           </tbody>
         </table>
       </div>
-      <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-        <ShieldCheck className="h-3 w-3" /> The first account to sign in becomes the Administrator automatically.
-      </p>
-
       {/* Role editor */}
       <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent className="max-w-md">
@@ -527,7 +516,6 @@ function MinistryTab() {
   const list = [
     { key: "ministry_name", label: "Ministry name", placeholder: "Gethsemane Ministry Youth" },
     { key: "church_name", label: "Church", placeholder: "Gethsemane Ministry" },
-    { key: "default_worker", label: "Default follow-up worker", placeholder: "Brother Daniel" },
     { key: "classes", label: "Classes (comma separated)", placeholder: "Millison, Reuben, Jacob, Romina" },
     { key: "bible_lessons", label: "Bible study lessons (comma separated)", placeholder: "Salvation, Prayer, Bible Study..." },
     { key: "ministries", label: "Ministries (comma separated)", placeholder: "Choir, Ushering, Evangelism Team..." },

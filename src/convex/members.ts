@@ -90,11 +90,17 @@ export const get = query({
     const user = await getCurrentUser(ctx);
     const member = await ctx.db.get(args.id);
     if (!member || member.isDeleted) return null;
-    const attendance = await ctx.db
-      .query("attendance")
-      .withIndex("memberId", (q) => q.eq("memberId", args.id))
-      .collect();
-    return { member, attendance: attendance.sort((a, b) => b.date.localeCompare(a.date)) };
+    const [attendance, prayers, notes] = await Promise.all([
+      ctx.db.query("attendance").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
+      ctx.db.query("prayerRequests").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
+      ctx.db.query("notes").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
+    ]);
+    return {
+      member,
+      attendance: attendance.sort((a, b) => b.date.localeCompare(a.date)),
+      prayers: prayers.sort((a, b) => b.createdAt - a.createdAt),
+      notes: notes.sort((a, b) => b.createdAt - a.createdAt),
+    };
   },
 });
 

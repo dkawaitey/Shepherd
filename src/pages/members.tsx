@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -35,12 +37,18 @@ import {
   ATTENDANCE_TYPE_LABELS,
   ATTENDANCE_STATUS_LABELS,
   ATTENDANCE_TYPES,
+  NOTE_TYPES,
+  NOTE_TYPE_LABELS,
+  PRAYER_STATUS,
 } from "@/convex/constants";
 import {
   EmptyState,
   PageHeader,
   StatusPill,
   fmtDate,
+  fmtDateTime,
+  telLink,
+  waLink,
   downloadCsv,
   downloadPdf,
   progressColor,
@@ -53,14 +61,22 @@ const deriveShortcut = (area: string) =>
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
+  ClipboardList,
   Crown,
   Download,
   FileText,
+  HandHeart,
   Link2,
+  Lock,
+  Mail,
+  MessageCircle,
+  NotebookPen,
   Pencil,
+  Phone,
   Plus,
   ScrollText,
   Search,
+  Trash2,
   UserRoundPlus,
 } from "lucide-react";
 
@@ -340,9 +356,6 @@ function AddMemberDialog({
       <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add member</DialogTitle>
-          <DialogDescription>
-Membership IDs use the first two letters of the Area name and the join date (e.g. AD-0104-2026-001). Only administrators can edit member records.
-          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -418,27 +431,16 @@ Membership IDs use the first two letters of the Area name and the join date (e.g
             </div>
           </div>
           <div>
+            <Label htmlFor="m-email">Email</Label>
+            <Input id="m-email" type="email" className="mt-1" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} />
+          </div>
+          <div>
             <Label htmlFor="m-joined">Date joined Youth Ministry</Label>
             <Input id="m-joined" type="date" className="mt-1" value={form.dateJoined ?? ""} onChange={(e) => set("dateJoined", e.target.value)} />
           </div>
           <div>
             <Label htmlFor="m-area">Area</Label>
             <Input id="m-area" className="mt-1" placeholder="e.g. Adjikpo" value={form.area ?? ""} onChange={(e) => set("area", e.target.value)} />
-          </div>
-          <div>
-            <Label>Area code (Membership ID)</Label>
-            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-              → {form.area ? deriveShortcut(form.area) : "…"}-
-              {form.dateJoined
-                ? `${new Date(form.dateJoined).getDate().toString().padStart(2, "0")}${(new Date(form.dateJoined).getMonth() + 1).toString().padStart(2, "0")}`
-                : "DDMM"}
-              -
-              {form.dateJoined ? new Date(form.dateJoined).getFullYear() : "YYYY"}
-              -001
-            </p>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              Auto-derived from the first two letters of the Area name.
-            </p>
           </div>
           {isAdmin && (
             <div>
@@ -462,9 +464,6 @@ Membership IDs use the first two letters of the Area name and the join date (e.g
                   ))}
                 </SelectContent>
               </Select>
-              <p className="mt-1 text-[9px] text-muted-foreground">
-                The position determines the system role when an account is linked to this member.
-              </p>
             </div>
           )}
           {isAdmin && (
@@ -494,9 +493,6 @@ Membership IDs use the first two letters of the Area name and the join date (e.g
                   ))}
                 </SelectContent>
               </Select>
-              <p className="mt-1 text-[9px] text-muted-foreground">
-                Members whose ministry position is Class Leader appear here — a login account is not required.
-              </p>
             </div>
           )}
           {isAdmin && (
@@ -505,15 +501,17 @@ Membership IDs use the first two letters of the Area name and the join date (e.g
                 <Label className="text-[12px] font-semibold">
                   This member is a class leader
                 </Label>
-                <p className="text-[10px] leading-4 text-muted-foreground">
-                  {position === POSITIONS.CLASS_LEADER
-                    ? `They lead the ${form.klass || CLASS_OPTIONS[0]} Class (from their position).`
-                    : position === POSITIONS.ADMIN
-                      ? `Administrators may also lead the ${form.klass || CLASS_OPTIONS[0]} Class.`
-                      : position === POSITIONS.COORDINATOR
-                        ? `Evangelism Coordinators may also lead the ${form.klass || CLASS_OPTIONS[0]} Class (dual role).`
-                        : "Only Class Leader, Administrator or Evangelism Coordinator positions can include class leadership."}
-                </p>
+                {(position === POSITIONS.CLASS_LEADER ||
+                  position === POSITIONS.ADMIN ||
+                  position === POSITIONS.COORDINATOR) && (
+                  <p className="text-[10px] leading-4 text-muted-foreground">
+                    {position === POSITIONS.CLASS_LEADER
+                      ? `They lead the ${form.klass || CLASS_OPTIONS[0]} Class (from their position).`
+                      : position === POSITIONS.ADMIN
+                        ? `Administrators may also lead the ${form.klass || CLASS_OPTIONS[0]} Class.`
+                        : `Evangelism Coordinators may also lead the ${form.klass || CLASS_OPTIONS[0]} Class (dual role).`}
+                  </p>
+                )}
               </div>
               <Switch
                 checked={isClassLeader}
@@ -554,23 +552,25 @@ export function MemberProfile() {
   const me = useQuery(api.users.currentUser);
   const accounts = useQuery(api.users.list);
   const linkMember = useMutation(api.users.linkMember);
-  const isAdmin = me?.role === "admin";
-  const setAttendance = useMutation(api.discipleship.setAttendance);
+  const isAdmin = me?.role === ROLES.ADMIN;
+  const canSeeConfidential = !!me?.role && me.role !== ROLES.LEADER;
+  const canRecord =
+    isAdmin || me?.role === ROLES.COORDINATOR || me?.role === ROLES.WORKER;
+  const canEditNotes =
+    isAdmin ||
+    me?.role === ROLES.COORDINATOR ||
+    me?.role === ROLES.WORKER ||
+    me?.role === ROLES.CLASS_LEADER;
+  const [tab, setTab] = useState("profile");
   const [editOpen, setEditOpen] = useState(false);
-
-  const [type, setType] = useState<string>(ATTENDANCE_TYPES.YOUTH_MEETING);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [status, setStatus] = useState("present");
-  const [program, setProgram] = useState("");
-  const [remarks, setRemarks] = useState("");
-  const [recordedBy, setRecordedBy] = useState(me?.name || me?.email || "");
 
   if (!data) {
     return <div className="h-64 animate-pulse rounded-lg border bg-card" />;
   }
-  const { member, attendance } = data;
+  const { member, attendance, prayers, notes } = data;
   const linked = (accounts ?? []).find((a) => a.memberId === member._id);
   const chip = positionChip(member);
+  const visibleNotes = notes.filter((n) => !n.isPrivate || canSeeConfidential);
 
   const youthRows = attendance.filter((a) => a.type === ATTENDANCE_TYPES.YOUTH_MEETING);
   const churchRows = attendance.filter((a) => a.type === ATTENDANCE_TYPES.SUNDAY_SERVICE || a.type === ATTENDANCE_TYPES.MIDWEEK);
@@ -586,223 +586,628 @@ export function MemberProfile() {
   const specialPct = pct(specialRows);
   const overall = pct(attendance);
 
+  const tabs = [
+    { id: "profile", label: "Profile", icon: ScrollText },
+    { id: "attendance", label: `Attendance (${attendance.length})`, icon: ClipboardList },
+    { id: "prayer", label: `Prayer Journal (${prayers.length})`, icon: HandHeart },
+    { id: "notes", label: `Notes (${visibleNotes.length})`, icon: NotebookPen },
+  ];
+
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Button variant="ghost" size="sm" onClick={() => navigate("/members")}>
           <ArrowLeft className="mr-1 h-4 w-4" /> Members
         </Button>
+        {isAdmin && (
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil className="mr-1 h-3.5 w-3.5" /> Edit member
+          </Button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-lg border bg-card">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-muted/40 px-5 py-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ScrollText className="h-5 w-5 text-primary" />
-              <h1 className="text-xl font-bold">{member.fullName}</h1>
-              {chip && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold",
-                    chip.cls,
-                  )}
-                >
-                  {chip.pos === POSITIONS.CLASS_LEADER && <Crown className="h-3 w-3" />}
-                  {chip.label}
-                </span>
+        {/* Header */}
+        <div className="border-b bg-muted/40 px-5 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-bold">{member.fullName}</h1>
+                {chip && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold",
+                      chip.cls,
+                    )}
+                  >
+                    {chip.pos === POSITIONS.CLASS_LEADER && <Crown className="h-3 w-3" />}
+                    {chip.label}
+                  </span>
+                )}
+                <StatusPill status={member.status === "active" ? "activeMember" : "inactive"} />
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                <span className="text-primary">{member.membershipId}</span>
+                <span>{member.klass} Class</span>
+                {member.area && <span>Area: {member.area}</span>}
+                {member.classLeader && <span>Class leader: {member.classLeader}</span>}
+                {member.dateJoined && <span>Joined {fmtDate(member.dateJoined)}</span>}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {member.phone && (
+                <a href={telLink(member.phone)} title={`Call ${member.phone}`}>
+                  <Button variant="outline" size="sm">
+                    <Phone className="mr-1 h-3.5 w-3.5" /> Call
+                  </Button>
+                </a>
               )}
-              <StatusPill status={member.status === "active" ? "activeMember" : "inactive"} />
+              {(member.whatsapp || member.phone) && (
+                <a
+                  href={waLink(member.whatsapp || member.phone, `Shalom ${member.fullName}, this is the Gethsemane Youth Ministry.`)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open WhatsApp"
+                >
+                  <Button variant="outline" size="sm">
+                    <MessageCircle className="mr-1 h-3.5 w-3.5" /> WhatsApp
+                  </Button>
+                </a>
+              )}
+              {member.email && (
+                <a href={`mailto:${member.email}`} title={`Email ${member.email}`}>
+                  <Button variant="outline" size="sm">
+                    <Mail className="mr-1 h-3.5 w-3.5" /> Email
+                  </Button>
+                </a>
+              )}
             </div>
-            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-              <span className="text-primary">{member.membershipId}</span>
-              <span>{member.klass} Class</span>
-              {member.area && <span>Area: {member.area}</span>}
-              {member.classLeader && <span>Class leader: {member.classLeader}</span>}
-              {member.dateJoined && <span>Joined {fmtDate(member.dateJoined)}</span>}
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-2 text-[11px] text-muted-foreground">
-            <div className="text-right">
-              {member.ministryRoles && <div>Ministry: {member.ministryRoles}</div>}
-              {member.occupation && <div>Occupation: {member.occupation}</div>}
-            </div>
-            {isAdmin && (
-              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-                <Pencil className="mr-1 h-3.5 w-3.5" /> Edit member
-              </Button>
-            )}
           </div>
         </div>
 
-        {/* Attendance stats */}
-        <div className="grid gap-3 border-b p-5 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: "Youth Meetings", value: youthPct },
-            { label: "Church Services", value: churchPct },
-            { label: "Special Programs", value: specialPct },
-            { label: "Overall Participation", value: overall },
-          ].map((s) => (
-            <div key={s.label} className="rounded-md border bg-card p-3">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</div>
-              <div className="mt-1 font-mono text-2xl font-bold" style={{ color: progressColor(s.value) }}>
-                {s.value}%
-              </div>
-              <Progress value={s.value} className="mt-2 h-1.5" />
-            </div>
-          ))}
+        {/* Tabs */}
+        <div className="flex flex-wrap gap-1 border-b px-3 pt-2">
+          {tabs.map((t) => {
+            const Icon = t.icon;
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-t-md border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
+                  active
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
         </div>
 
         {editOpen && (
           <EditMemberDialog member={member} open={editOpen} onOpenChange={setEditOpen} />
         )}
 
-        {/* Linked user account (admin only) */}
-        {isAdmin && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
-            <div className="min-w-0">
-              <p className="term-label">// linked account</p>
-              <p className="text-[11px] text-muted-foreground">
-                {linked
-                  ? `${linked.name || linked.email} · ${linked.email}`
-                  : "No user account is linked to this member yet. Link a volunteer's account so their responsibilities (e.g. Class Leader) follow this member record."}
-              </p>
+        {/* ============ Profile tab ============ */}
+        {tab === "profile" && (
+          <div className="space-y-4 p-5">
+            {/* Attendance stats */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: "Youth Meetings", value: youthPct },
+                { label: "Church Services", value: churchPct },
+                { label: "Special Programs", value: specialPct },
+                { label: "Overall Participation", value: overall },
+              ].map((s) => (
+                <div key={s.label} className="rounded-md border bg-card p-3">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</div>
+                  <div className="mt-1 font-mono text-2xl font-bold" style={{ color: progressColor(s.value) }}>
+                    {s.value}%
+                  </div>
+                  <Progress value={s.value} className="mt-2 h-1.5" />
+                </div>
+              ))}
             </div>
-            <Select
-              value={linked?._id ?? "none"}
-              onValueChange={async (v) => {
-                try {
-                  if (v !== "none") {
-                    await linkMember({ userId: v as any, memberId: member._id as any });
-                    toast.success("Account linked to this member");
-                  } else if (linked) {
-                    await linkMember({ userId: linked._id as any, memberId: undefined });
-                    toast.success("Account link removed");
-                  }
-                } catch (err: any) {
-                  toast.error(err?.message ?? "Could not link account");
-                }
-              }}
-            >
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Select account" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">— No account —</SelectItem>
-                {(accounts ?? []).map((a) => (
-                  <SelectItem key={a._id} value={a._id}>
-                    {a.name || a.email}
-                    {a.memberId && a.memberId !== member._id ? " · linked elsewhere" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+            {/* Details */}
+            <div className="grid gap-x-6 gap-y-2 rounded-lg border bg-card p-4 text-[12px] sm:grid-cols-2">
+              {[
+                ["Gender", member.gender ? member.gender[0].toUpperCase() + member.gender.slice(1) : "—"],
+                ["Phone", member.phone || "—"],
+                ["WhatsApp", member.whatsapp || "—"],
+                ["Email", member.email || "—"],
+                ["Class", member.klass || "—"],
+                ["Area", member.area || "—"],
+                ["Occupation", member.occupation || "—"],
+                ["Date joined", member.dateJoined ? fmtDate(member.dateJoined) : "—"],
+                ["Ministry roles", member.ministryRoles || "—"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex items-baseline justify-between gap-3 border-b border-dashed pb-1.5 last:border-0">
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="text-right font-medium">{v}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Linked user account (admin only) */}
+            {isAdmin && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+                <div className="min-w-0">
+                  <p className="term-label">// linked account</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {linked
+                      ? `${linked.name || linked.email} · ${linked.email}`
+                      : "No user account is linked to this member yet. Link a volunteer's account so their responsibilities (e.g. Class Leader) follow this member record."}
+                  </p>
+                </div>
+                <Select
+                  value={linked?._id ?? "none"}
+                  onValueChange={async (v) => {
+                    try {
+                      if (v !== "none") {
+                        await linkMember({ userId: v as any, memberId: member._id as any });
+                        toast.success("Account linked to this member");
+                      } else if (linked) {
+                        await linkMember({ userId: linked._id as any, memberId: undefined });
+                        toast.success("Account link removed");
+                      }
+                    } catch (err: any) {
+                      toast.error(err?.message ?? "Could not link account");
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— No account —</SelectItem>
+                    {(accounts ?? []).map((a) => (
+                      <SelectItem key={a._id} value={a._id}>
+                        {a.name || a.email}
+                        {a.memberId && a.memberId !== member._id ? " · linked elsewhere" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Record attendance */}
-        {isAdmin && (
-          <form
-            className="border-b p-5"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              await setAttendance({
-                subjectType: "member",
-                memberId: member._id,
-                date: new Date(date).toISOString(),
-                type: type as any,
-                programName: program.trim() || undefined,
-                status: status as any,
-                remarks: remarks.trim() || undefined,
-                recordedBy: recordedBy.trim() || me?.name || me?.email || undefined,
-              });
-              toast.success("Attendance recorded");
-              setRemarks("");
-            }}
-          >
-            <p className="term-label mb-3">// record attendance</p>
-            <div className="overflow-x-auto pb-1">
-              <div className="flex min-w-max items-end gap-2">
-                <div>
-                  <Label>Activity</Label>
-                  <Select value={type} onValueChange={setType}>
-                    <SelectTrigger className="mt-1 w-36"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Date</Label>
-                  <Input type="date" className="mt-1 w-36" value={date} onChange={(e) => setDate(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger className="mt-1 w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Program / Session</Label>
-                  <Input className="mt-1 w-44" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Morning session" />
-                </div>
-                <div>
-                  <Label>Remarks</Label>
-                  <Input className="mt-1 w-48" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Late, brought a friend…" />
-                </div>
-                <div>
-                  <Label>Recorded by</Label>
-                  <Input className="mt-1 w-40" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
-                </div>
-                <Button type="submit" size="sm" className="shrink-0">
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Record
+        {/* ============ Attendance tab ============ */}
+        {tab === "attendance" && (
+          <AttendanceTab member={member} rows={attendance} isAdmin={isAdmin} canRecord={canRecord} />
+        )}
+
+        {/* ============ Prayer journal tab ============ */}
+        {tab === "prayer" && (
+          <MemberPrayerTab memberId={member._id} rows={prayers} canEdit={canEditNotes} />
+        )}
+
+        {/* ============ Notes tab ============ */}
+        {tab === "notes" && (
+          <MemberNotesTab memberId={member._id} rows={visibleNotes} canEdit={canEditNotes} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Member attendance tab ----------
+function AttendanceTab({
+  member,
+  rows,
+  isAdmin,
+  canRecord,
+}: {
+  member: any;
+  rows: any[];
+  isAdmin: boolean;
+  canRecord: boolean;
+}) {
+  const me = useQuery(api.users.currentUser);
+  const setAttendance = useMutation(api.discipleship.setAttendance);
+  const updateAttendance = useMutation(api.discipleship.updateAttendance);
+  const deleteAttendance = useMutation(api.discipleship.deleteAttendance);
+
+  const [type, setType] = useState<string>(ATTENDANCE_TYPES.YOUTH_MEETING);
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [status, setStatus] = useState("present");
+  const [program, setProgram] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [recordedBy, setRecordedBy] = useState(me?.name || me?.email || "");
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const present = rows.filter((r) => r.status === "present").length;
+  const rate = rows.length ? Math.round((present / rows.length) * 100) : 0;
+  const needsFollowUp = rows.length >= 2 && rate < 60;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingId) {
+      await updateAttendance({
+        id: editingId as any,
+        date,
+        type: type as any,
+        programName: program.trim() || undefined,
+        status: status as any,
+        remarks: remarks.trim() || undefined,
+        recordedBy: recordedBy.trim() || me?.name || me?.email || undefined,
+      });
+      toast.success("Attendance record updated");
+      setEditingId(null);
+      setRemarks("");
+    } else {
+      await setAttendance({
+        subjectType: "member",
+        memberId: member._id,
+        date: new Date(date).toISOString(),
+        type: type as any,
+        programName: program.trim() || undefined,
+        status: status as any,
+        remarks: remarks.trim() || undefined,
+        recordedBy: recordedBy.trim() || me?.name || me?.email || undefined,
+      });
+      toast.success("Attendance recorded");
+      setRemarks("");
+    }
+  };
+
+  const startEdit = (a: any) => {
+    setEditingId(a._id);
+    setType(a.type);
+    setDate(a.date.slice(0, 10));
+    setStatus(a.status);
+    setProgram(a.programName || "");
+    setRemarks(a.remarks || "");
+    setRecordedBy(a.recordedBy || "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return (
+    <div className="space-y-4 p-5">
+      {needsFollowUp && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-[12px] text-amber-800 dark:text-amber-300">
+          <HandHeart className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">This member may need follow-up</p>
+            <p className="mt-0.5 leading-5">
+              Attendance rate is {rate}% ({present} of {rows.length} records present) — below the 60%
+              follow-up threshold. Reach out to encourage consistent attendance.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Record attendance */}
+      {canRecord && (
+        <form className="rounded-lg border bg-card p-4" onSubmit={submit}>
+          <p className="term-label mb-3">
+            {editingId ? "// edit attendance record" : "// record attendance"}
+          </p>
+          <div className="overflow-x-auto pb-1">
+            <div className="flex min-w-max items-end gap-2">
+              <div>
+                <Label>Activity</Label>
+                <Select value={type} onValueChange={setType}>
+                  <SelectTrigger className="mt-1 w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input type="date" className="mt-1 w-36" value={date} onChange={(e) => setDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="mt-1 w-28"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Program / Session</Label>
+                <Input className="mt-1 w-44" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Morning session" />
+              </div>
+              <div>
+                <Label>Remarks</Label>
+                <Input className="mt-1 w-48" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Late, brought a friend…" />
+              </div>
+              <div>
+                <Label>Recorded by</Label>
+                <Input className="mt-1 w-40" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
+              </div>
+              <div className="flex shrink-0 gap-1.5">
+                {editingId && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setEditingId(null)}>
+                    Cancel
+                  </Button>
+                )}
+                <Button type="submit" size="sm">
+                  <Plus className="mr-1 h-3.5 w-3.5" /> {editingId ? "Save changes" : "Record"}
                 </Button>
               </div>
             </div>
-          </form>
-        )}
+          </div>
+        </form>
+      )}
 
-        {/* History */}
-        <div className="p-5">
-          <p className="term-label mb-3">// attendance history</p>
-          {attendance.length === 0 ? (
-            <EmptyState title="No attendance records" message="Attendance appears here once recorded." />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-left text-[12px]">
-                <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2">Activity</th>
-                    <th className="px-3 py-2">Program</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Recorded by</th>
-                    <th className="px-3 py-2">Remarks</th>
+      {/* History */}
+      <div>
+        <p className="term-label mb-3">// attendance history</p>
+        {rows.length === 0 ? (
+          <EmptyState title="No attendance records" message="Attendance appears here once recorded." />
+        ) : (
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-left text-[12px]">
+              <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Activity</th>
+                  <th className="px-3 py-2">Program</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Recorded by</th>
+                  <th className="px-3 py-2">Remarks</th>
+                  {isAdmin && <th className="px-3 py-2">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((a) => (
+                  <tr key={a._id} className="border-t">
+                    <td className="px-3 py-2">{fmtDate(a.date)}</td>
+                    <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[a.type]}</td>
+                    <td className="px-3 py-2">{a.programName || "—"}</td>
+                    <td className="px-3 py-2"><StatusPill status={a.status} /></td>
+                    <td className="px-3 py-2">{a.recordedBy || "—"}</td>
+                    <td className="px-3 py-2">{a.remarks || "—"}</td>
+                    {isAdmin && (
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => startEdit(a)}
+                            title="Edit record"
+                            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm("Delete this attendance record? This cannot be undone.")) return;
+                              await deleteAttendance({ id: a._id });
+                              toast.success("Attendance record deleted");
+                            }}
+                            title="Delete record"
+                            className="rounded p-1 text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
-                </thead>
-                <tbody>
-                  {attendance.map((a) => (
-                    <tr key={a._id} className="border-t">
-                      <td className="px-3 py-2">{fmtDate(a.date)}</td>
-                      <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[a.type]}</td>
-                      <td className="px-3 py-2">{a.programName || "—"}</td>
-                      <td className="px-3 py-2"><StatusPill status={a.status} /></td>
-                      <td className="px-3 py-2">{a.recordedBy || "—"}</td>
-                      <td className="px-3 py-2">{a.remarks || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ---------- Member prayer journal tab ----------
+function MemberPrayerTab({
+  memberId,
+  rows,
+  canEdit,
+}: {
+  memberId: string;
+  rows: any[];
+  canEdit: boolean;
+}) {
+  const addPrayer = useMutation(api.discipleship.addPrayer);
+  const updateStatus = useMutation(api.discipleship.updatePrayerStatus);
+  const [title, setTitle] = useState("");
+  const [summary, setSummary] = useState("");
+  const [answerFor, setAnswerFor] = useState<any | null>(null);
+  const [answer, setAnswer] = useState("");
+
+  return (
+    <div className="space-y-4 p-5">
+      {canEdit && (
+        <form
+          className="space-y-3 rounded-lg border bg-card p-3.5"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!title.trim() || !summary.trim()) return;
+            await addPrayer({ memberId: memberId as any, title: title.trim(), summary: summary.trim() });
+            toast.success("Prayer request added");
+            setTitle("");
+            setSummary("");
+          }}
+        >
+          <p className="term-label">// add prayer request</p>
+          <Input placeholder="Title — e.g. Employment" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Textarea rows={2} placeholder="Prayer request details..." value={summary} onChange={(e) => setSummary(e.target.value)} />
+          <Button type="submit" size="sm" disabled={!title.trim() || !summary.trim()}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add request
+          </Button>
+        </form>
+      )}
+
+      {rows.length === 0 ? (
+        <EmptyState title="No prayer requests" message="Capture prayer needs here and celebrate answers." />
+      ) : (
+        <div className="space-y-3">
+          {rows.map((p) => (
+            <div key={p._id} className="rounded-lg border bg-card p-3.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <HandHeart className="h-3.5 w-3.5 text-primary" />
+                <span className="text-[13px] font-semibold">{p.title}</span>
+                <StatusPill status={p.status} />
+                {p.confidential && (
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Lock className="h-3 w-3" /> confidential
+                  </span>
+                )}
+                <span className="ml-auto text-[10px] text-muted-foreground">{fmtDate(new Date(p.createdAt).toISOString())}</span>
+              </div>
+              <p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">{p.summary}</p>
+              {p.answer && (
+                <p className="mt-2 rounded bg-[#15291c]/80 px-2 py-1.5 text-[11px] text-[#86efac]">
+                  <b>Answered:</b> {p.answer}
+                </p>
+              )}
+              {canEdit && p.status === PRAYER_STATUS.ACTIVE && (
+                <div className="mt-2 flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setAnswerFor(p)}>
+                    Mark answered
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      await updateStatus({ id: p._id, status: PRAYER_STATUS.CLOSED });
+                      toast.success("Prayer request closed");
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={!!answerFor} onOpenChange={(v) => !v && setAnswerFor(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Mark prayer answered</DialogTitle>
+            <DialogDescription>{answerFor?.title}</DialogDescription>
+          </DialogHeader>
+          <div>
+            <Label htmlFor="mp-answer">
+              How was it answered? <span className="text-destructive">*</span>
+            </Label>
+            <Textarea id="mp-answer" rows={3} className="mt-1" value={answer} onChange={(e) => setAnswer(e.target.value)} autoFocus />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAnswerFor(null)}>Cancel</Button>
+            <Button
+              disabled={!answer.trim()}
+              onClick={async () => {
+                if (!answerFor) return;
+                await updateStatus({ id: answerFor._id, status: PRAYER_STATUS.ANSWERED, answer });
+                toast.success("Marked as answered");
+                setAnswerFor(null);
+                setAnswer("");
+              }}
+            >
+              Mark answered
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ---------- Member notes tab ----------
+function MemberNotesTab({
+  memberId,
+  rows,
+  canEdit,
+}: {
+  memberId: string;
+  rows: any[];
+  canEdit: boolean;
+}) {
+  const addNote = useMutation(api.discipleship.addNote);
+  const [type, setType] = useState<string>(NOTE_TYPES.MINISTRY);
+  const [content, setContent] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
+
+  return (
+    <div className="space-y-4 p-5">
+      {canEdit && (
+        <form
+          className="space-y-3 rounded-lg border bg-card p-3.5"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!content.trim()) return;
+            await addNote({
+              memberId: memberId as any,
+              type: type as any,
+              content: content.trim(),
+              isPrivate: isPrivate || type === NOTE_TYPES.PRIVATE,
+            });
+            toast.success("Note added");
+            setContent("");
+          }}
+        >
+          <p className="term-label">// add note</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(NOTE_TYPE_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+              <Checkbox
+                checked={isPrivate || type === NOTE_TYPES.PRIVATE}
+                onCheckedChange={(v) => setIsPrivate(!!v)}
+                disabled={type === NOTE_TYPES.PRIVATE}
+              />
+              Confidential
+            </label>
+          </div>
+          <Textarea rows={2} placeholder="Family situation, employment needs, counselling notes..." value={content} onChange={(e) => setContent(e.target.value)} />
+          <Button type="submit" size="sm" disabled={!content.trim()}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add note
+          </Button>
+        </form>
+      )}
+
+      {rows.length === 0 ? (
+        <EmptyState title="No notes" message="Leaders can add ministry, counselling and confidential notes." />
+      ) : (
+        <div className="space-y-3">
+          {rows.map((n) => (
+            <div key={n._id} className="rounded-lg border bg-card p-3.5">
+              <div className="flex items-center gap-2">
+                <span className="rounded border border-primary/30 bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
+                  {NOTE_TYPE_LABELS[n.type]}
+                </span>
+                {n.isPrivate && (
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Lock className="h-3 w-3" /> confidential
+                  </span>
+                )}
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  {n.author} · {fmtDateTime(new Date(n.createdAt).toISOString())}
+                </span>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-[12px] leading-5 text-foreground/90">{n.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -938,15 +1343,17 @@ function EditMemberDialog({
             <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2.5">
               <div className="min-w-0">
                 <Label className="text-[12px] font-semibold">Also leads this class</Label>
-                <p className="text-[10px] leading-4 text-muted-foreground">
-                  {position === POSITIONS.CLASS_LEADER
-                    ? "Class leadership comes from the Class Leader position."
-                    : position === POSITIONS.ADMIN
-                      ? "Administrators may also lead their class."
-                      : position === POSITIONS.COORDINATOR
-                        ? "Evangelism Coordinators may also lead their class (dual role)."
-                        : "Only Class Leader, Administrator or Evangelism Coordinator positions can include class leadership."}
-                </p>
+                {(position === POSITIONS.CLASS_LEADER ||
+                  position === POSITIONS.ADMIN ||
+                  position === POSITIONS.COORDINATOR) && (
+                  <p className="text-[10px] leading-4 text-muted-foreground">
+                    {position === POSITIONS.CLASS_LEADER
+                      ? "Class leadership comes from the Class Leader position."
+                      : position === POSITIONS.ADMIN
+                        ? "Administrators may also lead their class."
+                        : "Evangelism Coordinators may also lead their class (dual role)."}
+                  </p>
+                )}
               </div>
               <Switch
                 checked={isClassLeader}

@@ -219,7 +219,8 @@ const schema = defineSchema(
 
     // ===== Prayer journal =====
     prayerRequests: defineTable({
-      contactId: v.id("contacts"),
+      contactId: v.optional(v.id("contacts")),
+      memberId: v.optional(v.id("members")),
       title: v.string(),
       summary: v.string(),
       status: v.union(
@@ -233,11 +234,13 @@ const schema = defineSchema(
       createdAt: v.number(),
     })
       .index("contactId", ["contactId"])
+      .index("memberId", ["memberId"])
       .index("status", ["status"]),
 
     // ===== Ministry / private notes =====
     notes: defineTable({
-      contactId: v.id("contacts"),
+      contactId: v.optional(v.id("contacts")),
+      memberId: v.optional(v.id("members")),
       author: v.optional(v.string()),
       authorId: v.optional(v.id("users")),
       type: v.union(
@@ -248,7 +251,9 @@ const schema = defineSchema(
       content: v.string(),
       isPrivate: v.optional(v.boolean()),
       createdAt: v.number(),
-    }).index("contactId", ["contactId"]),
+    })
+      .index("contactId", ["contactId"])
+      .index("memberId", ["memberId"]),
 
     // ===== Youth Ministry members (attendance module) =====
     members: defineTable({

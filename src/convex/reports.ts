@@ -34,7 +34,7 @@ export const overview = query({
       (f) => !f.isDeleted && (!scope || liveIds.has(f.contactId)),
     );
     const bibleStudies = scope ? allBibleStudies.filter((b) => liveIds.has(b.contactId)) : allBibleStudies;
-    const prayers = scope ? allPrayers.filter((p) => liveIds.has(p.contactId)) : allPrayers;
+    const prayers = scope ? allPrayers.filter((p) => p.contactId && liveIds.has(p.contactId)) : allPrayers;
     const attendance = scope
       ? allAttendance.filter((a) => a.contactId && liveIds.has(a.contactId))
       : allAttendance;

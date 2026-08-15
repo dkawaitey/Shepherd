@@ -299,7 +299,7 @@ export const NOTE_TYPES = {
 export const NOTE_TYPE_LABELS: Record<string, string> = {
   [NOTE_TYPES.MINISTRY]: "Ministry Note",
   [NOTE_TYPES.COUNSELLING]: "Counselling Note",
-  [NOTE_TYPES.PRIVATE]: "Private Note",
+  [NOTE_TYPES.PRIVATE]: "Confidential Note",
 };
 
 export const GENDERS = ["male", "female"] as const;

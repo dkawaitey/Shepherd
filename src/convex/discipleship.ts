@@ -268,23 +268,84 @@ export const listAttendance = query({
   },
 });
 
+/** Admin-only: correct a wrongly recorded attendance entry. */
+export const updateAttendance = mutation({
+  args: {
+    id: v.id("attendance"),
+    date: v.optional(v.string()),
+    type: v.optional(v.string()),
+    programName: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("present"), v.literal("absent"), v.literal("excused"))),
+    remarks: v.optional(v.string()),
+    recordedBy: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [ROLES.ADMIN]);
+    const row = await ctx.db.get(args.id);
+    if (!row) throw new Error("Attendance record not found");
+    const patch: Record<string, unknown> = {};
+    if (args.date !== undefined) patch.date = args.date;
+    if (args.type !== undefined) patch.type = args.type;
+    if (args.programName !== undefined) patch.programName = args.programName?.trim() || undefined;
+    if (args.status !== undefined) patch.status = args.status;
+    if (args.remarks !== undefined) patch.remarks = args.remarks?.trim() || undefined;
+    if (args.recordedBy !== undefined) patch.recordedBy = args.recordedBy?.trim() || user.name;
+    await ctx.db.patch(args.id, patch);
+    await logAudit(ctx, {
+      action: "attendance.update",
+      entityType: "attendance",
+      entityId: args.id,
+      details: `corrected ${row.date} record`,
+    });
+  },
+});
+
+/** Admin-only: delete a wrongly recorded attendance entry. */
+export const deleteAttendance = mutation({
+  args: { id: v.id("attendance") },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [ROLES.ADMIN]);
+    const row = await ctx.db.get(args.id);
+    if (!row) throw new Error("Attendance record not found");
+    await ctx.db.delete(args.id);
+    await logAudit(ctx, {
+      action: "attendance.delete",
+      entityType: "attendance",
+      entityId: args.id,
+      details: `deleted ${row.date} record`,
+    });
+  },
+});
+
 // ================= Prayer Journal =================
 
 export const addPrayer = mutation({
   args: {
-    contactId: v.id("contacts"),
+    contactId: v.optional(v.id("contacts")),
+    memberId: v.optional(v.id("members")),
     title: v.string(),
     summary: v.string(),
     confidential: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
-    const contact = await ctx.db.get(args.contactId);
-    if (!contact) throw new Error("Contact not found");
-    assertClassScope(user, contact.klass);
+    if (!args.contactId && !args.memberId) throw new Error("A contact or member is required");
+    let subjectName = "";
+    if (args.contactId) {
+      const contact = await ctx.db.get(args.contactId);
+      if (!contact) throw new Error("Contact not found");
+      assertClassScope(user, contact.klass);
+      subjectName = contact.fullName;
+    } else if (args.memberId) {
+      const member = await ctx.db.get(args.memberId);
+      if (!member) throw new Error("Member not found");
+      assertClassScope(user, member.klass);
+      subjectName = member.fullName;
+    }
     const now = Date.now();
     const id = await ctx.db.insert("prayerRequests", {
       contactId: args.contactId,
+      memberId: args.memberId,
       title: args.title,
       summary: args.summary,
       status: "active",
@@ -296,7 +357,7 @@ export const addPrayer = mutation({
       action: "prayer.add",
       entityType: "prayerRequests",
       entityId: id,
-      details: contact.fullName,
+      details: subjectName,
     });
     return id;
   },
@@ -313,8 +374,12 @@ export const updatePrayerStatus = mutation({
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const p = await ctx.db.get(args.id);
     if (!p) throw new Error("Prayer request not found");
-    const pContact = await ctx.db.get(p.contactId);
-    assertClassScope(user, pContact?.klass);
+    const scopeKlass = p.memberId
+      ? (await ctx.db.get(p.memberId))?.klass
+      : p.contactId
+        ? (await ctx.db.get(p.contactId))?.klass
+        : undefined;
+    assertClassScope(user, scopeKlass);
     if (args.status === "answered" && !args.answer?.trim()) {
       throw new Error("Describe how the prayer was answered");
     }
@@ -342,20 +407,37 @@ export const prayerFeed = query({
     if (args.status) prayers = prayers.filter((p) => p.status === args.status);
     if (args.search) {
       const q = args.search.toLowerCase();
-      const contacts = await ctx.db.query("contacts").collect();
+      const [contacts, members] = await Promise.all([
+        ctx.db.query("contacts").collect(),
+        ctx.db.query("members").collect(),
+      ]);
       const ids = new Set(
         contacts
           .filter((c) => !c.isDeleted && (c.fullName.toLowerCase().includes(q) || c.phone?.includes(q)))
           .map((c) => c._id),
       );
-      prayers = prayers.filter((p) => ids.has(p.contactId));
+      const memberIds = new Set(
+        members
+          .filter((m) => !m.isDeleted && m.fullName.toLowerCase().includes(q))
+          .map((m) => m._id),
+      );
+      prayers = prayers.filter(
+        (p) => (p.contactId && ids.has(p.contactId)) || (p.memberId && memberIds.has(p.memberId)),
+      );
     }
     prayers.sort((a, b) => b.updatedAt - a.updatedAt);
-    const contacts = await ctx.db.query("contacts").collect();
+    const [contacts, members] = await Promise.all([
+      ctx.db.query("contacts").collect(),
+      ctx.db.query("members").collect(),
+    ]);
     const map = new Map(contacts.map((c) => [c._id, c]));
+    const memberMap = new Map(members.map((m) => [m._id, m]));
     return prayers.map((p) => ({
       ...p,
-      contactName: map.get(p.contactId)?.fullName ?? "Unknown",
+      contactName:
+        (p.contactId && map.get(p.contactId)?.fullName) ||
+        (p.memberId && memberMap.get(p.memberId)?.fullName) ||
+        "Unknown",
     }));
   },
 });
@@ -364,18 +446,30 @@ export const prayerFeed = query({
 
 export const addNote = mutation({
   args: {
-    contactId: v.id("contacts"),
+    contactId: v.optional(v.id("contacts")),
+    memberId: v.optional(v.id("members")),
     type: v.union(v.literal("ministry"), v.literal("counselling"), v.literal("private")),
     content: v.string(),
     isPrivate: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
-    const contact = await ctx.db.get(args.contactId);
-    if (!contact) throw new Error("Contact not found");
-    assertClassScope(user, contact.klass);
+    if (!args.contactId && !args.memberId) throw new Error("A contact or member is required");
+    let subjectName = "";
+    if (args.contactId) {
+      const contact = await ctx.db.get(args.contactId);
+      if (!contact) throw new Error("Contact not found");
+      assertClassScope(user, contact.klass);
+      subjectName = contact.fullName;
+    } else if (args.memberId) {
+      const member = await ctx.db.get(args.memberId);
+      if (!member) throw new Error("Member not found");
+      assertClassScope(user, member.klass);
+      subjectName = member.fullName;
+    }
     const id = await ctx.db.insert("notes", {
       contactId: args.contactId,
+      memberId: args.memberId,
       author: user.name,
       authorId: user._id,
       type: args.type,
@@ -387,7 +481,7 @@ export const addNote = mutation({
       action: "note.add",
       entityType: "notes",
       entityId: id,
-      details: contact.fullName,
+      details: subjectName,
     });
     return id;
   },

@@ -47,9 +47,13 @@ export const stats = query({
     const liveFollowups = allFollowups.filter(
       (f) => !f.isDeleted && (!scope || liveIds.has(f.contactId)),
     );
-    const prayers = scope ? allPrayers.filter((p) => liveIds.has(p.contactId)) : allPrayers;
     const liveMembers = allMembers.filter((m) => !m.isDeleted && (!scope || m.klass === scope));
     const memberIds = new Set(liveMembers.map((m) => m._id));
+    const prayers = scope
+      ? allPrayers.filter(
+          (p) => (p.contactId && liveIds.has(p.contactId)) || (p.memberId && memberIds.has(p.memberId)),
+        )
+      : allPrayers;
     const attendance = scope
       ? allAttendance.filter(
           (a) =>
@@ -107,7 +111,7 @@ export const stats = query({
       .slice(0, 6)
       .map((p) => ({
         ...p,
-        contactName: contactMap.get(p.contactId)?.fullName ?? "Unknown",
+        contactName: contactMap.get(p.contactId as any)?.fullName ?? "Unknown",
       }));
     const activePrayers = prayers.filter((p) => p.status === "active").length;
     const answeredPrayers = prayers.filter((p) => p.status === "answered").length;
