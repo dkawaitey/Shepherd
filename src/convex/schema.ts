@@ -352,6 +352,7 @@ const schema = defineSchema(
 
     comments: defineTable({
       postId: v.id("posts"),
+      parentId: v.optional(v.id("comments")), // set when this is a reply to a comment
       author: v.optional(v.string()),
       authorId: v.optional(v.id("users")),
       body: v.string(),

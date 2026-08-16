@@ -36,19 +36,22 @@ export default function Announcements() {
   const [createOpen, setCreateOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Deep link from a notification: /announcements?post=<id> opens that thread.
+  // Deep link from a notification: /announcements?post=<id>[&c=<commentId>]
+  // opens that thread and scrolls to the post (or the exact comment/reply).
   const [searchParams] = useSearchParams();
   const urlPost = searchParams.get("post");
+  const urlComment = searchParams.get("c");
   useEffect(() => {
     if (!urlPost) return;
     setExpanded(urlPost);
     const t = setTimeout(() => {
-      document
-        .getElementById(`post-${urlPost}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const el = urlComment
+        ? document.getElementById(`comment-${urlComment}`)
+        : document.getElementById(`post-${urlPost}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 150);
     return () => clearTimeout(t);
-  }, [urlPost]);
+  }, [urlPost, urlComment]);
 
   const posts = useQuery(api.posts.list, {
     search: search || undefined,
@@ -191,6 +194,142 @@ export default function Announcements() {
   );
 }
 
+type ThreadComment = {
+  _id: string;
+  parentId?: string;
+  author?: string;
+  authorId?: string;
+  body: string;
+  createdAt: number;
+};
+
+/** One comment or reply, with its own reply input and nested replies below it. */
+function CommentNode({
+  comment,
+  depth,
+  childrenOf,
+  postId,
+  me,
+  isAdmin,
+  addComment,
+  removeComment,
+}: {
+  comment: ThreadComment;
+  depth: number;
+  childrenOf: Map<string | undefined, ThreadComment[]>;
+  postId: string;
+  me: { _id?: string } | null | undefined;
+  isAdmin: boolean;
+  addComment: (args: { postId: any; parentId?: any; body: string }) => Promise<unknown>;
+  removeComment: (args: { id: any }) => Promise<unknown>;
+}) {
+  const [replying, setReplying] = useState(false);
+  const [replyBody, setReplyBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const canDelete = isAdmin || comment.authorId === me?._id;
+  const replies = childrenOf.get(comment._id) ?? [];
+
+  return (
+    <div id={`comment-${comment._id}`} className="scroll-mt-24">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-card">
+          <UserRound className="h-3 w-3 text-muted-foreground" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[11px] font-semibold">{comment.author ?? "Member"}</span>
+            <span className="text-[9px] text-muted-foreground">
+              {fmtDateTime(new Date(comment.createdAt).toISOString())}
+            </span>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <button
+                className="text-[9px] font-medium text-muted-foreground hover:text-primary"
+                onClick={() => {
+                  setReplying((v) => !v);
+                  setReplyBody("");
+                }}
+              >
+                {replying ? "cancel" : "Reply"}
+              </button>
+              {canDelete && (
+                <button
+                  className="text-[9px] text-muted-foreground hover:text-destructive"
+                  onClick={async () => {
+                    await removeComment({ id: comment._id });
+                    toast.success("Comment removed");
+                  }}
+                >
+                  remove
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-5 text-foreground/85">
+            {comment.body}
+          </p>
+
+          {replying && (
+            <form
+              className="mt-2 flex items-center gap-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!replyBody.trim()) return;
+                setBusy(true);
+                try {
+                  await addComment({
+                    postId,
+                    parentId: comment._id,
+                    body: replyBody.trim(),
+                  });
+                  setReplyBody("");
+                  setReplying(false);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <Input
+                autoFocus
+                placeholder={`Reply to ${comment.author ?? "this comment"}...`}
+                className="flex-1"
+                value={replyBody}
+                onChange={(e) => setReplyBody(e.target.value)}
+              />
+              <Button type="submit" size="sm" disabled={busy || !replyBody.trim()}>
+                <Send className="mr-1 h-3.5 w-3.5" /> Reply
+              </Button>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {replies.length > 0 && (
+        <div
+          className={
+            depth < 3
+              ? "ml-6 mt-2.5 space-y-3 border-l-2 border-border/60 pl-3"
+              : "mt-2.5 space-y-3"
+          }
+        >
+          {replies.map((r) => (
+            <CommentNode
+              key={r._id}
+              comment={r}
+              depth={depth + 1}
+              childrenOf={childrenOf}
+              postId={postId}
+              me={me}
+              isAdmin={isAdmin}
+              addComment={addComment}
+              removeComment={removeComment}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CommentThread({ postId }: { postId: string }) {
   const post = useQuery(api.posts.get, { id: postId as any });
   const addComment = useMutation(api.posts.addComment);
@@ -200,43 +339,36 @@ function CommentThread({ postId }: { postId: string }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const comments: ThreadComment[] = (post?.comments ?? []) as ThreadComment[];
+  const childrenOf = new Map<string | undefined, ThreadComment[]>();
+  for (const c of comments) {
+    const key = c.parentId ?? undefined;
+    childrenOf.set(key, [...(childrenOf.get(key) ?? []), c]);
+  }
+  const roots = childrenOf.get(undefined) ?? [];
+  const replies = comments.length - roots.length;
+
   return (
     <div className="border-t bg-muted/30 px-4 py-4 sm:px-5">
       <div className="space-y-3">
-        {(post?.comments ?? []).map((c) => {
-          const canDelete = isAdmin || c.authorId === me?._id;
-          return (
-            <div key={c._id} className="flex items-start gap-2.5">
-              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-card">
-                <UserRound className="h-3 w-3 text-muted-foreground" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] font-semibold">{c.author}</span>
-                  <span className="text-[9px] text-muted-foreground">
-                    {fmtDateTime(new Date(c.createdAt).toISOString())}
-                  </span>
-                  {canDelete && (
-                    <button
-                      className="ml-auto text-[9px] text-muted-foreground hover:text-destructive"
-                      onClick={async () => {
-                        await removeComment({ id: c._id });
-                        toast.success("Comment removed");
-                      }}
-                    >
-                      remove
-                    </button>
-                  )}
-                </div>
-                <p className="mt-0.5 text-[12px] leading-5 text-foreground/85">{c.body}</p>
-              </div>
-            </div>
-          );
-        })}
-        {post && post.comments.length === 0 && (
+        {roots.length === 0 ? (
           <p className="py-1 text-center text-[11px] text-muted-foreground">
             No comments yet — be the first to respond.
           </p>
+        ) : (
+          roots.map((c) => (
+            <CommentNode
+              key={c._id}
+              comment={c}
+              depth={0}
+              childrenOf={childrenOf}
+              postId={postId}
+              me={me}
+              isAdmin={isAdmin}
+              addComment={addComment}
+              removeComment={removeComment}
+            />
+          ))
         )}
       </div>
 
@@ -246,9 +378,12 @@ function CommentThread({ postId }: { postId: string }) {
           e.preventDefault();
           if (!body.trim()) return;
           setBusy(true);
-          await addComment({ postId: postId as any, body: body.trim() });
-          setBody("");
-          setBusy(false);
+          try {
+            await addComment({ postId: postId as any, body: body.trim() });
+            setBody("");
+          } finally {
+            setBusy(false);
+          }
         }}
       >
         <Input

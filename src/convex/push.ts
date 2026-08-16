@@ -405,50 +405,24 @@ export const deliverWebPush = internalAction({
   },
 });
 
-/** Notify a specific set of users (in-app + device). Used for comment replies. */
-export const notifyUsers = internalAction({
-  args: {
-    userIds: v.array(v.id("users")),
-    title: v.string(),
-    message: v.string(),
-    type: v.optional(v.string()),
-    link: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<{ total: number; notified: number }> => {
-    let notified = 0;
-    for (const userId of args.userIds) {
-      await ctx.runMutation(internal.settings.pushNotificationInternal, {
-        userId,
-        title: args.title,
-        message: args.message,
-        type: args.type,
-        link: args.link,
-      });
-      const res = await ctx.runAction(internal.push.deliverWebPush, {
-        userId,
-        title: args.title,
-        message: args.message,
-        type: args.type,
-        link: args.link,
-      });
-      if (res.delivered > 0) notified++;
-    }
-    return { total: args.userIds.length, notified };
-  },
-});
-
-/** Notify every signed-in user (in-app + device). Used for announcements. */
+/**
+ * Notify every signed-in user (in-app + device). Used for announcements and
+ * comment/reply broadcasts. `excludeUserIds` lets the actor opt themselves out.
+ */
 export const broadcast = internalAction({
   args: {
     title: v.string(),
     message: v.string(),
     type: v.optional(v.string()),
     link: v.optional(v.string()),
+    excludeUserIds: v.optional(v.array(v.id("users"))),
   },
   handler: async (ctx, args): Promise<{ total: number; notified: number }> => {
     const people = await ctx.runQuery(internal.settings.listUsersForPushInternal, {});
+    const exclude = new Set(args.excludeUserIds ?? []);
+    const targets = people.filter((u) => !exclude.has(u._id));
     let notified = 0;
-    for (const u of people) {
+    for (const u of targets) {
       await ctx.runMutation(internal.settings.pushNotificationInternal, {
         userId: u._id,
         title: args.title,
@@ -465,6 +439,6 @@ export const broadcast = internalAction({
       });
       if (res.delivered > 0) notified++;
     }
-    return { total: people.length, notified };
+    return { total: targets.length, notified };
   },
 });

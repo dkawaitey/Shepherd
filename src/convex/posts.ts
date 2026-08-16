@@ -1,7 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
@@ -114,49 +113,49 @@ export const create = mutation({
   },
 });
 
-/** Comment on a post. */
+/**
+ * Comment on a post, or reply to a comment. Any signed-in user — including
+ * ordinary members — can join the conversation. Everyone is notified (in-app
+ * bar + device push) so the whole ministry can engage; the author of the
+ * comment/reply is excluded.
+ */
 export const addComment = mutation({
-  args: { postId: v.id("posts"), body: v.string() },
+  args: {
+    postId: v.id("posts"),
+    body: v.string(),
+    parentId: v.optional(v.id("comments")),
+  },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [
-      ROLES.COORDINATOR,
-      ROLES.WORKER,
-      ROLES.LEADER,
-    ]);
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) throw new Error("Sign in to comment");
     const post = await ctx.db.get(args.postId);
     if (!post || post.isDeleted) throw new Error("Post not found");
     if (!args.body.trim()) throw new Error("Comment is required");
+    if (args.parentId) {
+      const parent = await ctx.db.get(args.parentId);
+      if (!parent || parent.isDeleted || parent.postId !== args.postId) {
+        throw new Error("The comment you are replying to no longer exists");
+      }
+    }
     const id = await ctx.db.insert("comments", {
       postId: args.postId,
-      author: user.name ?? user.email,
+      parentId: args.parentId,
+      author: user.name ?? user.email ?? "Member",
       authorId: user._id,
       body: args.body.trim(),
       isDeleted: false,
       createdAt: Date.now(),
     });
 
-    // Notify the post author + everyone already in the thread (in-app bar +
-    // device push), so replies land like messages. The commenter is excluded.
-    const thread = await ctx.db
-      .query("comments")
-      .withIndex("postId", (q) => q.eq("postId", args.postId))
-      .collect();
-    const recipients = new Set<string>();
-    if (post.authorId) recipients.add(post.authorId);
-    for (const c of thread) {
-      if (!c.isDeleted && c.authorId) recipients.add(c.authorId);
-    }
-    recipients.delete(user._id);
-    if (recipients.size > 0) {
-      const commenter = user.name ?? "Someone";
-      await ctx.scheduler.runAfter(0, internal.push.notifyUsers, {
-        userIds: [...recipients] as Id<"users">[],
-        title: `New comment on "${post.title.slice(0, 60)}"`,
-        message: `${commenter}: ${args.body.trim().slice(0, 120)}`,
-        type: "comment",
-        link: `/announcements?post=${args.postId}`,
-      });
-    }
+    const isReply = !!args.parentId;
+    const who = user.name ?? user.email ?? "Someone";
+    await ctx.scheduler.runAfter(0, internal.push.broadcast, {
+      title: `${isReply ? "New reply" : "New comment"} on "${post.title.slice(0, 60)}"`,
+      message: `${who}${isReply ? " replied" : " commented"}: ${args.body.trim().slice(0, 120)}`,
+      type: "comment",
+      link: `/announcements?post=${args.postId}&c=${id}`,
+      excludeUserIds: [user._id],
+    });
     return id;
   },
 });
