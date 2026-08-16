@@ -405,6 +405,38 @@ export const deliverWebPush = internalAction({
   },
 });
 
+/** Notify a specific set of users (in-app + device). Used for comment replies. */
+export const notifyUsers = internalAction({
+  args: {
+    userIds: v.array(v.id("users")),
+    title: v.string(),
+    message: v.string(),
+    type: v.optional(v.string()),
+    link: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ total: number; notified: number }> => {
+    let notified = 0;
+    for (const userId of args.userIds) {
+      await ctx.runMutation(internal.settings.pushNotificationInternal, {
+        userId,
+        title: args.title,
+        message: args.message,
+        type: args.type,
+        link: args.link,
+      });
+      const res = await ctx.runAction(internal.push.deliverWebPush, {
+        userId,
+        title: args.title,
+        message: args.message,
+        type: args.type,
+        link: args.link,
+      });
+      if (res.delivered > 0) notified++;
+    }
+    return { total: args.userIds.length, notified };
+  },
+});
+
 /** Notify every signed-in user (in-app + device). Used for announcements. */
 export const broadcast = internalAction({
   args: {

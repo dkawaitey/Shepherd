@@ -1,6 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,20 @@ export default function Announcements() {
   const [author, setAuthor] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Deep link from a notification: /announcements?post=<id> opens that thread.
+  const [searchParams] = useSearchParams();
+  const urlPost = searchParams.get("post");
+  useEffect(() => {
+    if (!urlPost) return;
+    setExpanded(urlPost);
+    const t = setTimeout(() => {
+      document
+        .getElementById(`post-${urlPost}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [urlPost]);
 
   const posts = useQuery(api.posts.list, {
     search: search || undefined,
@@ -101,7 +116,7 @@ export default function Announcements() {
             const isOpen = expanded === p._id;
             const canDelete = isAdmin || p.authorId === me?._id;
             return (
-              <article key={p._id} className="overflow-hidden rounded-lg border bg-card">
+              <article key={p._id} id={`post-${p._id}`} className="scroll-mt-20 overflow-hidden rounded-lg border bg-card">
                 <div className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">

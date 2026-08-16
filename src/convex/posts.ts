@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
@@ -125,7 +126,7 @@ export const addComment = mutation({
     const post = await ctx.db.get(args.postId);
     if (!post || post.isDeleted) throw new Error("Post not found");
     if (!args.body.trim()) throw new Error("Comment is required");
-    return await ctx.db.insert("comments", {
+    const id = await ctx.db.insert("comments", {
       postId: args.postId,
       author: user.name ?? user.email,
       authorId: user._id,
@@ -133,6 +134,30 @@ export const addComment = mutation({
       isDeleted: false,
       createdAt: Date.now(),
     });
+
+    // Notify the post author + everyone already in the thread (in-app bar +
+    // device push), so replies land like messages. The commenter is excluded.
+    const thread = await ctx.db
+      .query("comments")
+      .withIndex("postId", (q) => q.eq("postId", args.postId))
+      .collect();
+    const recipients = new Set<string>();
+    if (post.authorId) recipients.add(post.authorId);
+    for (const c of thread) {
+      if (!c.isDeleted && c.authorId) recipients.add(c.authorId);
+    }
+    recipients.delete(user._id);
+    if (recipients.size > 0) {
+      const commenter = user.name ?? "Someone";
+      await ctx.scheduler.runAfter(0, internal.push.notifyUsers, {
+        userIds: [...recipients] as Id<"users">[],
+        title: `New comment on "${post.title.slice(0, 60)}"`,
+        message: `${commenter}: ${args.body.trim().slice(0, 120)}`,
+        type: "comment",
+        link: `/announcements?post=${args.postId}`,
+      });
+    }
+    return id;
   },
 });
 
