@@ -128,29 +128,31 @@ export const sendTest = action({
 
 /**
  * Send the current digest: one email per follow-up worker (their schedule) and
- * one per class leader (their class highlights). Pushes an in-app notification
- * alongside each email. Individual failures are logged and skipped.
+ * one per class leader (their class highlights). In-app + device notifications
+ * are pushed alongside each digest regardless of the email provider; emails
+ * are only sent when RESEND_API_KEY is configured. Individual failures are
+ * logged and skipped.
  */
 async function dispatchDigest(
   ctx: ActionCtx,
-): Promise<{ ok: boolean; reason?: string; sent: number; failed: string[] }> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    return { ok: false, reason: "RESEND_API_KEY is not configured", sent: 0, failed: [] };
-  }
+): Promise<{
+  ok: boolean;
+  reason?: string;
+  sent: number;
+  failed: string[];
+  notified: number;
+}> {
   const data = await ctx.runQuery(internal.reminders.digest, {});
   if (!data.enabled) {
-    return { ok: false, reason: "Email reminders are disabled in Settings", sent: 0, failed: [] };
+    return { ok: false, reason: "Reminders are disabled in Settings", sent: 0, failed: [], notified: 0 };
   }
+  const key = process.env.RESEND_API_KEY;
 
   let sent = 0;
+  let notified = 0;
   const failed: string[] = [];
 
   for (const r of data.workerRecipients) {
-    const { subject, html, text } = buildWorkerEmail(r);
-    const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "workerFollowups", userId: r.userId });
-    if (res.ok) sent++;
-    else failed.push(r.email);
     if (r.userId) {
       await ctx.runMutation(internal.settings.pushNotificationInternal, {
         userId: r.userId as never,
@@ -159,14 +161,16 @@ async function dispatchDigest(
         type: "reminder",
         link: "/followups?status=pending",
       });
+      notified++;
     }
+    if (!key) continue;
+    const { subject, html, text } = buildWorkerEmail(r);
+    const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "workerFollowups", userId: r.userId });
+    if (res.ok) sent++;
+    else failed.push(r.email);
   }
 
   for (const r of data.classRecipients) {
-    const { subject, html, text } = buildClassEmail(r);
-    const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "classDigest", userId: r.userId });
-    if (res.ok) sent++;
-    else failed.push(r.email);
     await ctx.runMutation(internal.settings.pushNotificationInternal, {
       userId: r.userId as never,
       title: `${r.className} Class digest`,
@@ -174,9 +178,23 @@ async function dispatchDigest(
       type: "reminder",
       link: "/dashboard",
     });
+    notified++;
+    if (!key) continue;
+    const { subject, html, text } = buildClassEmail(r);
+    const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "classDigest", userId: r.userId });
+    if (res.ok) sent++;
+    else failed.push(r.email);
   }
 
-  return { ok: true, sent, failed };
+  return {
+    ok: true,
+    reason: key
+      ? undefined
+      : "No RESEND_API_KEY — in-app/device reminders sent, emails skipped",
+    sent,
+    failed,
+    notified,
+  };
 }
 
 /** Daily automatic digest — invoked by the cron. */

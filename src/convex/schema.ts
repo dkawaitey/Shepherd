@@ -314,6 +314,18 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("userId", ["userId"]),
 
+    // ===== Web push (device) subscriptions — one per browser/device =====
+    pushSubscriptions: defineTable({
+      userId: v.id("users"),
+      endpoint: v.string(),
+      p256dh: v.string(),
+      auth: v.string(),
+      userAgent: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("userId", ["userId"])
+      .index("endpoint", ["endpoint"]),
+
     // ===== Audit logs =====
     auditLogs: defineTable({
       userId: v.optional(v.id("users")),

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
@@ -100,6 +101,13 @@ export const create = mutation({
       entityType: "posts",
       entityId: id,
       details: args.title.trim(),
+    });
+    // Announcement: notify every signed-in user, in the app and on their devices.
+    await ctx.scheduler.runAfter(0, internal.push.broadcast, {
+      title: `New announcement: ${args.title.trim()}`,
+      message: args.body.trim().slice(0, 160),
+      type: "announcement",
+      link: "/announcements",
     });
     return id;
   },

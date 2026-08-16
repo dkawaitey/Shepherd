@@ -35,6 +35,8 @@ import {
 import { PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
+  BellOff,
+  BellRing,
   Calendar as CalendarIcon,
   Download,
   FileText,
@@ -50,6 +52,7 @@ import {
   Send,
   Users,
 } from "lucide-react";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 const TABS = [
   { id: "users", label: "User Management" },
@@ -994,6 +997,210 @@ function StewardSyncSection() {
   );
 }
 
+function PushNotificationsSection() {
+  const me = useQuery(api.users.currentUser);
+  const isAdmin = me?.role === ROLES.ADMIN;
+  const push = usePushNotifications(true);
+  const sendTest = useAction(api.push.sendTest);
+  const getStatus = useAction(api.push.status);
+  const configure = useAction(api.push.configure);
+
+  const [status, setStatus] = useState<{
+    configured: boolean;
+    subscribers: number;
+    totalUsers: number;
+    subject: string;
+  } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [pubKey, setPubKey] = useState("");
+  const [privKey, setPrivKey] = useState("");
+
+  useEffect(() => {
+    if (isAdmin) getStatus().then(setStatus).catch(() => undefined);
+  }, [isAdmin, getStatus]);
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <BellRing className="h-4 w-4 text-primary" />
+        <p className="term-label">// device push notifications</p>
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
+          <div>
+            <div className="text-xs font-semibold">This device</div>
+            <div className="text-[10px] text-muted-foreground">
+              {!push.supported
+                ? "Not supported in this browser — use Chrome, Edge or Firefox, or the installed app on iOS 16.4+."
+                : push.permission === "granted" && push.subscribed
+                  ? "Notifications enabled — reminders and announcements appear even when the app is closed."
+                  : push.permission === "denied"
+                    ? "Blocked in this browser — allow notifications in the site settings to re-enable."
+                    : "Not enabled — allow notifications to get follow-up reminders and announcements like a messaging app."}
+            </div>
+          </div>
+          <span
+            className={cn(
+              "h-2 w-2 shrink-0 rounded-full",
+              push.subscribed
+                ? "bg-[#86efac]"
+                : push.permission === "denied"
+                  ? "bg-[#f87171]"
+                  : "bg-[#fbbf24]",
+            )}
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {push.supported && !push.subscribed && push.permission !== "denied" && (
+            <Button
+              size="sm"
+              onClick={async () => {
+                const res = await push.enable();
+                if (res.ok) toast.success("Notifications enabled on this device");
+                else toast.error(res.reason ?? "Could not enable notifications");
+              }}
+            >
+              <BellRing className="mr-1.5 h-3.5 w-3.5" /> Enable notifications
+            </Button>
+          )}
+          {push.subscribed && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  await push.disable();
+                  toast.success("Notifications disabled on this device");
+                }}
+              >
+                <BellOff className="mr-1.5 h-3.5 w-3.5" /> Disable
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={testing}
+                onClick={async () => {
+                  setTesting(true);
+                  try {
+                    const res = await sendTest();
+                    if (res.delivered > 0) {
+                      toast.success("Test notification sent to this device");
+                    } else {
+                      toast.error(
+                        res.reason ?? "No push subscription on this device to deliver to",
+                      );
+                    }
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error ? err.message : "Test notification failed",
+                    );
+                  } finally {
+                    setTesting(false);
+                  }
+                }}
+              >
+                <Send className={cn("mr-1.5 h-3.5 w-3.5", testing && "animate-pulse")} />
+                {testing ? "Sending…" : "Send test notification"}
+              </Button>
+            </>
+          )}
+        </div>
+
+        {isAdmin && (
+          <div className="rounded-md border bg-muted/40 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold">Ministry-wide delivery</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {status === null
+                    ? "Checking…"
+                    : status.configured
+                      ? `Keys ready · ${status.subscribers} of ${status.totalUsers} devices subscribed`
+                      : "Push keys not set up yet — generate them below"}
+                </div>
+              </div>
+              {!status?.configured && (
+                <Button size="sm" variant="outline" onClick={() => setShowConfig((v) => !v)}>
+                  Set up
+                </Button>
+              )}
+            </div>
+            {showConfig && (
+              <div className="mt-3 space-y-2 border-t border-dashed pt-3">
+                <p className="text-[10px] leading-4 text-muted-foreground">
+                  Push messages are free and need no external account — just a VAPID key pair.
+                  Generate one automatically, or paste your own (public + private, base64url). The
+                  public key is shared with browsers; the private key stays server-side.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    placeholder="VAPID public key"
+                    value={pubKey}
+                    onChange={(e) => setPubKey(e.target.value)}
+                    className="font-mono text-[10px]"
+                  />
+                  <Input
+                    placeholder="VAPID private key"
+                    value={privKey}
+                    onChange={(e) => setPrivKey(e.target.value)}
+                    className="font-mono text-[10px]"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={configuring}
+                    onClick={async () => {
+                      setConfiguring(true);
+                      try {
+                        await configure({
+                          publicKey: pubKey || undefined,
+                          privateKey: privKey || undefined,
+                        });
+                        toast.success(
+                          pubKey || privKey ? "Push keys saved" : "Push keys generated and saved",
+                        );
+                        setShowConfig(false);
+                        setPubKey("");
+                        setPrivKey("");
+                        const s = await getStatus();
+                        setStatus(s);
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Could not save keys");
+                      } finally {
+                        setConfiguring(false);
+                      }
+                    }}
+                  >
+                    <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+                    {pubKey || privKey ? "Save these keys" : "Generate keys automatically"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowConfig(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="text-[10px] leading-4 text-muted-foreground">
+          Every in-app notification (follow-up reminders, missed visits, class digests and
+          announcements) is also delivered to devices with notifications enabled — even when the
+          app is closed, like WhatsApp. Alternatively paste{" "}
+          <b className="text-foreground">VAPID_PUBLIC_KEY</b>,{" "}
+          <b className="text-foreground">VAPID_PRIVATE_KEY</b> and{" "}
+          <b className="text-foreground">VAPID_SUBJECT</b> in the Keys tab instead of generating
+          them here.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function NotificationsTab() {
   const me = useQuery(api.users.currentUser);
   const isAdmin = me?.role === ROLES.ADMIN;
@@ -1006,7 +1213,8 @@ function NotificationsTab() {
     { key: "remind_biblestudy", label: "Bible study due", desc: "Lessons waiting to be completed", def: true },
   ];
   return (
-    <div className="max-w-lg space-y-3">
+    <div className="max-w-xl space-y-3">
+      <PushNotificationsSection />
       <div className="rounded-lg border bg-card p-4">
         <p className="term-label mb-3">// automatic reminders</p>
         {items.map((it) => (
@@ -1019,8 +1227,9 @@ function NotificationsTab() {
           </div>
         ))}
         <p className="mt-3 text-[10px] text-muted-foreground">
-          Reminders appear on the dashboard and in the notification bell. Email / WhatsApp / SMS delivery
-          activates once the corresponding integration key is configured.
+          Reminders appear on the dashboard, in the notification bell, and as device notifications
+          once push is enabled. Email / WhatsApp / SMS delivery activates once the corresponding
+          integration key is configured.
         </p>
       </div>
     </div>

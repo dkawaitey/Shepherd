@@ -44,6 +44,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { QuickAddContact } from "@/pages/contacts";
 import { useOfflineSync } from "@/lib/offline-sync";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, code: "dash" },
@@ -127,6 +128,8 @@ export function AppShell() {
   const autoLink = useMutation(api.users.autoLinkAccount);
   // Keeps the offline sync queue replaying in the background (no UI needed).
   useOfflineSync();
+  // Keep this device's push subscription registered (silent when already granted).
+  usePushNotifications(!!user);
 
   // Link the signed-in account to their existing member record by verified
   // email, so permissions are inherited from the member's ministry position.

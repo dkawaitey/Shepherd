@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, internalMutation, internalQuery, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { getCurrentUser, requireAdmin, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
@@ -120,7 +121,7 @@ export const markAllRead = mutation({
   },
 });
 
-/** Push an in-app notification to a user. */
+/** Push an in-app notification to a user (and deliver it to their devices). */
 export const pushNotification = mutation({
   args: {
     userId: v.id("users"),
@@ -140,6 +141,13 @@ export const pushNotification = mutation({
       link: args.link,
       read: false,
       createdAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.push.deliverWebPush, {
+      userId: args.userId,
+      title: args.title,
+      message: args.message,
+      type: args.type,
+      link: args.link,
     });
   },
 });
@@ -163,6 +171,119 @@ export const pushNotificationInternal = internalMutation({
       read: false,
       createdAt: Date.now(),
     });
+    await ctx.scheduler.runAfter(0, internal.push.deliverWebPush, {
+      userId: args.userId,
+      title: args.title,
+      message: args.message,
+      type: args.type,
+      link: args.link,
+    });
+  },
+});
+
+// ================= Web push (device notifications) =================
+
+/** The VAPID public key browsers need to subscribe. Env keys are synced into settings by `push.status`. */
+export const getVapidPublicKey = query({
+  args: {},
+  handler: async (ctx) => {
+    const row = await ctx.db
+      .query("settings")
+      .withIndex("key", (q) => q.eq("key", "vapid_public_key"))
+      .first();
+    return row?.value ?? null;
+  },
+});
+
+/** Register (or refresh) this browser's push subscription for the current user. */
+export const subscribe = mutation({
+  args: {
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    userAgent: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+    const existing = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("endpoint", (q) => q.eq("endpoint", args.endpoint))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        userId: user._id,
+        p256dh: args.p256dh,
+        auth: args.auth,
+        userAgent: args.userAgent,
+        createdAt: Date.now(),
+      });
+      return existing._id;
+    }
+    return await ctx.db.insert("pushSubscriptions", {
+      userId: user._id,
+      endpoint: args.endpoint,
+      p256dh: args.p256dh,
+      auth: args.auth,
+      userAgent: args.userAgent,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Remove this browser's push subscription. */
+export const unsubscribe = mutation({
+  args: { endpoint: v.string() },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+    const existing = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("endpoint", (q) => q.eq("endpoint", args.endpoint))
+      .first();
+    if (existing) await ctx.db.delete(existing._id);
+  },
+});
+
+/** Counts for the push status card (admin). */
+export const pushStatsInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const [subs, users] = await Promise.all([
+      ctx.db.query("pushSubscriptions").collect(),
+      ctx.db.query("users").collect(),
+    ]);
+    return {
+      subscribers: subs.length,
+      totalUsers: users.filter((u) => !u.isAnonymous).length,
+    };
+  },
+});
+
+/** A user's device subscriptions (used by web push delivery). */
+export const pushSubscriptionsForUserInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) =>
+    ctx.db
+      .query("pushSubscriptions")
+      .withIndex("userId", (q) => q.eq("userId", args.userId))
+      .collect(),
+});
+
+/** Remove a dead device subscription (push service returned 404/410). */
+export const deletePushSubscriptionInternal = internalMutation({
+  args: { id: v.id("pushSubscriptions") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+  },
+});
+
+/** Non-anonymous users — announcement recipients. */
+export const listUsersForPushInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    return users.filter((u) => !u.isAnonymous).map((u) => ({ _id: u._id }));
   },
 });
 
