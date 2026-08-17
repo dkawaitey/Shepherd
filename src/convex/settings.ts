@@ -255,7 +255,11 @@ export const pushStatsInternal = internalQuery({
     ]);
     return {
       subscribers: subs.length,
-      totalUsers: users.filter((u) => !u.isAnonymous).length,
+      // Ministry accounts only — pure dev/anonymous sessions without a role or
+      // email shouldn't inflate the "devices subscribed" denominator.
+      totalUsers: users.filter(
+        (u) => !u.isAnonymous || !!u.role || (u.roles?.length ?? 0) > 0 || !!u.email,
+      ).length,
     };
   },
 });

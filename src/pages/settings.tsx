@@ -34,6 +34,19 @@ import {
 } from "@/convex/constants";
 import { PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles } from "@/components/shared";
 import { cn } from "@/lib/utils";
+
+/** Pull the real message out of a Convex action error blob for toast display. */
+function actionErrorMessage(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  const line = err.message
+    .split("\n")
+    .find((l) => /^(Uncaught )?Error: /.test(l.trim()));
+  if (line) {
+    const clean = line.trim().replace(/^Uncaught Error: /, "").replace(/^Error: /, "");
+    return clean || fallback;
+  }
+  return err.message || fallback;
+}
 import {
   BellOff,
   BellRing,
@@ -1094,9 +1107,7 @@ function PushNotificationsSection() {
                       );
                     }
                   } catch (err) {
-                    toast.error(
-                      err instanceof Error ? err.message : "Test notification failed",
-                    );
+                    toast.error(actionErrorMessage(err, "Test notification failed"));
                   } finally {
                     setTesting(false);
                   }
@@ -1169,7 +1180,7 @@ function PushNotificationsSection() {
                         const s = await getStatus();
                         setStatus(s);
                       } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Could not save keys");
+                        toast.error(actionErrorMessage(err, "Could not save keys"));
                       } finally {
                         setConfiguring(false);
                       }

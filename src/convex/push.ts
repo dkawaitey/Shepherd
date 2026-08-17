@@ -217,12 +217,36 @@ type ActionUser = {
 
 async function requireAdminAction(ctx: ActionCtx): Promise<ActionUser> {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Not authenticated");
-  const me = (await ctx.runQuery(internal.users.meById, {
-    userId: identity.subject as never,
-  })) as unknown as ActionUser | null;
-  if (!me || !userRoles(me).includes(ROLES.ADMIN)) {
-    throw new Error("Administrator access required");
+  if (!identity) {
+    throw new Error(
+      "Your session has expired — sign out and sign in again, then retry.",
+    );
+  }
+  let me: ActionUser | null = null;
+  try {
+    me = (await ctx.runQuery(internal.users.meById, {
+      userId: identity.subject as never,
+    })) as unknown as ActionUser | null;
+  } catch (err) {
+    // A stale/foreign session whose subject isn't a users-table id fails the
+    // v.id validator with an opaque ArgumentValidationError — surface a clear
+    // one instead of a raw "Server Error".
+    if (err instanceof Error && err.message.includes("ArgumentValidationError")) {
+      throw new Error(
+        "Your session is not linked to a ministry account — sign out and sign in again.",
+      );
+    }
+    throw err;
+  }
+  if (!me) {
+    throw new Error(
+      "Your session is not linked to a ministry account — sign out and sign in again.",
+    );
+  }
+  if (!userRoles(me).includes(ROLES.ADMIN)) {
+    throw new Error(
+      "Administrator access required — sign in with the administrator account to set up ministry-wide push.",
+    );
   }
   return me;
 }
