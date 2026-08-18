@@ -50,33 +50,68 @@ export function usePushNotifications(active = true): PushState {
   >("unsupported");
   const [subscribed, setSubscribed] = useState(false);
 
-  const sync = useCallback(async () => {
-    if (!active || !supported || publicKey == null) return;
-    try {
-      if (Notification.permission !== "granted") {
-        setPermission(Notification.permission);
-        setSubscribed(false);
-        return;
-      }
-      setPermission("granted");
-      const reg = await navigator.serviceWorker.ready;
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        });
-      }
-      await subscribe({
-        endpoint: sub.endpoint,
-        p256dh: bufferToBase64(sub.getKey("p256dh")),
-        auth: bufferToBase64(sub.getKey("auth")),
-        userAgent: navigator.userAgent,
-      });
-      setSubscribed(true);
-    } catch (err) {
-      console.warn("[push] sync failed:", err);
+  /**
+   * Core subscription sync — throws on failure so callers can surface errors.
+   */
+  const sync = useCallback(async (): Promise<{ ok: boolean; reason?: string }> => {
+    if (!active || !supported) return { ok: false, reason: "Push not supported on this browser" };
+    if (publicKey == null) return { ok: false, reason: "VAPID public key not loaded yet" };
+
+    if (Notification.permission !== "granted") {
+      setPermission(Notification.permission);
       setSubscribed(false);
+      return { ok: false, reason: "Notification permission not granted" };
+    }
+    setPermission("granted");
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+
+      // Check if there's already an active subscription
+      let sub = await reg.pushManager.getSubscription();
+
+      if (!sub) {
+        // No subscription yet — create one
+        try {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey),
+          });
+        } catch (subErr) {
+          const msg = subErr instanceof Error ? subErr.message : String(subErr);
+          console.error("[push] pushManager.subscribe failed:", subErr);
+          // Common causes: VAPID key mismatch, service worker not active, browser restrictions
+          if (msg.includes("InvalidAccessError")) {
+            return { ok: false, reason: "VAPID key may be invalid — regenerate keys in Settings → Notifications" };
+          }
+          if (msg.includes("NotSupportedError")) {
+            return { ok: false, reason: "Push notifications are not supported in this context — try installing the app to your Home Screen" };
+          }
+          return { ok: false, reason: `Browser subscription failed: ${msg}` };
+        }
+      }
+
+      // Save (or refresh) the subscription on the server
+      try {
+        await subscribe({
+          endpoint: sub.endpoint,
+          p256dh: bufferToBase64(sub.getKey("p256dh")),
+          auth: bufferToBase64(sub.getKey("auth")),
+          userAgent: navigator.userAgent,
+        });
+      } catch (subErr) {
+        const msg = subErr instanceof Error ? subErr.message : String(subErr);
+        console.error("[push] server subscribe failed:", subErr);
+        return { ok: false, reason: `Server rejected subscription: ${msg}` };
+      }
+
+      setSubscribed(true);
+      return { ok: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[push] sync failed:", err);
+      setSubscribed(false);
+      return { ok: false, reason: msg };
     }
   }, [active, supported, publicKey, subscribe]);
 
@@ -85,13 +120,17 @@ export function usePushNotifications(active = true): PushState {
   syncRef.current = sync;
 
   const enable = useCallback(async () => {
-    if (!active || !supported || publicKey == null) {
+    if (!active || !supported) {
+      return {
+        ok: false,
+        reason: "This browser does not support push notifications — use Chrome, Edge or Firefox, or install the app on iOS 16.4+",
+      };
+    }
+    if (publicKey == null) {
       return {
         ok: false,
         reason:
-          publicKey == null
-            ? "Push is not set up yet — ask an administrator to generate the keys in Settings → Notifications"
-            : "This browser does not support push notifications",
+          "Push is not set up yet — ask an administrator to generate the keys in Settings → Notifications",
       };
     }
     try {
@@ -100,8 +139,9 @@ export function usePushNotifications(active = true): PushState {
       if (perm !== "granted") {
         return { ok: false, reason: "Permission denied in the browser" };
       }
-      await sync();
-      return { ok: true };
+      // sync() now throws on failure
+      const result = await sync();
+      return result;
     } catch (err) {
       return {
         ok: false,
@@ -127,17 +167,19 @@ export function usePushNotifications(active = true): PushState {
   useEffect(() => {
     if (!active || !supported) return;
     setPermission(Notification.permission);
-    sync();
+
+    // Silent re-registration — don't throw on failure here, just log
+    sync().catch(() => {});
 
     // Re-register when the service worker reports a rotated subscription.
     const onMessage = (event: MessageEvent) => {
       if (event.data?.type === "push-subscription-changed") {
-        syncRef.current();
+        syncRef.current().catch(() => {});
       }
     };
     // Also refresh whenever the tab becomes visible again.
     const onVisible = () => {
-      if (document.visibilityState === "visible") syncRef.current();
+      if (document.visibilityState === "visible") syncRef.current().catch(() => {});
     };
     navigator.serviceWorker.addEventListener("message", onMessage);
     document.addEventListener("visibilitychange", onVisible);

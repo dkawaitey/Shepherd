@@ -1038,6 +1038,7 @@ function PushNotificationsSection() {
     subject: string;
   } | null>(null);
   const [testing, setTesting] = useState(false);
+  const [enabling, setEnabling] = useState(false);
   const [configuring, setConfiguring] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [pubKey, setPubKey] = useState("");
@@ -1062,9 +1063,11 @@ function PushNotificationsSection() {
                 ? "Not supported in this browser — use Chrome, Edge or Firefox, or the installed app on iOS 16.4+."
                 : push.permission === "granted" && push.subscribed
                   ? "Notifications enabled — reminders and announcements appear even when the app is closed."
-                  : push.permission === "denied"
-                    ? "Blocked in this browser — allow notifications in the site settings to re-enable."
-                    : "Not enabled — allow notifications to get follow-up reminders and announcements like a messaging app."}
+                  : push.permission === "granted" && !push.subscribed
+                    ? "Permission granted but subscription not saved — click Enable below to retry."
+                    : push.permission === "denied"
+                      ? "Blocked in this browser — allow notifications in the site settings to re-enable."
+                      : "Not enabled — allow notifications to get follow-up reminders and announcements like a messaging app."}
             </div>
           </div>
           <span
@@ -1084,12 +1087,18 @@ function PushNotificationsSection() {
             <Button
               size="sm"
               onClick={async () => {
-                const res = await push.enable();
-                if (res.ok) toast.success("Notifications enabled on this device");
-                else toast.error(res.reason ?? "Could not enable notifications");
+                setEnabling(true);
+                try {
+                  const res = await push.enable();
+                  if (res.ok) toast.success("Notifications enabled on this device");
+                  else toast.error(res.reason ?? "Could not enable notifications");
+                } finally {
+                  setEnabling(false);
+                }
               }}
             >
-              <BellRing className="mr-1.5 h-3.5 w-3.5" /> Enable notifications
+              <BellRing className={cn("mr-1.5 h-3.5 w-3.5", enabling && "animate-pulse")} />
+              {enabling ? "Enabling…" : "Enable notifications"}
             </Button>
           )}
           {push.subscribed && (
