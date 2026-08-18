@@ -121,7 +121,7 @@ export const markAllRead = mutation({
   },
 });
 
-/** Push an in-app notification to a user (and deliver it to their devices). */
+/** Deliver a device push notification to a user. */
 export const pushNotification = mutation({
   args: {
     userId: v.id("users"),
@@ -133,15 +133,6 @@ export const pushNotification = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return;
-    await ctx.db.insert("notifications", {
-      userId: args.userId,
-      title: args.title,
-      message: args.message,
-      type: args.type,
-      link: args.link,
-      read: false,
-      createdAt: Date.now(),
-    });
     await ctx.scheduler.runAfter(0, internal.push.deliverWebPush, {
       userId: args.userId,
       title: args.title,
@@ -152,7 +143,7 @@ export const pushNotification = mutation({
   },
 });
 
-/** Push a notification with no signed-in caller (used by cron/actions). */
+/** Deliver a device push notification with no signed-in caller (used by cron/actions). */
 export const pushNotificationInternal = internalMutation({
   args: {
     userId: v.id("users"),
@@ -162,15 +153,6 @@ export const pushNotificationInternal = internalMutation({
     link: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("notifications", {
-      userId: args.userId,
-      title: args.title,
-      message: args.message,
-      type: args.type,
-      link: args.link,
-      read: false,
-      createdAt: Date.now(),
-    });
     await ctx.scheduler.runAfter(0, internal.push.deliverWebPush, {
       userId: args.userId,
       title: args.title,
