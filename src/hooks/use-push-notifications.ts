@@ -17,12 +17,16 @@ function bufferToBase64(buffer: ArrayBuffer | null): string {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
+export type DiagEntry = { step: string; ok: boolean; detail: string };
+
 export type PushState = {
   /** Whether this browser supports web push (secure context + PushManager). */
   supported: boolean;
   permission: NotificationPermission | "unsupported";
   /** Whether this device currently has a push subscription registered. */
   subscribed: boolean;
+  /** Diagnostic log from the last enable/sync attempt. */
+  diag: DiagEntry[];
   enable: () => Promise<{ ok: boolean; reason?: string }>;
   disable: () => Promise<void>;
 };
@@ -49,71 +53,136 @@ export function usePushNotifications(active = true): PushState {
     NotificationPermission | "unsupported"
   >("unsupported");
   const [subscribed, setSubscribed] = useState(false);
+  const [diag, setDiag] = useState<DiagEntry[]>([]);
+
+  /** Log a diagnostic entry and return it for chaining. */
+  const logDiag = useCallback(
+    (entries: DiagEntry[]) => {
+      setDiag(entries);
+      for (const e of entries) {
+        const fn = e.ok ? console.log : console.warn;
+        fn(`[push][${e.step}] ${e.ok ? "OK" : "FAIL"}: ${e.detail}`);
+      }
+    },
+    [],
+  );
 
   /**
    * Core subscription sync — throws on failure so callers can surface errors.
    */
   const sync = useCallback(async (): Promise<{ ok: boolean; reason?: string }> => {
-    if (!active || !supported) return { ok: false, reason: "Push not supported on this browser" };
-    if (publicKey == null) return { ok: false, reason: "VAPID public key not loaded yet" };
+    const d: DiagEntry[] = [];
+    const push = (step: string, ok: boolean, detail: string) => {
+      d.push({ step, ok, detail });
+    };
 
+    // Step 1: environment check
+    if (!active || !supported) {
+      push("env", false, `active=${active}, supported=${supported}`);
+      logDiag(d);
+      return { ok: false, reason: "Push not supported on this browser" };
+    }
+    push("env", true, `isSecureContext=${window.isSecureContext}, protocol=${location.protocol}`);
+
+    // Step 2: VAPID key
+    if (publicKey == null) {
+      push("vapid", false, "publicKey query returned null (still loading?)");
+      logDiag(d);
+      return { ok: false, reason: "VAPID public key not loaded yet" };
+    }
+    push("vapid", true, `key length=${publicKey.length}`);
+
+    // Step 3: notification permission
     if (Notification.permission !== "granted") {
+      push("permission", false, `current="${Notification.permission}"`);
       setPermission(Notification.permission);
       setSubscribed(false);
+      logDiag(d);
       return { ok: false, reason: "Notification permission not granted" };
     }
     setPermission("granted");
+    push("permission", true, "granted");
 
+    // Step 4: service worker ready
+    let reg: ServiceWorkerRegistration;
     try {
-      const reg = await navigator.serviceWorker.ready;
-
-      // Check if there's already an active subscription
-      let sub = await reg.pushManager.getSubscription();
-
-      if (!sub) {
-        // No subscription yet — create one
-        try {
-          sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicKey),
-          });
-        } catch (subErr) {
-          const msg = subErr instanceof Error ? subErr.message : String(subErr);
-          console.error("[push] pushManager.subscribe failed:", subErr);
-          // Common causes: VAPID key mismatch, service worker not active, browser restrictions
-          if (msg.includes("InvalidAccessError")) {
-            return { ok: false, reason: "VAPID key may be invalid — regenerate keys in Settings → Notifications" };
-          }
-          if (msg.includes("NotSupportedError")) {
-            return { ok: false, reason: "Push notifications are not supported in this context — try installing the app to your Home Screen" };
-          }
-          return { ok: false, reason: `Browser subscription failed: ${msg}` };
-        }
-      }
-
-      // Save (or refresh) the subscription on the server
-      try {
-        await subscribe({
-          endpoint: sub.endpoint,
-          p256dh: bufferToBase64(sub.getKey("p256dh")),
-          auth: bufferToBase64(sub.getKey("auth")),
-          userAgent: navigator.userAgent,
-        });
-      } catch (subErr) {
-        const msg = subErr instanceof Error ? subErr.message : String(subErr);
-        console.error("[push] server subscribe failed:", subErr);
-        return { ok: false, reason: `Server rejected subscription: ${msg}` };
-      }
-
-      setSubscribed(true);
-      return { ok: true };
+      reg = await navigator.serviceWorker.ready;
+      push("sw-ready", true, `scope=${reg.scope}, active=${reg.active?.state ?? "null"}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("[push] sync failed:", err);
-      setSubscribed(false);
-      return { ok: false, reason: msg };
+      push("sw-ready", false, msg);
+      logDiag(d);
+      return { ok: false, reason: `Service worker not ready: ${msg}` };
     }
-  }, [active, supported, publicKey, subscribe]);
+
+    // Step 5: existing subscription or create new
+    let sub: PushSubscription | null = null;
+    let action = "existing";
+    try {
+      sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        push("get-sub", true, `endpoint=${sub.endpoint.substring(0, 60)}...`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      push("get-sub", false, msg);
+      logDiag(d);
+      return { ok: false, reason: `Failed to check subscription: ${msg}` };
+    }
+
+    if (!sub) {
+      action = "new";
+      try {
+        const keyBytes = urlBase64ToUint8Array(publicKey);
+        push("subscribe-prep", true, `applicationServerKey bytes=${keyBytes.length}`);
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: keyBytes,
+        });
+        push("subscribe", true, `endpoint=${sub.endpoint.substring(0, 60)}...`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const name = err instanceof Error ? err.name : "";
+        push("subscribe", false, `${name}: ${msg}`);
+        logDiag(d);
+        // Common causes:
+        if (name === "InvalidAccessError") {
+          return { ok: false, reason: "VAPID key may be invalid — regenerate keys in Settings → Notifications" };
+        }
+        if (name === "NotSupportedError") {
+          return { ok: false, reason: "Push not supported in this context — try installing the app to your Home Screen" };
+        }
+        if (name === "SecurityError") {
+          return { ok: false, reason: "Security error — the app must be served over HTTPS from its own domain" };
+        }
+        return { ok: false, reason: `Browser subscription failed: ${msg}` };
+      }
+    }
+
+    // Step 6: save subscription on the server
+    const p256dh = bufferToBase64(sub.getKey("p256dh"));
+    const auth = bufferToBase64(sub.getKey("auth"));
+    push("keys", p256dh.length > 0 && auth.length > 0, `p256dh=${p256dh.length}chars, auth=${auth.length}chars`);
+
+    try {
+      const savedId = await subscribe({
+        endpoint: sub.endpoint,
+        p256dh,
+        auth,
+        userAgent: navigator.userAgent,
+      });
+      push("server-save", true, `saved subscription id=${savedId} (action=${action})`);
+    } catch (subErr) {
+      const msg = subErr instanceof Error ? subErr.message : String(subErr);
+      push("server-save", false, msg);
+      logDiag(d);
+      return { ok: false, reason: `Server rejected subscription: ${msg}` };
+    }
+
+    setSubscribed(true);
+    logDiag(d);
+    return { ok: true };
+  }, [active, supported, publicKey, subscribe, logDiag]);
 
   // Always call the latest sync from listeners (ref avoids stale closures).
   const syncRef = useRef(sync);
@@ -139,7 +208,6 @@ export function usePushNotifications(active = true): PushState {
       if (perm !== "granted") {
         return { ok: false, reason: "Permission denied in the browser" };
       }
-      // sync() now throws on failure
       const result = await sync();
       return result;
     } catch (err) {
@@ -189,5 +257,5 @@ export function usePushNotifications(active = true): PushState {
     };
   }, [active, supported, sync]);
 
-  return { supported, permission, subscribed, enable, disable };
+  return { supported, permission, subscribed, diag, enable, disable };
 }

@@ -1082,6 +1082,22 @@ function PushNotificationsSection() {
           />
         </div>
 
+        {/* Diagnostic trail from last enable/sync attempt */}
+        {push.diag.length > 0 && (
+          <div className="rounded-md border bg-muted/40 px-3 py-2">
+            <div className="text-[10px] font-semibold text-muted-foreground mb-1">Diagnostics (last attempt)</div>
+            <div className="space-y-0.5">
+              {push.diag.map((d, i) => (
+                <div key={i} className="flex items-start gap-2 text-[10px] font-mono">
+                  <span className={cn("mt-0.5 shrink-0 rounded-full h-1.5 w-1.5", d.ok ? "bg-[#86efac]" : "bg-[#f87171]")} />
+                  <span className="text-muted-foreground">{d.step}:</span>
+                  <span className={d.ok ? "text-muted-foreground" : "text-red-500 dark:text-red-400 break-all"}>{d.detail}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
           {push.supported && !push.subscribed && push.permission !== "denied" && (
             <Button
