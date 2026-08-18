@@ -101,6 +101,22 @@ export const meById = internalQuery({
 });
 
 /**
+ * Resolve the current user from the auth session (via getAuthUserId).
+ * Actions cannot call getAuthUserId directly, but they CAN call this
+ * internal query via ctx.runQuery — the auth context propagates.
+ */
+export const meByAuth = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    const user = await ctx.db.get(userId);
+    if (!user) return null;
+    return { ...user, _id: userId };
+  },
+});
+
+/**
  * Use this function internally to get the current user data. Remember to handle the null user case.
  * @param ctx
  * @returns

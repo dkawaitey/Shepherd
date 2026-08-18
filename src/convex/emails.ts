@@ -18,13 +18,12 @@ type ActionUser = {
   classScope?: string;
 };
 
-/** Only admins pass — for actions (auth identity + role lookup via runQuery). */
+/** Only admins pass — for actions (uses meByAuth which resolves via getAuthUserId). */
 async function requireAdminAction(ctx: ActionCtx): Promise<ActionUser> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Not authenticated");
-  const me = (await ctx.runQuery(internal.users.meById, {
-    userId: identity.subject as never,
-  })) as unknown as ActionUser | null;
+  const me = (await ctx.runQuery(
+    internal.users.meByAuth,
+    {},
+  )) as unknown as ActionUser | null;
   if (!me || !userRoles(me).includes(ROLES.ADMIN)) {
     throw new Error("Administrator access required");
   }

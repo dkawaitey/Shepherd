@@ -38,14 +38,27 @@ import { cn } from "@/lib/utils";
 /** Pull the real message out of a Convex action error blob for toast display. */
 function actionErrorMessage(err: unknown, fallback: string): string {
   if (!(err instanceof Error)) return fallback;
-  const line = err.message
+  const msg = err.message || "";
+  // Convex wraps server errors as:
+  //   [CONVEX A(module:func)] [Request ID: xxx] Server Error\nUncaught Error: ...\n    at ...\nCalled by client
+  // Try multiple extraction strategies:
+  // 1. Find a line starting with "Uncaught Error: " or "Error: "
+  const line = msg
     .split("\n")
     .find((l) => /^(Uncaught )?Error: /.test(l.trim()));
   if (line) {
     const clean = line.trim().replace(/^Uncaught Error: /, "").replace(/^Error: /, "");
-    return clean || fallback;
+    if (clean) return clean;
   }
-  return err.message || fallback;
+  // 2. Strip the Convex wrapper prefix if present
+  const stripped = msg
+    .replace(/^\[CONVEX [^\]]+\]\s*/, "")
+    .replace(/^\[Request ID: [^\]]+\]\s*/, "")
+    .replace(/^Server Error\s*/, "")
+    .replace(/\s*Called by client\s*$/, "")
+    .trim();
+  if (stripped && stripped !== msg.trim()) return stripped || fallback;
+  return msg || fallback;
 }
 import {
   BellOff,
