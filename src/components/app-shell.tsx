@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import {
   BarChart3,
   Bell,
+  BellRing,
   BookOpen,
   CalendarCheck2,
   ClipboardList,
@@ -129,7 +130,10 @@ export function AppShell() {
   // Keeps the offline sync queue replaying in the background (no UI needed).
   useOfflineSync();
   // Keep this device's push subscription registered (silent when already granted).
-  usePushNotifications(!!user);
+  const push = usePushNotifications(!!user);
+  const [pushDismissed, setPushDismissed] = useState(false);
+  const [pushEnabling, setPushEnabling] = useState(false);
+  const showPushBanner = !!user && push.supported && !push.subscribed && push.permission !== "denied" && !pushDismissed;
 
   // Link the signed-in account to their existing member record by verified
   // email, so permissions are inherited from the member's ministry position.
@@ -329,6 +333,44 @@ export function AppShell() {
             >
               End test
             </Button>
+          </div>
+        )}
+
+        {showPushBanner && (
+          <div className="flex items-center justify-between gap-3 border-b border-primary/20 bg-primary/5 px-4 py-2 text-[11px] text-foreground md:px-6">
+            <span className="flex min-w-0 items-center gap-2">
+              <BellRing className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="truncate">
+                Enable device notifications to receive follow-up reminders and announcements even when the app is closed.
+              </span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                className="h-6 shrink-0 px-2 text-[10px]"
+                disabled={pushEnabling}
+                onClick={async () => {
+                  setPushEnabling(true);
+                  try {
+                    const res = await push.enable();
+                    if (res.ok) toast.success("Device notifications enabled!");
+                    else toast.error(res.reason ?? "Could not enable notifications");
+                  } finally {
+                    setPushEnabling(false);
+                  }
+                }}
+              >
+                {pushEnabling ? "Enabling\u2026" : "Enable"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 shrink-0 px-2 text-[10px] text-muted-foreground"
+                onClick={() => setPushDismissed(true)}
+              >
+                Dismiss
+              </Button>
+            </div>
           </div>
         )}
 
