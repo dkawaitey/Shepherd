@@ -303,29 +303,6 @@ const schema = defineSchema(
       .index("status", ["status"])
       .index("membershipId", ["membershipId"]),
 
-    // ===== Notifications / reminders =====
-    notifications: defineTable({
-      userId: v.id("users"),
-      title: v.string(),
-      message: v.string(),
-      type: v.optional(v.string()),
-      link: v.optional(v.string()),
-      read: v.optional(v.boolean()),
-      createdAt: v.number(),
-    }).index("userId", ["userId"]),
-
-    // ===== Web push (device) subscriptions — one per browser/device =====
-    pushSubscriptions: defineTable({
-      userId: v.id("users"),
-      endpoint: v.string(),
-      p256dh: v.string(),
-      auth: v.string(),
-      userAgent: v.optional(v.string()),
-      createdAt: v.number(),
-    })
-      .index("userId", ["userId"])
-      .index("endpoint", ["endpoint"]),
-
     // ===== Audit logs =====
     auditLogs: defineTable({
       userId: v.optional(v.id("users")),

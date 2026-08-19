@@ -127,10 +127,8 @@ export const sendTest = action({
 
 /**
  * Send the current digest: one email per follow-up worker (their schedule) and
- * one per class leader (their class highlights). In-app + device notifications
- * are pushed alongside each digest regardless of the email provider; emails
- * are only sent when RESEND_API_KEY is configured. Individual failures are
- * logged and skipped.
+ * one per class leader (their class highlights). Emails are only sent when
+ * RESEND_API_KEY is configured. Individual failures are logged and skipped.
  */
 async function dispatchDigest(
   ctx: ActionCtx,
@@ -139,29 +137,17 @@ async function dispatchDigest(
   reason?: string;
   sent: number;
   failed: string[];
-  notified: number;
 }> {
   const data = await ctx.runQuery(internal.reminders.digest, {});
   if (!data.enabled) {
-    return { ok: false, reason: "Reminders are disabled in Settings", sent: 0, failed: [], notified: 0 };
+    return { ok: false, reason: "Reminders are disabled in Settings", sent: 0, failed: [] };
   }
   const key = process.env.RESEND_API_KEY;
 
   let sent = 0;
-  let notified = 0;
   const failed: string[] = [];
 
   for (const r of data.workerRecipients) {
-    if (r.userId) {
-      await ctx.runMutation(internal.settings.pushNotificationInternal, {
-        userId: r.userId as never,
-        title: "Follow-up reminders",
-        message: `You have ${r.items.length} follow-up${r.items.length === 1 ? "" : "s"} due in the next 3 days.`,
-        type: "reminder",
-        link: "/followups?status=pending",
-      });
-      notified++;
-    }
     if (!key) continue;
     const { subject, html, text } = buildWorkerEmail(r);
     const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "workerFollowups", userId: r.userId });
@@ -170,14 +156,6 @@ async function dispatchDigest(
   }
 
   for (const r of data.classRecipients) {
-    await ctx.runMutation(internal.settings.pushNotificationInternal, {
-      userId: r.userId as never,
-      title: `${r.className} Class digest`,
-      message: `Follow-ups, birthdays and attendance highlights for ${r.className} Class are ready.`,
-      type: "reminder",
-      link: "/dashboard",
-    });
-    notified++;
     if (!key) continue;
     const { subject, html, text } = buildClassEmail(r);
     const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "classDigest", userId: r.userId });
@@ -187,12 +165,9 @@ async function dispatchDigest(
 
   return {
     ok: true,
-    reason: key
-      ? undefined
-      : "No RESEND_API_KEY — in-app/device reminders sent, emails skipped",
+    reason: key ? undefined : "No RESEND_API_KEY — emails skipped",
     sent,
     failed,
-    notified,
   };
 }
 

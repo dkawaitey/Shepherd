@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
@@ -102,13 +101,6 @@ export const create = mutation({
       entityId: id,
       details: args.title.trim(),
     });
-    // Announcement: notify every signed-in user, in the app and on their devices.
-    await ctx.scheduler.runAfter(0, internal.push.broadcast, {
-      title: `New announcement: ${args.title.trim()}`,
-      message: args.body.trim().slice(0, 160),
-      type: "announcement",
-      link: "/announcements",
-    });
     return id;
   },
 });
@@ -147,15 +139,6 @@ export const addComment = mutation({
       createdAt: Date.now(),
     });
 
-    const isReply = !!args.parentId;
-    const who = user.name ?? user.email ?? "Someone";
-    await ctx.scheduler.runAfter(0, internal.push.broadcast, {
-      title: `${isReply ? "New reply" : "New comment"} on "${post.title.slice(0, 60)}"`,
-      message: `${who}${isReply ? " replied" : " commented"}: ${args.body.trim().slice(0, 120)}`,
-      type: "comment",
-      link: `/announcements?post=${args.postId}&c=${id}`,
-      excludeUserIds: [user._id],
-    });
     return id;
   },
 });
