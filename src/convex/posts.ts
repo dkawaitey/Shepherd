@@ -110,17 +110,16 @@ export const create = mutation({
         .filter((u) => !u.isAnonymous && u._id !== user._id)
         .map((u) => u._id);
       if (recipientIds.length > 0) {
-        const now = Date.now();
-        await ctx.scheduler.runAfter(0, internal.notifications.scheduleNotification, {
+        await ctx.runMutation(internal.notifications.scheduleNotification, {
           kind: "post",
           dedupeKey: `post:${id}`,
-          deliverAt: now,
+          deliverAt: Date.now(),
           payload: {
             title: "New announcement",
             body: args.title.trim(),
             url: "/announcements",
           },
-          recipientUserIds: recipientIds,
+          recipientUserIds: recipientIds as any,
         });
       }
     } catch {
@@ -192,11 +191,10 @@ export const addComment = mutation({
         const isReply = !!args.parentId;
         const kind = isReply ? "reply" : "comment";
         const label = isReply ? "New reply" : "New comment";
-        const now = Date.now();
-        await ctx.scheduler.runAfter(0, internal.notifications.scheduleNotification, {
+        await ctx.runMutation(internal.notifications.scheduleNotification, {
           kind,
           dedupeKey: `${kind}:${id}`,
-          deliverAt: now,
+          deliverAt: Date.now(),
           payload: {
             title: label,
             body: `${user.name ?? user.email ?? "Someone"}: ${args.body.trim().slice(0, 120)}`,

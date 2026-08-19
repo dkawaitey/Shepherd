@@ -1002,6 +1002,8 @@ function NotificationsTab() {
   const me = useQuery(api.users.currentUser);
   const { subscribed, permission, loading, enable, disable } = usePushNotifications(!!me);
   const [actionError, setActionError] = useState("");
+  const [testing, setTesting] = useState(false);
+  const sendTestNotif = useMutation(api.push.sendTestNotification);
 
   const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
 
@@ -1061,23 +1063,45 @@ function NotificationsTab() {
           )}
 
           {subscribed && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                setActionError("");
-                const result = await disable();
-                if (!result.ok) setActionError(result.reason);
-              }}
-            >
-              Disable notifications on this device
-            </Button>
+            <div className="flex items-center gap-2 border-b border-dashed pb-3">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={testing}
+                onClick={async () => {
+                  setTesting(true);
+                  setActionError("");
+                  try {
+                    await sendTestNotif();
+                    toast.success("Test notification sent — check your device");
+                  } catch (err: any) {
+                    const msg = err?.data?.message ?? err?.message ?? "Failed";
+                    setActionError(msg);
+                  } finally {
+                    setTesting(false);
+                  }
+                }}
+              >
+                <Bell className={cn("mr-1.5 h-3.5 w-3.5", testing && "animate-pulse")} />
+                {testing ? "Sending…" : "Send test notification"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  setActionError("");
+                  const result = await disable();
+                  if (!result.ok) setActionError(result.reason);
+                }}
+              >
+                Disable
+              </Button>
+            </div>
           )}
 
           <p className="text-[10px] leading-4 text-muted-foreground">
             Notifications are delivered as device push notifications — they wake the screen and appear in your
-            notification centre even when the app is closed. Each device must be enabled independently. You can
-            manage device registrations in the <b className="text-foreground">Integrations</b> tab.
+            notification centre even when the app is closed. Each device must be enabled independently.
           </p>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 
 /** Return the VAPID public key so the browser can subscribe. */
@@ -69,6 +70,45 @@ export const removeSubscription = mutation({
     if (row && row.userId === userId) {
       await ctx.db.delete(row._id);
     }
+  },
+});
+
+/**
+ * Send a test notification to the current user's registered devices.
+ * Creates a notification job and immediately schedules delivery.
+ */
+export const sendTestNotification = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError("Sign in to send a test notification.");
+
+    // Check that the user has at least one registered device.
+    const devices = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    if (devices.length === 0) {
+      throw new ConvexError(
+        "No device registered. Enable notifications on this device first.",
+      );
+    }
+
+    // Schedule an immediate notification job for this user.
+    await ctx.runMutation(internal.notifications.scheduleNotification, {
+      kind: "follow_up_reminder",
+      dedupeKey: `test:${userId}:${Date.now()}`,
+      deliverAt: Date.now(),
+      payload: {
+        title: "Shepherd Test",
+        body: "Device push notifications are working!",
+        url: "/settings",
+      },
+      recipientUserIds: [userId],
+    });
+
+    return { ok: true };
   },
 });
 

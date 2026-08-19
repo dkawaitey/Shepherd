@@ -8,6 +8,7 @@ import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import {
   BarChart3,
+  BellRing,
   BookOpen,
   CalendarCheck2,
   ClipboardList,
@@ -26,6 +27,7 @@ import {
   UserPlus,
   FlaskConical,
 } from "lucide-react";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -119,6 +121,11 @@ export function AppShell() {
       autoLink().catch(() => undefined);
     }
   }, [user, autoLink]);
+
+  const [pushDismissed, setPushDismissed] = useState(false);
+  const push = usePushNotifications(!!user);
+  const pushSupported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+  const showPushBanner = user && pushSupported && !push.subscribed && push.permission !== "denied" && !pushDismissed;
 
   const endTest = () => {
     setTestAs({ role: undefined })
@@ -253,6 +260,38 @@ export function AppShell() {
             >
               End test
             </Button>
+          </div>
+        )}
+
+        {showPushBanner && (
+          <div className="flex items-center justify-between gap-3 border-b border-primary/20 bg-primary/5 px-4 py-2 text-[11px] text-foreground md:px-6">
+            <span className="flex min-w-0 items-center gap-2">
+              <BellRing className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="truncate">
+                Enable device notifications to receive follow-up reminders and announcements even when the app is closed.
+              </span>
+            </span>
+            <div className="flex shrink-0 gap-1">
+              <Button
+                size="sm"
+                className="h-6 px-2 text-[10px]"
+                onClick={async () => {
+                  const res = await push.enable();
+                  if (res.ok) toast.success("Notifications enabled");
+                  else toast.error(res.reason);
+                }}
+              >
+                Enable
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-[10px]"
+                onClick={() => setPushDismissed(true)}
+              >
+                Dismiss
+              </Button>
+            </div>
           </div>
         )}
 
