@@ -11,6 +11,14 @@ crons.daily(
   internal.emails.dailyDigest,
 );
 
+// Daily push notifications at 06:30 UTC: follow-up reminders, birthday alerts,
+// missed follow-ups, and low attendance alerts delivered as device notifications.
+crons.daily(
+  "daily-push-notifications",
+  { hourUTC: 6, minuteUTC: 30 },
+  internal.pushScheduler.dailyPushNotifications,
+);
+
 // Hourly background push to the Steward app: pushes Shepherd's members out to
 // Steward (respects the enable toggle in Settings → Integrations). Sync is
 // one-way — nothing is ever pulled from Steward into Shepherd.
