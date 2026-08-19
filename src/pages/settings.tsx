@@ -1,4 +1,5 @@
 import { api } from "@/convex/_generated/api";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
@@ -36,6 +37,7 @@ import { PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles } from "
 import { cn } from "@/lib/utils";
 
 import {
+  Bell,
   Calendar as CalendarIcon,
   Download,
   FileText,
@@ -57,6 +59,7 @@ const TABS = [
   { id: "users", label: "User Management" },
   { id: "profile", label: "My Profile" },
   { id: "ministry", label: "Ministry Settings" },
+  { id: "notifications", label: "Notifications" },
   { id: "integrations", label: "Integrations" },
   { id: "audit", label: "Audit Logs" },
 ];
@@ -101,6 +104,7 @@ export default function Settings() {
       {tab === "users" && <UsersTab />}
       {tab === "profile" && <ProfileTab />}
       {tab === "ministry" && <MinistryTab />}
+      {tab === "notifications" && <NotificationsTab />}
       {tab === "integrations" && <IntegrationsTab />}
       {tab === "audit" && <AuditTab />}
     </div>
@@ -995,7 +999,90 @@ function StewardSyncSection() {
 }
 
 function NotificationsTab() {
-  return null;
+  const me = useQuery(api.users.currentUser);
+  const { subscribed, permission, loading, enable, disable } = usePushNotifications(!!me);
+  const [actionError, setActionError] = useState("");
+
+  const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+
+  return (
+    <div className="max-w-lg space-y-4">
+      <div className="rounded-lg border bg-card p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Bell className="h-4 w-4 text-primary" />
+          <p className="term-label">// device push notifications</p>
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
+            <div>
+              <div className="text-xs font-semibold">Push notifications</div>
+              <div className="text-[10px] text-muted-foreground">
+                {!supported
+                  ? "Not supported in this browser"
+                  : subscribed
+                    ? "Enabled — you will receive device notifications"
+                    : permission === "denied"
+                      ? "Permission denied — enable in browser settings"
+                      : "Receive follow-up reminders, announcements and alerts as device notifications"}
+              </div>
+            </div>
+            <span
+              className={cn(
+                "h-2 w-2 shrink-0 rounded-full",
+                subscribed ? "bg-[#86efac]" : permission === "denied" ? "bg-[#f87171]" : "bg-[#fbbf24]",
+              )}
+            />
+          </div>
+
+          {supported && permission !== "denied" && (
+            <div className="flex items-center justify-between border-b border-dashed pb-3">
+              <div>
+                <div className="text-[13px] font-medium">Enable on this device</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {subscribed ? "Notifications are active" : "Click to enable device notifications"}
+                </div>
+              </div>
+              <Switch
+                checked={subscribed}
+                disabled={loading}
+                onCheckedChange={async (checked) => {
+                  setActionError("");
+                  const result = checked ? await enable() : await disable();
+                  if (!result.ok) setActionError(result.reason);
+                }}
+              />
+            </div>
+          )}
+
+          {actionError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
+              {actionError}
+            </div>
+          )}
+
+          {subscribed && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                setActionError("");
+                const result = await disable();
+                if (!result.ok) setActionError(result.reason);
+              }}
+            >
+              Disable notifications on this device
+            </Button>
+          )}
+
+          <p className="text-[10px] leading-4 text-muted-foreground">
+            Notifications are delivered as device push notifications — they wake the screen and appear in your
+            notification centre even when the app is closed. Each device must be enabled independently. You can
+            manage device registrations in the <b className="text-foreground">Integrations</b> tab.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AuditTab() {

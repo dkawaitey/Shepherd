@@ -355,6 +355,44 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("createdAt", ["createdAt"]),
 
+    // ===== Push subscriptions (device registrations) =====
+    pushSubscriptions: defineTable({
+      userId: v.id("users"),
+      email: v.optional(v.string()),
+      endpoint: v.string(),
+      p256dh: v.string(),
+      auth: v.string(),
+      userAgent: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_endpoint", ["endpoint"])
+      .index("by_email", ["email"])
+      .index("by_user", ["userId"]),
+
+    // ===== Scheduled notification jobs =====
+    notificationJobs: defineTable({
+      kind: v.union(
+        v.literal("follow_up_reminder"),
+        v.literal("birthday_alert"),
+        v.literal("missed_follow_up"),
+        v.literal("low_attendance"),
+        v.literal("bible_study_reminder"),
+        v.literal("post"),
+        v.literal("comment"),
+        v.literal("reply"),
+      ),
+      dedupeKey: v.string(),
+      deliverAt: v.number(),
+      status: v.union(v.literal("scheduled"), v.literal("delivered"), v.literal("cancelled")),
+      payload: v.object({ title: v.string(), body: v.string(), url: v.string() }),
+      recipientUserIds: v.array(v.id("users")),
+      scheduledFunctionId: v.optional(v.id("_scheduled_functions")),
+      createdAt: v.number(),
+    })
+      .index("by_dedupe_key", ["dedupeKey"])
+      .index("by_status_deliver_at", ["status", "deliverAt"]),
+
     // ===== Sequence counters (membership IDs, per area+date) =====
     counters: defineTable({
       name: v.string(),

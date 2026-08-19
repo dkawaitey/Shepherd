@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
 import { ROLES } from "./constants";
@@ -101,6 +102,31 @@ export const create = mutation({
       entityId: id,
       details: args.title.trim(),
     });
+
+    // Schedule push notification for all active members except the author.
+    try {
+      const users = await ctx.db.query("users").collect();
+      const recipientIds = users
+        .filter((u) => !u.isAnonymous && u._id !== user._id)
+        .map((u) => u._id);
+      if (recipientIds.length > 0) {
+        const now = Date.now();
+        await ctx.scheduler.runAfter(0, internal.notifications.scheduleNotification, {
+          kind: "post",
+          dedupeKey: `post:${id}`,
+          deliverAt: now,
+          payload: {
+            title: "New announcement",
+            body: args.title.trim(),
+            url: "/announcements",
+          },
+          recipientUserIds: recipientIds,
+        });
+      }
+    } catch {
+      // Non-critical — don't block the post if scheduling fails.
+    }
+
     return id;
   },
 });
@@ -138,6 +164,50 @@ export const addComment = mutation({
       isDeleted: false,
       createdAt: Date.now(),
     });
+
+    // Schedule push notification: post author + thread participants, excluding the commenter.
+    try {
+      const post = await ctx.db.get(args.postId);
+      const allComments = await ctx.db
+        .query("comments")
+        .withIndex("postId", (q) => q.eq("postId", args.postId))
+        .collect();
+
+      // Collect unique user IDs from the thread.
+      const participantIds = new Set<string>();
+      if (post?.authorId) participantIds.add(post.authorId);
+      for (const c of allComments) {
+        if (c.authorId) participantIds.add(c.authorId);
+      }
+      // Also notify all active users to keep the ministry engaged.
+      const allUsers = await ctx.db.query("users").collect();
+      for (const u of allUsers) {
+        if (!u.isAnonymous) participantIds.add(u._id);
+      }
+      // Exclude the commenter.
+      participantIds.delete(user._id);
+
+      const recipientIds = [...participantIds];
+      if (recipientIds.length > 0) {
+        const isReply = !!args.parentId;
+        const kind = isReply ? "reply" : "comment";
+        const label = isReply ? "New reply" : "New comment";
+        const now = Date.now();
+        await ctx.scheduler.runAfter(0, internal.notifications.scheduleNotification, {
+          kind,
+          dedupeKey: `${kind}:${id}`,
+          deliverAt: now,
+          payload: {
+            title: label,
+            body: `${user.name ?? user.email ?? "Someone"}: ${args.body.trim().slice(0, 120)}`,
+            url: `/announcements`,
+          },
+          recipientUserIds: recipientIds as any,
+        });
+      }
+    } catch {
+      // Non-critical — don't block the comment if scheduling fails.
+    }
 
     return id;
   },
