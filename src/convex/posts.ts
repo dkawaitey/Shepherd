@@ -110,17 +110,18 @@ export const create = mutation({
         .filter((u) => !u.isAnonymous && u._id !== user._id)
         .map((u) => u._id);
       if (recipientIds.length > 0) {
-        await ctx.runMutation(internal.notifications.scheduleNotification, {
+        const now2 = Date.now();
+        const jobId = await ctx.db.insert("notificationJobs", {
           kind: "post",
           dedupeKey: `post:${id}`,
-          deliverAt: Date.now(),
-          payload: {
-            title: "New announcement",
-            body: args.title.trim(),
-            url: "/announcements",
-          },
+          deliverAt: now2,
+          status: "scheduled",
+          payload: { title: "New announcement", body: args.title.trim(), url: "/announcements" },
           recipientUserIds: recipientIds as any,
+          createdAt: now2,
         });
+        const sfId = await ctx.scheduler.runAfter(0, internal.pushNode.deliverJob, { jobId });
+        await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
       }
     } catch {
       // Non-critical — don't block the post if scheduling fails.
@@ -191,17 +192,18 @@ export const addComment = mutation({
         const isReply = !!args.parentId;
         const kind = isReply ? "reply" : "comment";
         const label = isReply ? "New reply" : "New comment";
-        await ctx.runMutation(internal.notifications.scheduleNotification, {
+        const now2 = Date.now();
+        const jobId = await ctx.db.insert("notificationJobs", {
           kind,
           dedupeKey: `${kind}:${id}`,
-          deliverAt: Date.now(),
-          payload: {
-            title: label,
-            body: `${user.name ?? user.email ?? "Someone"}: ${args.body.trim().slice(0, 120)}`,
-            url: `/announcements`,
-          },
+          deliverAt: now2,
+          status: "scheduled",
+          payload: { title: label, body: `${user.name ?? user.email ?? "Someone"}: ${args.body.trim().slice(0, 120)}`, url: "/announcements" },
           recipientUserIds: recipientIds as any,
+          createdAt: now2,
         });
+        const sfId = await ctx.scheduler.runAfter(0, internal.pushNode.deliverJob, { jobId });
+        await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
       }
     } catch {
       // Non-critical — don't block the comment if scheduling fails.

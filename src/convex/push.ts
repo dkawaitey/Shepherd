@@ -73,9 +73,29 @@ export const removeSubscription = mutation({
   },
 });
 
+/** Return the current user's subscription count and last subscription info (for debugging). */
+export const mySubscriptionStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return { subscribed: false, count: 0, permission: "unavailable" as const };
+
+    const devices = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    return {
+      subscribed: devices.length > 0,
+      count: devices.length,
+      permission: typeof Notification !== "undefined" ? Notification.permission : "unavailable",
+    };
+  },
+});
+
 /**
  * Send a test notification to the current user's registered devices.
- * Creates a notification job and immediately schedules delivery.
+ * Creates a notification job inline and schedules immediate delivery.
  */
 export const sendTestNotification = mutation({
   args: {},
@@ -95,20 +115,35 @@ export const sendTestNotification = mutation({
       );
     }
 
-    // Schedule an immediate notification job for this user.
-    await ctx.runMutation(internal.notifications.scheduleNotification, {
+    // Create the notification job directly (not via ctx.runMutation, which may
+    // not be available inside a mutation).
+    const now = Date.now();
+    const dedupeKey = `test:${userId}:${now}`;
+
+    const jobId = await ctx.db.insert("notificationJobs", {
       kind: "follow_up_reminder",
-      dedupeKey: `test:${userId}:${Date.now()}`,
-      deliverAt: Date.now(),
+      dedupeKey,
+      deliverAt: now,
+      status: "scheduled",
       payload: {
         title: "Shepherd Test",
         body: "Device push notifications are working!",
         url: "/settings",
       },
       recipientUserIds: [userId],
+      createdAt: now,
     });
 
-    return { ok: true };
+    // Schedule the delivery action via the scheduler.
+    const scheduledFunctionId = await ctx.scheduler.runAfter(
+      0,
+      internal.pushNode.deliverJob,
+      { jobId },
+    );
+
+    await ctx.db.patch(jobId, { scheduledFunctionId });
+
+    return { ok: true, jobId };
   },
 });
 
