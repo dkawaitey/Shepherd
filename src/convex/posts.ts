@@ -103,12 +103,12 @@ export const create = mutation({
       details: args.title.trim(),
     });
 
-    // Schedule push notification for all active members except the author.
-    // We do this inline (not via the helper) so the mutation can own the scheduler call.
+    // Schedule push notification for all active users including the author
+    // so everyone gets a device notification about new posts.
     try {
       const allUsers = await ctx.db.query("users").collect();
       const recipientIds = allUsers
-        .filter((u) => !u.isAnonymous && u._id !== user._id)
+        .filter((u) => !u.isAnonymous)
         .map((u) => u._id);
 
       if (recipientIds.length > 0) {
@@ -135,6 +135,16 @@ export const create = mutation({
       }
     } catch (err) {
       console.error("[posts] Push notification scheduling failed:", err);
+      // Log the error to delivery logs so it's visible in diagnostics.
+      try {
+        await ctx.db.insert("pushDeliveryLogs", {
+          jobId: undefined,
+          endpoint: `post:${id}`,
+          success: false,
+          error: `Post notification scheduling failed: ${String(err)}`,
+          createdAt: Date.now(),
+        });
+      } catch { /* best effort */ }
     }
 
     return id;
@@ -175,8 +185,8 @@ export const addComment = mutation({
       createdAt: Date.now(),
     });
 
-    // Schedule push notification: everyone (including non-class-leader members),
-    // excluding the commenter.
+    // Schedule push notification: everyone (including the commenter) so
+    // all users receive device notifications to keep the ministry engaged.
     try {
       const allComments = await ctx.db
         .query("comments")
@@ -194,8 +204,6 @@ export const addComment = mutation({
       for (const u of allUsers) {
         if (!u.isAnonymous) participantIds.add(u._id);
       }
-      // Exclude the commenter.
-      participantIds.delete(user._id);
 
       const recipientIds = [...participantIds];
       if (recipientIds.length > 0) {
@@ -225,6 +233,15 @@ export const addComment = mutation({
       }
     } catch (err) {
       console.error("[posts] Comment push notification scheduling failed:", err);
+      try {
+        await ctx.db.insert("pushDeliveryLogs", {
+          jobId: undefined,
+          endpoint: `comment:${id}`,
+          success: false,
+          error: `Comment notification scheduling failed: ${String(err)}`,
+          createdAt: Date.now(),
+        });
+      } catch { /* best effort */ }
     }
 
     return id;
