@@ -160,3 +160,65 @@ export const cleanupDeadSubscriptions = internalMutation({
     }
   },
 });
+
+/** Log a delivery attempt for debugging. */
+export const logDelivery = internalMutation({
+  args: {
+    jobId: v.optional(v.id("notificationJobs")),
+    endpoint: v.string(),
+    success: v.boolean(),
+    error: v.optional(v.string()),
+    statusCode: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("pushDeliveryLogs", {
+      ...args,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Return VAPID key configuration status and recent delivery logs. */
+export const deliveryDiagnostics = query({
+  args: {},
+  handler: async (ctx) => {
+    const publicKey = !!process.env.VAPID_PUBLIC_KEY;
+    const privateKey = !!process.env.VAPID_PRIVATE_KEY;
+    const subject = !!process.env.VAPID_SUBJECT;
+
+    const allSubscriptions = await ctx.db.query("pushSubscriptions").collect();
+    const recentLogs = await ctx.db
+      .query("pushDeliveryLogs")
+      .withIndex("by_created")
+      .order("desc")
+      .take(10);
+
+    const recentJobs = await ctx.db
+      .query("notificationJobs")
+      .withIndex("by_status_deliver_at")
+      .order("desc")
+      .take(5);
+
+    return {
+      vapidConfigured: publicKey && privateKey && subject,
+      vapidPublicKey: publicKey,
+      vapidPrivateKey: privateKey,
+      vapidSubject: subject,
+      totalSubscriptions: allSubscriptions.length,
+      recentLogs: recentLogs.map((l) => ({
+        endpoint: l.endpoint,
+        success: l.success,
+        error: l.error,
+        statusCode: l.statusCode,
+        createdAt: l.createdAt,
+      })),
+      recentJobs: recentJobs.map((j) => ({
+        kind: j.kind,
+        status: j.status,
+        deliverAt: j.deliverAt,
+        recipients: j.recipientUserIds.length,
+        createdAt: j.createdAt,
+      })),
+    };
+  },
+});

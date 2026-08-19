@@ -393,6 +393,17 @@ const schema = defineSchema(
       .index("by_dedupe_key", ["dedupeKey"])
       .index("by_status_deliver_at", ["status", "deliverAt"]),
 
+    // ===== Push delivery logs (for debugging device notification failures) =====
+    pushDeliveryLogs: defineTable({
+      jobId: v.optional(v.id("notificationJobs")),
+      endpoint: v.string(),
+      success: v.boolean(),
+      error: v.optional(v.string()),
+      statusCode: v.optional(v.number()),
+      createdAt: v.number(),
+    }).index("by_job", ["jobId"])
+      .index("by_created", ["createdAt"]),
+
     // ===== Sequence counters (membership IDs, per area+date) =====
     counters: defineTable({
       name: v.string(),

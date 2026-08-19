@@ -1004,11 +1004,33 @@ function NotificationsTab() {
   const [actionError, setActionError] = useState("");
   const [testing, setTesting] = useState(false);
   const sendTestNotif = useMutation(api.push.sendTestNotification);
+  const diag = useQuery(api.push.deliveryDiagnostics);
 
   const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+  const inIframe = typeof window !== "undefined" && window.self !== window.top;
 
   return (
     <div className="max-w-lg space-y-4">
+      {inIframe && (
+        <div className="rounded-lg border border-amber-300/50 bg-amber-50 p-4 dark:border-amber-700/50 dark:bg-amber-950/30">
+          <div className="mb-2 flex items-center gap-2">
+            <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Push notifications require the app to be opened directly</p>
+          </div>
+          <p className="text-[11px] leading-5 text-amber-700 dark:text-amber-400/80">
+            You are viewing Shepherd inside an embedded preview. Push notifications are blocked by the browser in this mode.
+            Open the app in a new tab or install it as a PWA on your home screen to enable device notifications.
+          </p>
+          <a
+            href={window.location.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-block rounded-md bg-amber-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-amber-700"
+          >
+            Open in new tab →
+          </a>
+        </div>
+      )}
       <div className="rounded-lg border bg-card p-4">
         <div className="mb-3 flex items-center gap-2">
           <Bell className="h-4 w-4 text-primary" />
@@ -1096,6 +1118,84 @@ function NotificationsTab() {
               >
                 Disable
               </Button>
+            </div>
+          )}
+
+          {/* ── Diagnostics ── */}
+          {diag && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2.5 text-[10px] leading-4">
+              <div className="mb-1.5 text-[11px] font-semibold">Delivery Diagnostics</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <span className="text-muted-foreground">VAPID keys: </span>
+                  <span className={diag.vapidConfigured ? "text-status-green font-semibold" : "text-destructive font-semibold"}>
+                    {diag.vapidConfigured ? "✓ Configured" : "✗ Missing"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Registered devices: </span>
+                  <span className="font-semibold">{diag.totalSubscriptions}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Public key: </span>
+                  <span className={diag.vapidPublicKey ? "text-status-green" : "text-destructive"}>
+                    {diag.vapidPublicKey ? "Set" : "Missing"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Private key: </span>
+                  <span className={diag.vapidPrivateKey ? "text-status-green" : "text-destructive"}>
+                    {diag.vapidPrivateKey ? "Set" : "Missing"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Subject: </span>
+                  <span className={diag.vapidSubject ? "text-status-green" : "text-destructive"}>
+                    {diag.vapidSubject ? "Set" : "Missing"}
+                  </span>
+                </div>
+              </div>
+
+              {!diag.vapidConfigured && (
+                <div className="mt-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-destructive">
+                  <b>VAPID keys are not configured.</b> Add these environment variables in the Convex dashboard (Settings → Environment Variables):<br />
+                  <code className="text-[9px]">VAPID_PUBLIC_KEY</code>, <code className="text-[9px]">VAPID_PRIVATE_KEY</code>, <code className="text-[9px]">VAPID_SUBJECT</code> (e.g. <code className="text-[9px]">mailto:admin@gethsemane.org</code>)
+                </div>
+              )}
+
+              {diag.recentLogs.length > 0 && (
+                <div className="mt-2">
+                  <div className="mb-1 font-semibold">Recent delivery attempts</div>
+                  <div className="divide-y rounded border bg-background">
+                    {diag.recentLogs.map((l, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 px-2 py-1">
+                        <span className="truncate text-[9px] text-muted-foreground">
+                          {l.endpoint === "config" ? "Config check" : `${l.endpoint.slice(0, 40)}…`}
+                        </span>
+                        <span className={cn("shrink-0 font-semibold", l.success ? "text-status-green" : "text-destructive")}>
+                          {l.success ? "✓ sent" : `✗ ${l.error?.slice(0, 60) ?? "failed"}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {diag.recentJobs.length > 0 && (
+                <div className="mt-2">
+                  <div className="mb-1 font-semibold">Recent jobs</div>
+                  <div className="divide-y rounded border bg-background">
+                    {diag.recentJobs.map((j, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 px-2 py-1">
+                        <span className="text-[9px] text-muted-foreground">{j.kind} → {j.recipients} recipient{j.recipients === 1 ? "" : "s"}</span>
+                        <span className={cn("shrink-0 text-[9px] font-semibold", j.status === "delivered" ? "text-status-green" : j.status === "cancelled" ? "text-muted-foreground" : "text-status-amber")}>
+                          {j.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
