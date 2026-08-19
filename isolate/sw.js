@@ -1,11 +1,13 @@
-/* Shepherd service worker — installable PWA + offline app shell.
+/* Shepherd service worker — installable PWA + offline app shell + push notifications.
  *
  * Strategy:
  *  - Navigations: network-first, falling back to the cached shell (offline).
  *  - Same-origin assets: stale-while-revalidate (fast, then fresh).
  *  - Everything else (Convex API, external fonts, etc.): untouched.
+ *  - Push events: display system notifications.
+ *  - Notification clicks: focus or open the app to the notification URL.
  */
-const CACHE = "shepherd-shell-v1";
+const CACHE = "shepherd-shell-v2";
 const SHELL = [
   "/",
   "/index.html",
@@ -76,54 +78,43 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-/* ===== Web push notifications (WhatsApp-style delivery) ===== */
+/* ===================== Push Notifications ===================== */
 
-// Show a system notification when a push message arrives. The payload is
-// encrypted by the server (VAPID / aes128gcm) and decrypted by the browser.
 self.addEventListener("push", (event) => {
-  let data = {};
-  try {
-    data = event.data ? event.data.json() : {};
-  } catch {
-    // Non-JSON payload — fall back to a generic notification.
-  }
-  const title = data.title || "Shepherd";
-  const options = {
-    body: data.message || "You have a new update in Shepherd.",
-    icon: "/sidebarr-logo.png",
-    badge: "/sidebarr-logo.png",
-    data: { url: data.link || "/dashboard" },
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
-});
+  const data = event.data?.json?.() ?? { title: "Shepherd", body: "", url: "/" };
+  const url =
+    typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/";
 
-// Tapping the notification opens (or focuses) the app at the right page.
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  const url = event.notification.data?.url || "/dashboard";
   event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((list) => {
-        for (const client of list) {
-          if ("focus" in client && "navigate" in client) {
-            if (client.url !== url) client.navigate(url).catch(() => undefined);
-            return client.focus();
-          }
-        }
-        return self.clients.openWindow(url);
-      }),
+    self.registration.showNotification(data.title || "Shepherd", {
+      body: data.body || "",
+      icon: "/sidebar-logo.png",
+      badge: "/sidebar-logo.png",
+      data: { url },
+      tag: "shepherd-notification",
+    }),
   );
 });
 
-// The browser rotated the subscription (e.g. after expiry). Ask any open tab
-// to re-register it, since only the page holds the Convex auth session.
-self.addEventListener("pushsubscriptionchange", (event) => {
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL(
+    event.notification.data?.url || "/",
+    self.location.origin,
+  ).href;
+
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clients) =>
-        clients.forEach((c) => c.postMessage({ type: "push-subscription-changed" })),
-      ),
+      .then(async (clients) => {
+        // Focus an existing Shepherd window if one is open.
+        const client = clients[0];
+        if (client) {
+          await client.navigate(url);
+          return client.focus();
+        }
+        // Otherwise open a new window.
+        return self.clients.openWindow(url);
+      }),
   );
 });
