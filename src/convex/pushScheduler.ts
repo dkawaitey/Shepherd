@@ -140,7 +140,8 @@ export const dailyPushNotifications = internalMutation({
     }
 
     // ─── 3. Birthday alerts ────────────────────────────────────────
-    // Contacts with birthdays in the next 7 days
+    // Contacts with birthdays in the next 7 days → sent to ALL members
+    const allMemberIds = people.map((u) => u._id);
     for (const c of liveContacts) {
       if (!c.dateOfBirth) continue;
       const dob = new Date(c.dateOfBirth);
@@ -150,31 +151,19 @@ export const dailyPushNotifications = internalMutation({
       if (next < now) next.setFullYear(now.getFullYear() + 1);
       const dateStr = localDate(next);
 
-      if (dateStr === tomorrow) {
-        // Notify all active leaders/managers about upcoming birthday
-        const leaders = people.filter(
-          (u) =>
-            !u.isAnonymous &&
-            (u.roles?.includes("admin") ||
-              u.roles?.includes("coordinator") ||
-              u.role === "admin" ||
-              u.role === "coordinator"),
-        );
-        const leaderIds = leaders.map((l) => l._id);
-        if (leaderIds.length > 0) {
-          await ctx.runMutation(internal.notifications.scheduleNotification, {
-            kind: "birthday_alert",
-            dedupeKey: `birthday:${c._id}:day-before`,
-            deliverAt: Date.now(),
-            payload: {
-              title: "Birthday Tomorrow 🎂",
-              body: `${c.fullName}'s birthday is tomorrow!`,
-              url: `/contacts/${c._id}`,
-            },
-            recipientUserIds: leaderIds,
-          });
-          scheduled++;
-        }
+      if (dateStr === tomorrow && allMemberIds.length > 0) {
+        await ctx.runMutation(internal.notifications.scheduleNotification, {
+          kind: "birthday_alert",
+          dedupeKey: `birthday:${c._id}:day-before`,
+          deliverAt: Date.now(),
+          payload: {
+            title: "Birthday Tomorrow 🎂",
+            body: `${c.fullName}'s birthday is tomorrow!`,
+            url: `/contacts/${c._id}`,
+          },
+          recipientUserIds: allMemberIds,
+        });
+        scheduled++;
       }
     }
 
@@ -212,6 +201,41 @@ export const dailyPushNotifications = internalMutation({
         });
         scheduled++;
       }
+    }
+
+    // ─── 4. Bible study reminders ──────────────────────────────────
+    // Contacts with Bible study lessons in progress for >2 weeks → remind worker
+    const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const bibleStudies = await ctx.db.query("bibleStudies").collect();
+    for (const bs of bibleStudies) {
+      if (bs.status !== "inProgress") continue;
+      // Check if the lesson has been in progress for more than 2 weeks
+      if (bs.createdAt > twoWeeksAgo) continue;
+
+      const contact = contactById.get(bs.contactId);
+      if (!contact) continue;
+
+      let workerId = contact.assignedWorkerId;
+      if (!workerId && contact.assignedWorker) {
+        const worker = people.find(
+          (u) => !!u.email && (u.name ?? "").toLowerCase() === contact.assignedWorker!.toLowerCase(),
+        );
+        if (worker) workerId = worker._id;
+      }
+      if (!workerId) continue;
+
+      await ctx.runMutation(internal.notifications.scheduleNotification, {
+        kind: "bible_study_reminder",
+        dedupeKey: `bible-study:${bs._id}:${today}`,
+        deliverAt: Date.now(),
+        payload: {
+          title: "Bible Study Reminder",
+          body: `Lesson ${bs.lesson} for ${contact.fullName} is overdue — started ${new Date(bs.createdAt).toLocaleDateString()}`,
+          url: `/contacts/${contact._id}`,
+        },
+        recipientUserIds: [workerId],
+      });
+      scheduled++;
     }
 
     return { scheduled };
