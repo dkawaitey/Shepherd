@@ -1196,6 +1196,28 @@ function NotificationsTab() {
                   </div>
                 </div>
               )}
+
+              {diag.postNotificationJobs && diag.postNotificationJobs.length > 0 && (
+                <div className="mt-2">
+                  <div className="mb-1 font-semibold">Post / Comment / Reply push jobs</div>
+                  <div className="divide-y rounded border bg-background">
+                    {diag.postNotificationJobs.map((j, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 px-2 py-1">
+                        <span className="text-[9px] text-muted-foreground">{j.kind} → {j.recipients} recipient{j.recipients === 1 ? "" : "s"}</span>
+                        <span className={cn("shrink-0 text-[9px] font-semibold", j.status === "delivered" ? "text-status-green" : j.status === "cancelled" ? "text-muted-foreground" : "text-status-amber")}>
+                          {j.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {diag.postNotificationJobs && diag.postNotificationJobs.length === 0 && (
+                <div className="mt-2 rounded border border-dashed p-2 text-[10px] text-muted-foreground">
+                  No post/comment/reply push jobs yet. Create a post to test.
+                </div>
+              )}
             </div>
           )}
 

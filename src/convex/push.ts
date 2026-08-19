@@ -201,6 +201,17 @@ export const deliveryDiagnostics = query({
       .order("desc")
       .take(5);
 
+    // Check for recent post/comment notification jobs.
+    const postJobs = await ctx.db
+      .query("notificationJobs")
+      .filter((q) => q.or(
+        q.eq(q.field("kind"), "post"),
+        q.eq(q.field("kind"), "comment"),
+        q.eq(q.field("kind"), "reply"),
+      ))
+      .order("desc")
+      .take(5);
+
     return {
       vapidConfigured,
       vapidPublicKey: publicKey,
@@ -215,6 +226,13 @@ export const deliveryDiagnostics = query({
         createdAt: l.createdAt,
       })),
       recentJobs: recentJobs.map((j) => ({
+        kind: j.kind,
+        status: j.status,
+        deliverAt: j.deliverAt,
+        recipients: j.recipientUserIds.length,
+        createdAt: j.createdAt,
+      })),
+      postNotificationJobs: postJobs.map((j) => ({
         kind: j.kind,
         status: j.status,
         deliverAt: j.deliverAt,

@@ -104,27 +104,37 @@ export const create = mutation({
     });
 
     // Schedule push notification for all active members except the author.
+    // We do this inline (not via the helper) so the mutation can own the scheduler call.
     try {
-      const users = await ctx.db.query("users").collect();
-      const recipientIds = users
+      const allUsers = await ctx.db.query("users").collect();
+      const recipientIds = allUsers
         .filter((u) => !u.isAnonymous && u._id !== user._id)
         .map((u) => u._id);
+
       if (recipientIds.length > 0) {
-        const now2 = Date.now();
+        const ts = Date.now();
         const jobId = await ctx.db.insert("notificationJobs", {
           kind: "post",
           dedupeKey: `post:${id}`,
-          deliverAt: now2,
+          deliverAt: ts,
           status: "scheduled",
-          payload: { title: "New announcement", body: args.title.trim(), url: "/announcements" },
+          payload: {
+            title: "New announcement",
+            body: `${user.name ?? user.email ?? "Someone"}: ${args.title.trim()}`,
+            url: "/announcements",
+          },
           recipientUserIds: recipientIds as any,
-          createdAt: now2,
+          createdAt: ts,
         });
-        const sfId = await ctx.scheduler.runAfter(0, internal.pushNode.deliverJob, { jobId });
+        const sfId = await ctx.scheduler.runAfter(
+          0,
+          internal.pushNode.deliverJob,
+          { jobId },
+        );
         await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
       }
-    } catch {
-      // Non-critical — don't block the post if scheduling fails.
+    } catch (err) {
+      console.error("[posts] Push notification scheduling failed:", err);
     }
 
     return id;
@@ -165,9 +175,9 @@ export const addComment = mutation({
       createdAt: Date.now(),
     });
 
-    // Schedule push notification: post author + thread participants, excluding the commenter.
+    // Schedule push notification: everyone (including non-class-leader members),
+    // excluding the commenter.
     try {
-      const post = await ctx.db.get(args.postId);
       const allComments = await ctx.db
         .query("comments")
         .withIndex("postId", (q) => q.eq("postId", args.postId))
@@ -175,7 +185,7 @@ export const addComment = mutation({
 
       // Collect unique user IDs from the thread.
       const participantIds = new Set<string>();
-      if (post?.authorId) participantIds.add(post.authorId);
+      if (post.authorId) participantIds.add(post.authorId);
       for (const c of allComments) {
         if (c.authorId) participantIds.add(c.authorId);
       }
@@ -190,23 +200,31 @@ export const addComment = mutation({
       const recipientIds = [...participantIds];
       if (recipientIds.length > 0) {
         const isReply = !!args.parentId;
-        const kind = isReply ? "reply" : "comment";
+        const kind = isReply ? ("reply" as const) : ("comment" as const);
         const label = isReply ? "New reply" : "New comment";
-        const now2 = Date.now();
+        const ts = Date.now();
         const jobId = await ctx.db.insert("notificationJobs", {
           kind,
           dedupeKey: `${kind}:${id}`,
-          deliverAt: now2,
+          deliverAt: ts,
           status: "scheduled",
-          payload: { title: label, body: `${user.name ?? user.email ?? "Someone"}: ${args.body.trim().slice(0, 120)}`, url: "/announcements" },
+          payload: {
+            title: label,
+            body: `${user.name ?? user.email ?? "Someone"}: ${args.body.trim().slice(0, 120)}`,
+            url: "/announcements",
+          },
           recipientUserIds: recipientIds as any,
-          createdAt: now2,
+          createdAt: ts,
         });
-        const sfId = await ctx.scheduler.runAfter(0, internal.pushNode.deliverJob, { jobId });
+        const sfId = await ctx.scheduler.runAfter(
+          0,
+          internal.pushNode.deliverJob,
+          { jobId },
+        );
         await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
       }
-    } catch {
-      // Non-critical — don't block the comment if scheduling fails.
+    } catch (err) {
+      console.error("[posts] Comment push notification scheduling failed:", err);
     }
 
     return id;
