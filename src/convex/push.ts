@@ -185,6 +185,8 @@ export const deliveryDiagnostics = query({
     const publicKey = !!process.env.VAPID_PUBLIC_KEY;
     const privateKey = !!process.env.VAPID_PRIVATE_KEY;
     const subject = !!process.env.VAPID_SUBJECT;
+    // Subject has a built-in fallback, so only public + private are truly required.
+    const vapidConfigured = publicKey && privateKey;
 
     const allSubscriptions = await ctx.db.query("pushSubscriptions").collect();
     const recentLogs = await ctx.db
@@ -200,7 +202,7 @@ export const deliveryDiagnostics = query({
       .take(5);
 
     return {
-      vapidConfigured: publicKey && privateKey && subject,
+      vapidConfigured,
       vapidPublicKey: publicKey,
       vapidPrivateKey: privateKey,
       vapidSubject: subject,

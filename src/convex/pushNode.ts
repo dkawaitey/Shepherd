@@ -23,15 +23,16 @@ export const deliverJob = internalAction({
 
     const publicKey = process.env.VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
-    const subject = process.env.VAPID_SUBJECT;
+    // Subject is required by web-push but is just a contact string.
+    // Provide a sensible default so delivery works even if the env var is missing.
+    const subject = process.env.VAPID_SUBJECT || "mailto:admin@gethsemane.org";
 
-    if (!publicKey || !privateKey || !subject) {
-      // Log the configuration issue so it's visible in the UI.
+    if (!publicKey || !privateKey) {
       await ctx.runMutation(internal.push.logDelivery, {
         jobId,
         endpoint: "config",
         success: false,
-        error: `Missing VAPID keys: publicKey=${!!publicKey}, privateKey=${!!privateKey}, subject=${!!subject}`,
+        error: `Missing VAPID keys: publicKey=${!!publicKey}, privateKey=${!!privateKey}`,
       });
       console.warn("[push] VAPID keys not configured — skipping delivery");
       return;
@@ -56,21 +57,18 @@ export const deliverJob = internalAction({
               JSON.stringify(job.payload),
               { TTL: 60 * 60 * 24 }, // 24 hours
             );
-            // Log success.
             await ctx.runMutation(internal.push.logDelivery, {
               jobId,
-              endpoint: sub.endpoint.slice(0, 80), // truncate for storage
+              endpoint: sub.endpoint.slice(0, 80),
               success: true,
             });
             sentCount++;
           } catch (error: any) {
             const statusCode = error?.statusCode ?? 0;
             const errorMsg = error?.message ?? String(error);
-            // Subscription expired or removed — mark for cleanup.
             if (statusCode === 404 || statusCode === 410) {
               dead.push(sub.endpoint);
             }
-            // Log every failure.
             await ctx.runMutation(internal.push.logDelivery, {
               jobId,
               endpoint: sub.endpoint.slice(0, 80),
@@ -85,14 +83,12 @@ export const deliverJob = internalAction({
       void results;
     }
 
-    // Clean up dead subscriptions.
     if (dead.length) {
       await ctx.runMutation(internal.push.cleanupDeadSubscriptions, {
         endpoints: dead,
       });
     }
 
-    // Mark the job as delivered (even if some sends failed — the job itself was processed).
     await ctx.runMutation(internal.notifications.markDelivered, { jobId });
 
     console.log(

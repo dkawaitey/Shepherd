@@ -104,7 +104,30 @@ export function usePushNotifications(enabled: boolean) {
         return { ok: false, reason: "Notification permission was denied" };
       }
 
-      const registration = await navigator.serviceWorker.ready;
+      // Ensure the service worker is fully registered AND activated before subscribing.
+      // navigator.serviceWorker.ready resolves when the SW is active, but in some
+      // browsers/environments the controller may not be set yet, which causes
+      // "Subscription failed - no active Service Worker". We wait for it explicitly.
+      let registration = await navigator.serviceWorker.ready;
+      if (!registration.active) {
+        // Wait up to 5 seconds for the SW to become active.
+        registration = await new Promise<ServiceWorkerRegistration>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("Service worker did not activate in time")), 5000);
+          const check = () => {
+            navigator.serviceWorker.ready.then((reg) => {
+              if (reg.active) {
+                clearTimeout(timeout);
+                resolve(reg);
+              } else {
+                // Retry in 200ms.
+                setTimeout(check, 200);
+              }
+            });
+          };
+          check();
+        });
+      }
+
       const publicKey = getPublicKey;
       if (!publicKey) {
         return { ok: false, reason: "VAPID public key not configured — ask an administrator" };
