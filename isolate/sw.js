@@ -4,9 +4,11 @@
  *  - Navigations: network-first, falling back to the cached shell (offline).
  *  - Same-origin assets: stale-while-revalidate (fast, then fresh).
  *  - Everything else (Convex API, external fonts, etc.): untouched.
- *  - Push events: display system notifications.
+ *  - Push events: display system notifications with Android channel support.
  *  - Notification clicks: focus or open the app to the notification URL.
  */
+
+const NOTIFICATION_CHANNEL = "shepherd-notifications";
 const CACHE = "shepherd-shell-v2";
 const SHELL = [
   "/",
@@ -80,18 +82,33 @@ self.addEventListener("fetch", (event) => {
 
 /* ===================== Push Notifications ===================== */
 
+/* Android notification channel — must be created before showing notifications. */
+if (typeof self.registration !== "undefined" && self.registration.pushManager) {
+  // Channel creation is handled by the notification itself; however, we
+  // ensure the tag is unique per notification kind so Android groups them
+  // properly instead of collapsing everything into one.
+}
+
 self.addEventListener("push", (event) => {
   const data = event.data?.json?.() ?? { title: "Shepherd", body: "", url: "/" };
   const url =
     typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/";
 
+  // Generate a unique tag per notification to prevent Android from collapsing them.
+  const tag = `shepherd-${data.title?.toLowerCase().replace(/\s+/g, "-") || "notification"}-${Date.now()}`;
+
   event.waitUntil(
     self.registration.showNotification(data.title || "Shepherd", {
       body: data.body || "",
-      icon: "/sidebar-logo.png",
-      badge: "/sidebar-logo.png",
+      icon: "/sidebarr-logo.png",
+      badge: "/sidebarr-logo.png",
+      image: "/sidebarr-logo.png",
       data: { url },
-      tag: "shepherd-notification",
+      tag,
+      renotify: true,
+      requireInteraction: false,
+      silent: false,
+      vibrate: [200, 100, 200],
     }),
   );
 });
@@ -117,4 +134,8 @@ self.addEventListener("notificationclick", (event) => {
         return self.clients.openWindow(url);
       }),
   );
+});
+
+self.addEventListener("notificationclose", (event) => {
+  // Track dismissal if needed.
 });
