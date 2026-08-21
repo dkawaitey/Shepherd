@@ -3,14 +3,48 @@
   "short_name": "Shepherd",
   "description": "Discipleship management for Gethsemane Ministry Youth Ministry — outreach, follow-up, discipleship, attendance, and church integration.",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#0c0f0c",
   "theme_color": "#0c0f0c",
   "lang": "en",
+  "dir": "ltr",
   "categories": ["productivity", "education", "lifestyle"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open the main dashboard",
+      "url": "/?source=pwa-shortcut",
+      "icons": [
+        {
+          "src": "/sidebarr-logo.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/sidebarr-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Shepherd Dashboard"
+    },
+    {
+      "src": "/sidebarr-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Shepherd Mobile"
+    }
+  ],
   "icons": [
     {
       "src": "/sidebarr-logo.png",
