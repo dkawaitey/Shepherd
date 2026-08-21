@@ -241,6 +241,15 @@ function PostMediaItem({ media }: { media: { storageId: string; type: string; na
     );
   }
 
+  if (media.type === "audio") {
+    return (
+      <div className="flex items-center gap-3 rounded-md border bg-muted px-3 py-2.5">
+        <audio src={url as string} controls className="h-8 max-w-xs" />
+        <span className="truncate text-[10px] text-muted-foreground">{media.name}</span>
+      </div>
+    );
+  }
+
   // File attachment
   return (
     <a
@@ -512,6 +521,7 @@ function CreatePostDialog({
   const detectType = (file: File): string => {
     if (file.type.startsWith("image/")) return "image";
     if (file.type.startsWith("video/")) return "video";
+    if (file.type.startsWith("audio/")) return "audio";
     return "file";
   };
 
@@ -610,12 +620,12 @@ function CreatePostDialog({
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
                 className="hidden"
                 onChange={handleFileChange}
               />
               <span className="text-[10px] text-muted-foreground">
-                Images, videos, or documents
+                Images, videos, audio, or documents
               </span>
             </div>
             {pendingFiles.length > 0 && (
