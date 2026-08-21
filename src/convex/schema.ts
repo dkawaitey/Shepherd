@@ -321,6 +321,11 @@ const schema = defineSchema(
       title: v.string(),
       body: v.string(),
       tags: v.optional(v.array(v.string())),
+      media: v.optional(v.array(v.object({
+        storageId: v.string(),
+        type: v.string(), // "image" | "video" | "file"
+        name: v.string(),
+      }))),
       isPinned: v.optional(v.boolean()),
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),

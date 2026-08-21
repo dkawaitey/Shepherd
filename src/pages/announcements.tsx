@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,13 +20,19 @@ import {
   PageHeader,
   fmtDateTime,
 } from "@/components/shared";
+
 import {
+  FileIcon,
+  Image as ImageIcon,
   MessageSquare,
+  Paperclip,
   Pin,
   Plus,
   Search,
   Send,
   Trash2,
+  Video,
+  X,
   UserRound,
 } from "lucide-react";
 
@@ -160,6 +166,14 @@ export default function Announcements() {
                     {p.body}
                   </p>
 
+                  {p.media && p.media.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {p.media.map((m, i) => (
+                        <PostMediaItem key={i} media={m} />
+                      ))}
+                    </div>
+                  )}
+
                   {p.tags && p.tags.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {p.tags.map((t) => (
@@ -191,6 +205,53 @@ export default function Announcements() {
 
       <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
+  );
+}
+
+function PostMediaItem({ media }: { media: { storageId: string; type: string; name: string } }) {
+  const url = useQuery(api.posts.getMediaUrl, { storageId: media.storageId });
+
+  if (!url) {
+    return (
+      <div className="flex h-16 w-16 items-center justify-center rounded-md border bg-muted">
+        <span className="text-[8px] text-muted-foreground">Loading...</span>
+      </div>
+    );
+  }
+
+  if (media.type === "image") {
+    return (
+      <a href={url as string} target="_blank" rel="noreferrer">
+        <img
+          src={url as string}
+          alt={media.name}
+          className="max-h-48 rounded-md border object-cover transition-transform hover:scale-[1.02]"
+        />
+      </a>
+    );
+  }
+
+  if (media.type === "video") {
+    return (
+      <video
+        src={url as string}
+        controls
+        className="max-h-48 rounded-md border"
+      />
+    );
+  }
+
+  // File attachment
+  return (
+    <a
+      href={url as string}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 transition-colors hover:bg-muted/80"
+    >
+      <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="truncate text-[11px] text-foreground/80">{media.name}</span>
+    </a>
   );
 }
 
@@ -400,6 +461,11 @@ function CommentThread({ postId }: { postId: string }) {
   );
 }
 
+type PendingFile = {
+  file: File;
+  preview?: string;
+};
+
 function CreatePostDialog({
   open,
   onOpenChange,
@@ -408,14 +474,49 @@ function CreatePostDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const create = useMutation(api.posts.create);
+  const generateUploadUrl = useMutation(api.posts.generateUploadUrl);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [tags, setTags] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const reset = () => {
+    setTitle("");
+    setBody("");
+    setTags("");
+    setPendingFiles([]);
+    setError(null);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    const newPending: PendingFile[] = files.map((f) => ({
+      file: f,
+      preview: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+    }));
+    setPendingFiles((prev) => [...prev, ...newPending].slice(0, 5));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setPendingFiles((prev) => {
+      const removed = prev[index];
+      if (removed?.preview) URL.revokeObjectURL(removed.preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const detectType = (file: File): string => {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("video/")) return "video";
+    return "file";
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>New post</DialogTitle>
@@ -434,6 +535,23 @@ function CreatePostDialog({
             setBusy(true);
             setError(null);
             try {
+              // Upload media files
+              const uploadedMedia: { storageId: string; type: string; name: string }[] = [];
+              for (const pf of pendingFiles) {
+                const url = await generateUploadUrl();
+                const res = await fetch(url, {
+                  method: "POST",
+                  headers: { "Content-Type": pf.file.type },
+                  body: pf.file,
+                });
+                const { storageId } = await res.json();
+                uploadedMedia.push({
+                  storageId,
+                  type: detectType(pf.file),
+                  name: pf.file.name,
+                });
+              }
+
               await create({
                 title: title.trim(),
                 body: body.trim(),
@@ -442,11 +560,10 @@ function CreatePostDialog({
                   .map((t) => t.trim().replace(/^#/, ""))
                   .filter(Boolean)
                   .slice(0, 5) || undefined,
+                media: uploadedMedia.length > 0 ? uploadedMedia : undefined,
               });
               toast.success("Post published");
-              setTitle("");
-              setBody("");
-              setTags("");
+              reset();
               onOpenChange(false);
             } catch (err: any) {
               setError(err?.message ?? "Failed to post");
@@ -478,6 +595,60 @@ function CreatePostDialog({
             />
           </div>
           <div>
+            <Label>Media (optional, max 5)</Label>
+            <div className="mt-1 flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={pendingFiles.length >= 5}
+              >
+                <Paperclip className="mr-1.5 h-3.5 w-3.5" /> Add files
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <span className="text-[10px] text-muted-foreground">
+                Images, videos, or documents
+              </span>
+            </div>
+            {pendingFiles.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {pendingFiles.map((pf, i) => (
+                  <div key={i} className="group relative">
+                    {pf.preview ? (
+                      <img
+                        src={pf.preview}
+                        alt={pf.file.name}
+                        className="h-16 w-16 rounded-md border object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-16 w-16 flex-col items-center justify-center rounded-md border bg-muted p-1">
+                        <FileIcon className="h-5 w-5 text-muted-foreground" />
+                        <span className="mt-0.5 max-w-full truncate text-[8px] text-muted-foreground">
+                          {pf.file.name}
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeFile(i)}
+                      className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
             <Label htmlFor="ap-tags">Tags (comma separated)</Label>
             <Input
               id="ap-tags"
@@ -489,7 +660,7 @@ function CreatePostDialog({
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="ghost" onClick={() => { reset(); onOpenChange(false); }}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>

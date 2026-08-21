@@ -4,6 +4,23 @@ import { mutation, query } from "./_generated/server";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
+/** Generate a storage upload URL for post media (images, videos, files). */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await getCurrentUser(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** Get a signed URL for a stored file (media attachment). */
+export const getMediaUrl = query({
+  args: { storageId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId as any);
+  },
+});
+
 /** Browse/search all team posts (any signed-in user can read). */
 export const list = query({
   args: {
@@ -75,6 +92,11 @@ export const create = mutation({
     title: v.string(),
     body: v.string(),
     tags: v.optional(v.array(v.string())),
+    media: v.optional(v.array(v.object({
+      storageId: v.string(),
+      type: v.string(),
+      name: v.string(),
+    }))),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [
@@ -91,6 +113,7 @@ export const create = mutation({
       title: args.title.trim(),
       body: args.body.trim(),
       tags: args.tags,
+      media: args.media,
       isPinned: false,
       isDeleted: false,
       createdAt: now,
