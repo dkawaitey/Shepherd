@@ -184,6 +184,15 @@ export const create = mutation({
         gender: args.gender ?? "",
       },
     });
+
+    // One-way sync: push member to App B (Steward).
+    await ctx.scheduler.runAfter(0, internal.sync.pushMemberToAppB, {
+      sourceId: id,
+      name: args.fullName,
+      email: args.email ?? "",
+      role: (position as string) || null,
+    });
+
     return { _id: id, membershipId };
   },
 });
@@ -265,6 +274,17 @@ export const update = mutation({
       entityId: id,
       details: member.fullName,
     });
+
+    // One-way sync: push updated member to App B (Steward).
+    const updated = await ctx.db.get(id);
+    if (updated) {
+      await ctx.scheduler.runAfter(0, internal.sync.pushMemberToAppB, {
+        sourceId: id,
+        name: updated.fullName,
+        email: updated.email ?? "",
+        role: (updated.position as string) || null,
+      });
+    }
   },
 });
 
@@ -313,6 +333,11 @@ export const remove = mutation({
       entityType: "members",
       entityId: args.id,
       details: `${member.fullName} (${member.membershipId}) — permanently deleted with all records`,
+    });
+
+    // One-way sync: tell App B (Steward) to delete its copy.
+    await ctx.scheduler.runAfter(0, internal.sync.pushMemberDeleteToAppB, {
+      sourceId: args.id,
     });
   },
 });

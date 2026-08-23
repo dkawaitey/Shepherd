@@ -1,73 +1,56 @@
+// APP A (source) — convex/sync.ts
+//
+// This is the only place that talks to App B. Actions (unlike mutations)
+// are allowed to make outbound fetch() calls.
+//
+// Requires two environment variables set on App A's Convex deployment
+// (Convex dashboard -> Settings -> Environment Variables):
+//   APP_B_SYNC_URL       e.g. https://<app-b-deployment>.convex.site/syncMember
+//   SYNC_SHARED_SECRET   any random string — must match App B's value exactly
+
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
 
-/**
- * Steward member sync — shared outbound engine (runs in the default V8 runtime).
- *
- * Shepherd pushes its member directory to the Steward app via
- * POST /api/sync/members, authenticated with the shared STEWARD_SYNC_KEY.
- * Both apps use the member payload shape defined below. Records are matched on
- * the Steward side by membership ID, email, phone or name + class; Steward
- * returns the IDs it assigned so Shepherd can remember what has been synced.
- */
-
-/** The 2-letter area code used in membership IDs (Adjikpo → AD). */
-export const deriveShortcut = (area?: string) =>
-  (area || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
-
-/** A synced member — the payload Shepherd sends to Steward. */
-export type SyncMember = {
-  stewardId?: string;
-  membershipId?: string;
-  fullName: string;
-  gender?: "male" | "female";
-  phone?: string;
-  whatsapp?: string;
-  email?: string;
-  klass?: string;
-  area?: string;
-  dateJoined?: string;
-  occupation?: string;
-  status?: "active" | "inactive";
-  updatedAt: number;
-};
-
-/** Map a local member row to the exchange payload. */
-export const toSyncPayload = (m: {
-  stewardId?: string;
-  membershipId: string;
-  fullName: string;
-  gender?: string;
-  phone?: string;
-  whatsapp?: string;
-  email?: string;
-  klass?: string;
-  area?: string;
-  dateJoined?: string;
-  occupation?: string;
-  status?: string;
-  updatedAt: number;
-}): SyncMember => ({
-  stewardId: m.stewardId,
-  membershipId: m.membershipId,
-  fullName: m.fullName,
-  gender: m.gender as SyncMember["gender"],
-  phone: m.phone,
-  whatsapp: m.whatsapp,
-  email: m.email,
-  klass: m.klass,
-  area: m.area,
-  dateJoined: m.dateJoined,
-  occupation: m.occupation,
-  status: m.status === "inactive" ? "inactive" : "active",
-  updatedAt: m.updatedAt ?? Date.now(),
+/** Return all non-deleted members for the batch sync. */
+export const listMembersForSync = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const members = (await ctx.db.query("members").collect()).filter(
+      (m) => !m.isDeleted,
+    );
+    return members.map((m) => ({
+      membershipId: m.membershipId,
+      fullName: m.fullName,
+      gender: m.gender,
+      phone: m.phone,
+      whatsapp: m.whatsapp,
+      email: m.email,
+      klass: m.klass,
+      area: m.area,
+      dateJoined: m.dateJoined,
+      classLeader: m.classLeader,
+      ministryRoles: m.ministryRoles,
+      status: m.status,
+      occupation: m.occupation,
+      position: m.position,
+      isClassLeader: m.isClassLeader,
+      sourceContactId: m.sourceContactId,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt,
+      stewardId: m.stewardId ?? null,
+      syncedAt: m.syncedAt ?? null,
+    }));
+  },
 });
 
-/** After pushing to Steward, record the Steward IDs + sync time it returned. */
+/** Record steward IDs and last-synced timestamps after a push. */
 export const markPushed = internalMutation({
   args: {
     matched: v.array(
-      v.object({ membershipId: v.string(), stewardId: v.string() }),
+      v.object({
+        membershipId: v.string(),
+        stewardId: v.string(),
+      }),
     ),
     at: v.number(),
   },
@@ -87,21 +70,89 @@ export const markPushed = internalMutation({
   },
 });
 
-/** All non-deleted members as exchange payloads (used by the outbound push). */
-export const listMembersForSync = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
-    return members.map((m) => toSyncPayload(m));
-  },
-});
-
-/** Counts for the settings card: total / synced / unsynced members. */
+/** Return sync counts for the Settings card. */
 export const membersSyncStats = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
-    const synced = members.filter((m) => m.stewardId || m.syncedAt).length;
-    return { total: members.length, synced, unsynced: members.length - synced };
+    const members = (await ctx.db.query("members").collect()).filter(
+      (m) => !m.isDeleted,
+    );
+    const total = members.length;
+    const synced = members.filter((m) => !!m.stewardId).length;
+    return { total, synced, unsynced: total - synced };
+  },
+});
+
+export const pushMemberToAppB = internalAction({
+  args: {
+    sourceId: v.string(),
+    name: v.string(),
+    email: v.string(),
+    role: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const url = process.env.APP_B_SYNC_URL;
+    const secret = process.env.SYNC_SHARED_SECRET;
+
+    if (!url || !secret) {
+      console.error(
+        "Sync skipped: missing APP_B_SYNC_URL or SYNC_SHARED_SECRET env vars"
+      );
+      return;
+    }
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify(args),
+    });
+
+    if (!res.ok) {
+      // Log and move on — don't throw, so a transient App B outage
+      // doesn't retry-loop forever. Add retry/alerting here if needed.
+      console.error(
+        `Sync to App B failed (${res.status}):`,
+        await res.text()
+      );
+    }
+  },
+});
+
+export const pushMemberDeleteToAppB = internalAction({
+  args: {
+    sourceId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const url = process.env.APP_B_SYNC_URL; // e.g. https://<app-b>.convex.site/deleteMember
+    const secret = process.env.SYNC_SHARED_SECRET;
+
+    if (!url || !secret) {
+      console.error(
+        "Delete sync skipped: missing APP_B_SYNC_URL or SYNC_SHARED_SECRET env vars"
+      );
+      return;
+    }
+
+    // Same base URL as the add/update sync, different path.
+    const deleteUrl = url.replace(/\/syncMember\/?$/, "/deleteMember");
+
+    const res = await fetch(deleteUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify(args),
+    });
+
+    if (!res.ok) {
+      console.error(
+        `Delete sync to App B failed (${res.status}):`,
+        await res.text()
+      );
+    }
   },
 });
