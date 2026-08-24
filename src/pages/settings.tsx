@@ -860,6 +860,46 @@ function EmailRemindersSection() {
   );
 }
 
+function TestSyncButton() {
+  const testSync = useAction(api.sync.testSync);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  return (
+    <div>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={testing}
+        onClick={async () => {
+          setTesting(true);
+          setResult(null);
+          try {
+            const res = await testSync();
+            if (res.ok) {
+              setResult(`✅ Success (${res.status}): ${res.body}`);
+              toast.success("Test sync succeeded — check Steward!");
+            } else {
+              setResult(`❌ Failed (${res.status ?? "N/A"}): ${res.error ?? res.body}`);
+              toast.error("Test sync failed — see details below");
+            }
+          } catch (e) {
+            setResult(`❌ Error: ${e instanceof Error ? e.message : String(e)}`);
+            toast.error("Test sync threw an error");
+          } finally {
+            setTesting(false);
+          }
+        }}
+      >
+        {testing ? "Testing…" : "Test Sync"}
+      </Button>
+      {result && (
+        <p className="mt-1.5 text-[10px] text-muted-foreground break-all">{result}</p>
+      )}
+    </div>
+  );
+}
+
 function StewardSyncSection() {
   const settings = useQuery(api.settings.get);
   const setSetting = useMutation(api.settings.set);
@@ -955,28 +995,31 @@ function StewardSyncSection() {
           ))}
         </div>
 
-        <Button
-          size="sm"
-          disabled={!status?.configured || syncing}
-          onClick={async () => {
-            setSyncing(true);
-            try {
-              const res = await runSync();
-              if (res.ok) {
-                toast.success("Sync complete — members pushed to Steward");
-              } else {
-                toast.error(res.push?.reason || "Sync failed");
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            disabled={!status?.configured || syncing}
+            onClick={async () => {
+              setSyncing(true);
+              try {
+                const res = await runSync();
+                if (res.ok) {
+                  toast.success("Sync complete — members pushed to Steward");
+                } else {
+                  toast.error(res.push?.reason || "Sync failed");
+                }
+                const s = await getStatus();
+                setStatus(s);
+              } finally {
+                setSyncing(false);
               }
-              const s = await getStatus();
-              setStatus(s);
-            } finally {
-              setSyncing(false);
-            }
-          }}
-        >
-          <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", syncing && "animate-spin")} />
-          {syncing ? "Syncing…" : "Sync now"}
-        </Button>
+            }}
+          >
+            <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", syncing && "animate-spin")} />
+            {syncing ? "Syncing…" : "Sync now"}
+          </Button>
+          <TestSyncButton />
+        </div>
 
         <div>
           <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">last sync</p>

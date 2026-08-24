@@ -8,8 +8,9 @@
 //   APP_B_SYNC_URL       e.g. https://<app-b-deployment>.convex.site/syncMember
 //   SYNC_SHARED_SECRET   any random string — must match App B's value exactly
 
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 /** Return all non-deleted members for the batch sync. */
 export const listMembersForSync = internalQuery({
@@ -94,6 +95,9 @@ export const pushMemberToAppB = internalAction({
     const url = process.env.APP_B_SYNC_URL;
     const secret = process.env.SYNC_SHARED_SECRET;
 
+    console.log(`[Sync] pushMemberToAppB called: sourceId=${args.sourceId}, name=${args.name}`);
+    console.log(`[Sync] APP_B_SYNC_URL=${url ? "SET" : "MISSING"}, SYNC_SHARED_SECRET=${secret ? "SET" : "MISSING"}`);
+
     if (!url || !secret) {
       console.error(
         "Sync skipped: missing APP_B_SYNC_URL or SYNC_SHARED_SECRET env vars"
@@ -118,6 +122,33 @@ export const pushMemberToAppB = internalAction({
         await res.text()
       );
     }
+  },
+});
+
+/** Public action: test sync by pushing a dummy member to Steward and reporting the result. */
+export const testSync = action({
+  args: {},
+  handler: async () => {
+    const url = process.env.APP_B_SYNC_URL;
+    const secret = process.env.SYNC_SHARED_SECRET;
+    if (!url || !secret) {
+      return { ok: false, error: "Missing APP_B_SYNC_URL or SYNC_SHARED_SECRET env vars" };
+    }
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify({
+        sourceId: `test-${Date.now()}`,
+        name: "Test Sync Member",
+        email: "test-sync@shepherd.app",
+        role: null,
+      }),
+    });
+    const body = await res.text();
+    return { ok: res.ok, status: res.status, body };
   },
 });
 
