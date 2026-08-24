@@ -954,7 +954,7 @@ function StewardSyncSection() {
                 ? "Checking connection…"
                 : status.configured
                   ? `Connected — pushing to ${status.baseUrl}`
-                  : "Not connected — add STEWARD_API_URL + STEWARD_SYNC_KEY in the Keys tab"}
+                  : "Not connected — APP_B_SYNC_URL or SYNC_SHARED_SECRET missing in Convex env vars"}
             </div>
           </div>
           <span

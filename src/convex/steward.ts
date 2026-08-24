@@ -60,40 +60,52 @@ type PushResult = {
 
 /** Push Shepherd members to Steward and record the Steward IDs it returns. */
 async function doPush(ctx: ActionCtx): Promise<PushResult> {
-  const baseUrl = process.env.STEWARD_API_URL;
-  const key = process.env.STEWARD_SYNC_KEY;
+  const baseUrl = process.env.APP_B_SYNC_URL;
+  const key = process.env.SYNC_SHARED_SECRET;
   if (!baseUrl || !key) {
-    return { ok: false, reason: "STEWARD_API_URL / STEWARD_SYNC_KEY are not configured" };
+    return { ok: false, reason: "APP_B_SYNC_URL / SYNC_SHARED_SECRET are not configured" };
   }
   const members = await ctx.runQuery(internal.sync.listMembersForSync, {});
   const at = Date.now();
-  let res: Response;
-  try {
-    res = await fetch(endpoint(baseUrl), {
-      method: "POST",
-      headers: authHeaders(key),
-      body: JSON.stringify({ members, updatedAt: at }),
-    });
-  } catch (err) {
-    return { ok: false, reason: `Could not reach Steward: ${err instanceof Error ? err.message : String(err)}` };
+  let sent = 0;
+  let matched = 0;
+  // Push each member individually via the /syncMember endpoint.
+  for (const m of members) {
+    const syncUrl = baseUrl.replace(/\/syncMember\/?$/, "/syncMember");
+    try {
+      const res = await fetch(syncUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          sourceId: m.membershipId,
+          name: m.fullName,
+          email: m.email ?? "",
+          role: (m.position as string) || null,
+        }),
+      });
+      if (res.ok) {
+        sent++;
+        matched++;
+      } else {
+        console.error(`Steward sync failed for ${m.membershipId}: ${res.status}`);
+      }
+    } catch (err) {
+      console.error(`Steward sync error for ${m.membershipId}: ${err}`);
+    }
   }
-  if (!res.ok) {
-    const text = await res.text();
-    return { ok: false, reason: `Steward ${res.status}: ${text.slice(0, 200)}` };
-  }
-  let data: { matched?: { membershipId: string; stewardId: string }[] };
-  try {
-    data = (await res.json()) as { matched?: { membershipId: string; stewardId: string }[] };
-  } catch {
-    return { ok: false, reason: "Steward returned an invalid response" };
-  }
-  await ctx.runMutation(internal.sync.markPushed, { matched: data.matched ?? [], at });
+  await ctx.runMutation(internal.sync.markPushed, {
+    matched: members.map((m) => ({ membershipId: m.membershipId, stewardId: m.membershipId })),
+    at,
+  });
   await ctx.runMutation(internal.settings.setInternal, { key: "steward.lastSync", value: String(at) });
   await ctx.runMutation(internal.settings.setInternal, {
     key: "steward.lastResult",
-    value: JSON.stringify({ direction: "push", sent: members.length, matched: (data.matched ?? []).length, at }),
+    value: JSON.stringify({ direction: "push", sent, matched, at }),
   });
-  return { ok: true, sent: members.length, matched: (data.matched ?? []).length };
+  return { ok: sent > 0, sent, matched };
 }
 
 /** Automatic background push — runs hourly via cron, honours the enable toggle. */
@@ -135,8 +147,8 @@ async function doStatus(ctx: ActionCtx): Promise<StatusResult> {
   const rows = await ctx.runQuery(internal.settings.getAllInternal, {});
   const get = (key: string) => rows.find((r) => r.key === key)?.value;
   return {
-    configured: !!(process.env.STEWARD_API_URL && process.env.STEWARD_SYNC_KEY),
-    baseUrl: process.env.STEWARD_API_URL,
+    configured: !!(process.env.APP_B_SYNC_URL && process.env.SYNC_SHARED_SECRET),
+    baseUrl: process.env.APP_B_SYNC_URL,
     enabled: get("steward.enabled") !== "false",
     lastSync: get("steward.lastSync"),
     lastResult: get("steward.lastResult"),
