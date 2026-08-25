@@ -84,16 +84,16 @@ async function doPush(ctx: ActionCtx): Promise<PushResult> {
         body: JSON.stringify({
           sourceId: m._id,
           name: m.fullName,
-          email: m.email ?? "",
+          email: m.email || `${m.membershipId.toLowerCase()}@shepherd.local`,
           role: (m.position as string) || null,
         }),
       });
+      const resBody = await res.text().catch(() => "");
       if (res.ok) {
         sent++;
         matched++;
       } else {
-        const body = await res.text().catch(() => "");
-        const msg = `Sync failed for ${m.membershipId}: HTTP ${res.status} - ${body}`;
+        const msg = `Sync failed for ${m.membershipId}: HTTP ${res.status} - ${resBody}`;
         console.error(msg);
         errors.push(msg);
       }

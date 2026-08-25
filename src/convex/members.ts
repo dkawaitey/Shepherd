@@ -189,7 +189,7 @@ export const create = mutation({
     await ctx.scheduler.runAfter(0, internal.sync.pushMemberToAppB, {
       sourceId: id,
       name: args.fullName,
-      email: args.email ?? "",
+      email: args.email || `${membershipId.toLowerCase()}@shepherd.local`,
       role: (position as string) || null,
     });
 
@@ -281,7 +281,7 @@ export const update = mutation({
       await ctx.scheduler.runAfter(0, internal.sync.pushMemberToAppB, {
         sourceId: id,
         name: updated.fullName,
-        email: updated.email ?? "",
+        email: updated.email || `${updated.membershipId.toLowerCase()}@shepherd.local`,
         role: (updated.position as string) || null,
       });
     }
