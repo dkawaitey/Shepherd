@@ -80,7 +80,7 @@ async function doPush(ctx: ActionCtx): Promise<PushResult> {
           Authorization: `Bearer ${key}`,
         },
         body: JSON.stringify({
-          sourceId: m.membershipId,
+          sourceId: m._id,
           name: m.fullName,
           email: m.email ?? "",
           role: (m.position as string) || null,
@@ -97,7 +97,7 @@ async function doPush(ctx: ActionCtx): Promise<PushResult> {
     }
   }
   await ctx.runMutation(internal.sync.markPushed, {
-    matched: members.map((m) => ({ membershipId: m.membershipId, stewardId: m.membershipId })),
+    matched: members.map((m) => ({ membershipId: m.membershipId, stewardId: m._id })),
     at,
   });
   await ctx.runMutation(internal.settings.setInternal, { key: "steward.lastSync", value: String(at) });

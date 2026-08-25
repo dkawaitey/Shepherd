@@ -20,6 +20,7 @@ export const listMembersForSync = internalQuery({
       (m) => !m.isDeleted,
     );
     return members.map((m) => ({
+      _id: m._id,
       membershipId: m.membershipId,
       fullName: m.fullName,
       gender: m.gender,
