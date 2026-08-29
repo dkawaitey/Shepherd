@@ -38,17 +38,10 @@ import { cn } from "@/lib/utils";
 
 import {
   Bell,
-  Calendar as CalendarIcon,
   Download,
   FileText,
-  KeyRound,
   Link2,
-  Mail,
   MailCheck,
-  MapPin,
-  MessageCircle,
-  MessageSquareText,
-  QrCode,
   RefreshCw,
   Send,
   Users,
@@ -64,16 +57,7 @@ const TABS = [
   { id: "audit", label: "Audit Logs" },
 ];
 
-const INTEGRATION_FIELDS = [
-  { key: "wa_number", label: "WhatsApp number", icon: MessageCircle, placeholder: "233240000000", hint: "Used for wa.me links and reminders" },
-  { key: "sms_provider", label: "SMS provider", icon: MessageSquareText, placeholder: "Twilio / Hubtel / AfriSMS", hint: "API key needed to send bulk SMS" },
-  { key: "sms_api_key", label: "SMS API key", icon: KeyRound, placeholder: "••••••••", hint: "Store the provider API key" },
-  { key: "email_provider", label: "Email provider", icon: Mail, placeholder: "Resend / SendGrid / SES", hint: "Sends reminders, reports and weekly summaries" },
-  { key: "email_api_key", label: "Email API key", icon: KeyRound, placeholder: "••••••••", hint: "Provider API key" },
-  { key: "maps_api_key", label: "Google Maps API key", icon: MapPin, placeholder: "AIza...", hint: "Enables map embeds and geocoding" },
-  { key: "calendar_connected", label: "Google Calendar", icon: CalendarIcon, placeholder: "connected@email.com", hint: "Follow-ups sync as calendar events" },
-  { key: "qr_code", label: "QR code / visitor card", icon: QrCode, placeholder: "enabled", hint: "QR codes on outreach cards" },
-];
+
 
 export default function Settings() {
   const me = useQuery(api.users.currentUser);
@@ -162,22 +146,6 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border bg-card p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Users className="h-4 w-4 text-primary" />
-          <p className="term-label">create & manage ministry users</p>
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          {Object.entries(ROLE_LABELS).map(([k, v]) => (
-            <div key={k} className="rounded-md border bg-muted/40 p-2.5">
-              <div className="text-[11px] font-bold">{v}</div>
-              <div className="text-[9px] leading-4 text-muted-foreground">
-                {ROLE_NOTES[k as Role]}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       <div className="overflow-x-auto rounded-lg border bg-card">
         <table className="w-full text-left text-[11px]">
@@ -478,7 +446,6 @@ function ProfileTab() {
   return (
     <div className="max-w-md space-y-4">
       <div className="rounded-lg border bg-card p-4">
-        <p className="term-label mb-3">// my profile</p>
         <div className="space-y-3">
           <div>
             <Label htmlFor="p-name">Full name</Label>
@@ -528,7 +495,6 @@ function MinistryTab() {
   return (
     <div className="max-w-lg space-y-4">
       <div className="rounded-lg border bg-card p-4">
-        <p className="term-label mb-3">// ministry settings</p>
         <div className="space-y-3">
           {list.map((f) => (
             <div key={f.key}>
@@ -554,136 +520,16 @@ function MinistryTab() {
           </Button>
         </div>
       </div>
-      <p className="text-[10px] text-muted-foreground">
-        Class and lesson changes apply to the <b>Contacts</b> and <b>Bible Studies</b> modules. Values are stored in the database.
-      </p>
+
     </div>
   );
 }
 
 function IntegrationsTab() {
-  const settings = useQuery(api.settings.get);
-  const setSetting = useMutation(api.settings.set);
-  const [values, setValues] = useState<Record<string, string>>({});
-
   return (
     <div className="max-w-lg space-y-4">
-      <div className="rounded-lg border bg-card p-4">
-        <p className="term-label mb-3">// integration settings</p>
-        <div className="space-y-3">
-          {INTEGRATION_FIELDS.map((f) => (
-            <div key={f.key}>
-              <Label htmlFor={`i-${f.key}`} className="flex items-center gap-1.5">
-                <f.icon className="h-3.5 w-3.5 text-muted-foreground" /> {f.label}
-              </Label>
-              <Input
-                id={`i-${f.key}`}
-                className="mt-1"
-                placeholder={f.placeholder}
-                value={values[f.key] ?? settings?.[f.key] ?? ""}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              />
-              <p className="mt-0.5 text-[9px] text-muted-foreground">{f.hint}</p>
-            </div>
-          ))}
-          <Button
-            onClick={async () => {
-              for (const [k, v] of Object.entries(values)) {
-                await setSetting({ key: k, value: v });
-              }
-              toast.success("Integration settings saved");
-            }}
-          >
-            Save integration settings
-          </Button>
-        </div>
-      </div>
-      <CustomerioSection />
       <EmailRemindersSection />
       <StewardSyncSection />
-      <div className="rounded-md border border-dashed p-4 text-[11px] leading-5 text-muted-foreground">
-        <b className="text-foreground">How integrations work here:</b>
-        <ul className="mt-1 list-inside list-disc space-y-1">
-          <li>WhatsApp, SMS and phone links work instantly from every contact profile — no key needed.</li>
-          <li>Google Maps directions open from profiles using the saved address / GPS.</li>
-          <li>Email reminders (follow-up schedules + class digests) go out automatically every day at 07:00 UTC once a provider key is configured.</li>
-          <li>Member details push automatically to the Steward app every hour (one-way, outbound), or on demand with Sync now.</li>
-          <li>For bulk SMS or Google Calendar sync, add the provider API key above and wire the provider in the backend.</li>
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function CustomerioSection() {
-  const sendStatus = useAction(api.customerio.status);
-  const sendTest = useAction(api.customerio.sendTest);
-
-  const [status, setStatus] = useState<{
-    configured: boolean;
-    region: string;
-    host: string;
-  } | null>(null);
-  const [testing, setTesting] = useState(false);
-
-  useEffect(() => {
-    sendStatus().then(setStatus).catch(() => undefined);
-  }, [sendStatus]);
-
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Send className="h-4 w-4 text-primary" />
-        <p className="term-label">// customer.io messaging</p>
-      </div>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
-          <div>
-            <div className="text-xs font-semibold">Customer.io connection</div>
-            <div className="text-[10px] text-muted-foreground">
-              {status === null
-                ? "Checking connection…"
-                : status.configured
-                  ? `Connected — sending events to ${status.host}`
-                  : "Not connected — add CUSTOMERIO_SITE_ID + CUSTOMERIO_API_KEY in the Keys tab"}
-            </div>
-          </div>
-          <span
-            className={cn(
-              "h-2 w-2 shrink-0 rounded-full",
-              status?.configured ? "bg-[#86efac]" : "bg-[#fbbf24]",
-            )}
-          />
-        </div>
-
-        <Button
-          size="sm"
-          disabled={!status?.configured || testing}
-          onClick={async () => {
-            setTesting(true);
-            try {
-              const res = await sendTest({});
-              if (res.ok) toast.success("Test event sent to Customer.io");
-              else toast.error(res.error ?? "Could not reach Customer.io");
-            } finally {
-              setTesting(false);
-            }
-          }}
-        >
-          <Send className={cn("mr-1.5 h-3.5 w-3.5", testing && "animate-pulse")} />
-          {testing ? "Sending…" : "Send test event"}
-        </Button>
-
-        <p className="text-[10px] leading-4 text-muted-foreground">
-          Ministry moments are pushed automatically as events: contacts created, journey stages
-          (accepted Christ, baptized, joined church…), follow-ups scheduled and completed, and members
-          added. Build journeys, transactional email, SMS or push on top of them. Add{" "}
-          <b className="text-foreground">CUSTOMERIO_SITE_ID</b> (workspace Site ID) and{" "}
-          <b className="text-foreground">CUSTOMERIO_API_KEY</b> (Tracking API Key) in the Keys tab;
-          set <b className="text-foreground">CUSTOMERIO_REGION</b> to <b>eu</b> if your workspace is in
-          the EU region.
-        </p>
-      </div>
     </div>
   );
 }
@@ -744,9 +590,7 @@ function EmailRemindersSection() {
         <div className="flex items-center justify-between border-b border-dashed pb-3">
           <div>
             <div className="text-[13px] font-medium">Daily reminder emails</div>
-            <div className="text-[10px] text-muted-foreground">
-              Auto-sent at 07:00 UTC · follow-up schedules + class digests
-            </div>
+
           </div>
           <Switch
             checked={enabled}
@@ -849,12 +693,7 @@ function EmailRemindersSection() {
           )}
         </div>
 
-        <p className="text-[10px] leading-4 text-muted-foreground">
-          Paste <b className="text-foreground">RESEND_API_KEY</b> into the Keys tab to enable sending (an optional{" "}
-          <b className="text-foreground">EMAIL_FROM</b> overrides the sender address). Workers receive their follow-up
-          schedule; class leaders receive birthdays, low-attendance alerts, new contacts and follow-up highlights
-          for their class.
-        </p>
+
       </div>
     </div>
   );
@@ -968,9 +807,7 @@ function StewardSyncSection() {
         <div className="flex items-center justify-between border-b border-dashed pb-3">
           <div>
             <div className="text-[13px] font-medium">Automatic background sync</div>
-            <div className="text-[10px] text-muted-foreground">
-              Runs hourly · pushes Shepherd's members out to Steward (one-way)
-            </div>
+
           </div>
           <Switch
             checked={enabled}
@@ -1029,13 +866,7 @@ function StewardSyncSection() {
           </p>
         </div>
 
-        <p className="text-[10px] leading-4 text-muted-foreground">
-          Add <b className="text-foreground">STEWARD_API_URL</b> (the Steward app's public URL) and a shared{" "}
-          <b className="text-foreground">STEWARD_SYNC_KEY</b> in the Keys tab, and set the same two variables on the
-          Steward app — it must accept <b className="text-foreground">POST /api/sync/members</b>. Members are matched
-          on the Steward side by membership ID, email, phone or name + class, so edits stay on the same record. Sync is
-          one-way: Shepherd pushes out and never imports Steward data. Ministry positions stay managed inside Shepherd.
-        </p>
+
       </div>
     </div>
   );
@@ -1264,10 +1095,7 @@ function NotificationsTab() {
             </div>
           )}
 
-          <p className="text-[10px] leading-4 text-muted-foreground">
-            Notifications are delivered as device push notifications — they wake the screen and appear in your
-            notification centre even when the app is closed. Each device must be enabled independently.
-          </p>
+
         </div>
       </div>
     </div>
