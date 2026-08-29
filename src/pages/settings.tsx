@@ -61,7 +61,7 @@ const TABS = [
 
 export default function Settings() {
   const me = useQuery(api.users.currentUser);
-  const isAdmin = me?.role === ROLES.ADMIN;
+  const isAdmin = me?.role === ROLES.ADMIN || me?.roles?.includes(ROLES.ADMIN);
   const [tab, setTab] = useState(isAdmin ? "users" : "profile");
 
   const tabs = isAdmin ? TABS : TABS.filter((t) => t.id === "profile");
