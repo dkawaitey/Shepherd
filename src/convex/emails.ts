@@ -96,6 +96,67 @@ async function sendEmail(
   }
 }
 
+type SmsArgs = {
+  to: string;
+  body: string;
+  kind: string;
+  userId?: string;
+};
+
+/**
+ * Transport: send one SMS through Brevo's Transactional SMS API.
+ * Reads BREVO_SMS_API_KEY and BREVO_SMS_SENDER from the environment.
+ * Sender must be pre-registered in Brevo → SMS → Senders.
+ */
+async function sendSms(
+  ctx: ActionCtx,
+  args: SmsArgs,
+): Promise<{ ok: boolean; error?: string }> {
+  const key = process.env.BREVO_SMS_API_KEY;
+  if (!key) {
+    return { ok: false, error: "BREVO_SMS_API_KEY is not configured" };
+  }
+  const sender = process.env.BREVO_SMS_SENDER || "Shepherd";
+  try {
+    const res = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+      method: "POST",
+      headers: {
+        "api-key": key,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender,
+        recipient: args.to,
+        content: args.body,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Brevo SMS ${res.status}: ${body.slice(0, 200)}`);
+    }
+    await ctx.runMutation(internal.settings.logEmail, {
+      to: args.to,
+      subject: args.body.slice(0, 60),
+      kind: `sms_${args.kind}`,
+      userId: args.userId as never,
+      status: "sent",
+    });
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await ctx.runMutation(internal.settings.logEmail, {
+      to: args.to,
+      subject: args.body.slice(0, 60),
+      kind: `sms_${args.kind}`,
+      userId: args.userId as never,
+      status: "failed",
+      error: message,
+    });
+    return { ok: false, error: message };
+  }
+}
+
 export const send = internalAction({
   args: {
     to: v.string(),
@@ -144,30 +205,49 @@ async function dispatchDigest(
   if (!data.enabled) {
     return { ok: false, reason: "Reminders are disabled in Settings", sent: 0, failed: [] };
   }
-  const key = process.env.RESEND_API_KEY;
+  const emailKey = process.env.BREVO_API_KEY;
+  const smsKey = process.env.BREVO_SMS_API_KEY;
 
   let sent = 0;
   const failed: string[] = [];
 
   for (const r of data.workerRecipients) {
-    if (!key) continue;
-    const { subject, html, text } = buildWorkerEmail(r);
-    const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "workerFollowups", userId: r.userId });
-    if (res.ok) sent++;
-    else failed.push(r.email);
+    if (r.email && emailKey) {
+      const { subject, html, text } = buildWorkerEmail(r);
+      const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "workerFollowups", userId: r.userId });
+      if (res.ok) sent++;
+      else failed.push(r.email);
+    } else if (r.phone && smsKey) {
+      const summary = r.items.map((i) => `${i.contactName}: ${i.typeLabel} (${i.date})`).join("\n");
+      const body = `Shepherd — Follow-up reminders\n\n${summary}\n\nOpen Shepherd to record outcomes.`;
+      const res = await sendSms(ctx, { to: r.phone, body, kind: "workerFollowups", userId: r.userId });
+      if (res.ok) sent++;
+      else failed.push(`sms:${r.phone}`);
+    }
   }
 
   for (const r of data.classRecipients) {
-    if (!key) continue;
-    const { subject, html, text } = buildClassEmail(r);
-    const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "classDigest", userId: r.userId });
-    if (res.ok) sent++;
-    else failed.push(r.email);
+    if (r.email && emailKey) {
+      const { subject, html, text } = buildClassEmail(r);
+      const res = await sendEmail(ctx, { to: r.email, subject, html, text, kind: "classDigest", userId: r.userId });
+      if (res.ok) sent++;
+      else failed.push(r.email);
+    } else if (r.phone && smsKey) {
+      const lines: string[] = [];
+      if (r.upcoming.length) lines.push(`Upcoming: ${r.upcoming.length} follow-ups`);
+      if (r.overdue.length) lines.push(`Overdue: ${r.overdue.length} follow-ups`);
+      if (r.birthdays.length) lines.push(`Birthdays: ${r.birthdays.map((b) => b.contactName).join(", ")}`);
+      if (r.lowAttendance.length) lines.push(`Low attendance: ${r.lowAttendance.length} members`);
+      const body = `Shepherd — ${r.className} digest\n\n${lines.join("\n")}\n\nOpen Shepherd for details.`;
+      const res = await sendSms(ctx, { to: r.phone, body, kind: "classDigest", userId: r.userId });
+      if (res.ok) sent++;
+      else failed.push(`sms:${r.phone}`);
+    }
   }
 
   return {
     ok: true,
-    reason: key ? undefined : "No RESEND_API_KEY — emails skipped",
+    reason: !emailKey && !smsKey ? "No BREVO_API_KEY or BREVO_SMS_API_KEY — skipped" : undefined,
     sent,
     failed,
   };

@@ -58,6 +58,17 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
   const liveMembers = members.filter((m) => !m.isDeleted);
   const people = users.filter((u) => !u.isAnonymous);
 
+  // Build a phone lookup: prefer user's profile phone, fall back to their linked member record.
+  const memberById = new Map(liveMembers.map((m) => [m._id, m]));
+  const userPhone = (u: typeof people[0]): string | undefined => {
+    if (u.phone) return u.phone;
+    if (u.memberId) {
+      const m = memberById.get(u.memberId);
+      if (m?.phone) return m.phone;
+    }
+    return undefined;
+  };
+
   const userById = new Map(people.map((u) => [u._id, u]));
   const contactById = new Map(liveContacts.map((c) => [c._id, c]));
 
@@ -77,13 +88,14 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
         (u) => !!u.email && (u.name ?? "").toLowerCase() === f.assignedWorker!.toLowerCase(),
       );
     }
-    if (!worker?.email) {
+    if (!worker || (!worker.email && !userPhone(worker))) {
       skippedNames.add(f.assignedWorker || "unassigned");
       continue;
     }
     const entry: WorkerRecipient = workerMap.get(worker._id) ?? {
       userId: worker._id,
-      email: worker.email,
+      email: worker.email ?? "",
+      phone: userPhone(worker),
       name: worker.name ?? "Worker",
       items: [],
     };
@@ -107,7 +119,7 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
     (u) =>
       (u.roles?.includes(ROLES.CLASS_LEADER) || u.role === ROLES.CLASS_LEADER) &&
       !!u.classScope &&
-      !!u.email,
+      (!!u.email || !!userPhone(u)),
   );
 
   const classRecipients: ClassRecipient[] = classLeaders.map((leader) => {
@@ -164,7 +176,8 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
 
     return {
       userId: leader._id,
-      email: leader.email!,
+      email: leader.email ?? "",
+      phone: userPhone(leader),
       name: leader.name ?? "Class Leader",
       className: scope,
       upcoming: classUpcoming.map((f) => ({

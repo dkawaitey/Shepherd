@@ -104,6 +104,7 @@ export interface WorkerItem {
 export interface WorkerRecipient {
   userId?: string;
   email: string;
+  phone?: string;
   name: string;
   items: WorkerItem[];
 }
@@ -111,6 +112,7 @@ export interface WorkerRecipient {
 export interface ClassRecipient {
   userId: string;
   email: string;
+  phone?: string;
   name: string;
   className: string;
   upcoming: { contactId: string; contactName: string; typeLabel: string; date: string }[];
