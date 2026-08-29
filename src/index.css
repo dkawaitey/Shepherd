@@ -48,41 +48,41 @@
     Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-/* Premium terminal theme. Dark by default — near-black green surfaces, sage/
-   moss green and amber accents, monospace throughout. Light mode is a soft
-   off-white terminal: same structure, darker ink, tuned status accents. */
+/* Glassmorphism theme — sage/moss green frosted surfaces.
+   Semi-transparent cards float over ambient gradient backgrounds.
+   Light mode: warm cream with white glass. Dark mode: deep green-black with dark glass. */
 :root {
-  --radius: 0.5rem;
-  --background: #f6f5ef; /* warm off-white */
+  --radius: 0.75rem;
+  --background: #f0efe8;
   --foreground: #20261c;
-  --card: #ffffff;
+  --card: rgba(255, 255, 255, 0.55);
   --card-foreground: #20261c;
-  --popover: #ffffff;
+  --popover: rgba(255, 255, 255, 0.7);
   --popover-foreground: #20261c;
-  --primary: #55724c; /* moss — readable on off-white */
+  --primary: #55724c;
   --primary-foreground: #f6f6f0;
-  --secondary: #e9ece1;
+  --secondary: rgba(233, 236, 225, 0.6);
   --secondary-foreground: #2a3226;
-  --muted: #eef0e6;
+  --muted: rgba(238, 240, 230, 0.6);
   --muted-foreground: #5c6654;
-  --accent: #e6ebda; /* light sage */
+  --accent: rgba(230, 235, 218, 0.5);
   --accent-foreground: #2a3226;
   --destructive: #d04444;
-  --border: #dde1d1;
-  --input: #d3d9c8;
+  --border: rgba(221, 225, 209, 0.7);
+  --input: rgba(211, 217, 200, 0.5);
   --ring: #7d996f;
-  --chart-1: #8faf8a; /* sage */
-  --chart-2: #c8912f; /* amber */
-  --chart-3: #a8b98e; /* muted olive */
-  --chart-4: #6f8f6a; /* moss */
-  --chart-5: #55724c; /* deep sage */
-  --sidebar: #f1f0e9;
+  --chart-1: #8faf8a;
+  --chart-2: #c8912f;
+  --chart-3: #a8b98e;
+  --chart-4: #6f8f6a;
+  --chart-5: #55724c;
+  --sidebar: rgba(241, 240, 233, 0.65);
   --sidebar-foreground: #2a3226;
   --sidebar-primary: #55724c;
   --sidebar-primary-foreground: #f6f6f0;
-  --sidebar-accent: #e5eadd;
+  --sidebar-accent: rgba(229, 234, 221, 0.5);
   --sidebar-accent-foreground: #22291d;
-  --sidebar-border: #dfe2d3;
+  --sidebar-border: rgba(223, 226, 211, 0.5);
   --sidebar-ring: #7d996f;
   --status-green: #2f7d3e;
   --status-amber: #a16207;
@@ -90,38 +90,38 @@
   --status-grey: #6b7280;
 }
 
-/* Dark mode — the product default. */
+/* Dark mode — deep green-black glass surfaces. */
 .dark {
-  --background: #0e110c; /* deep green-black */
+  --background: #0b0e09;
   --foreground: #e7ece1;
-  --card: #141813;
+  --card: rgba(20, 24, 19, 0.6);
   --card-foreground: #e7ece1;
-  --popover: #171b13;
+  --popover: rgba(23, 27, 19, 0.75);
   --popover-foreground: #e7ece1;
-  --primary: #9db392; /* sage — reads on near-black */
+  --primary: #9db392;
   --primary-foreground: #0d100b;
-  --secondary: #1b2118;
+  --secondary: rgba(27, 33, 24, 0.6);
   --secondary-foreground: #d8dfd1;
-  --muted: #191f16;
+  --muted: rgba(25, 31, 22, 0.55);
   --muted-foreground: #93a08a;
-  --accent: #20271b;
+  --accent: rgba(32, 39, 27, 0.55);
   --accent-foreground: #dbe3d5;
   --destructive: #e5484d;
-  --border: #262d21;
-  --input: #2b3327;
+  --border: rgba(38, 45, 33, 0.6);
+  --input: rgba(43, 51, 39, 0.5);
   --ring: #9db392;
-  --chart-1: #8faf8a; /* sage */
-  --chart-2: #d9a441; /* amber */
-  --chart-3: #a8b98e; /* muted olive */
-  --chart-4: #6f8f6a; /* moss */
-  --chart-5: #86b26f; /* status green */
-  --sidebar: #0c0f0a;
+  --chart-1: #8faf8a;
+  --chart-2: #d9a441;
+  --chart-3: #a8b98e;
+  --chart-4: #6f8f6a;
+  --chart-5: #86b26f;
+  --sidebar: rgba(12, 15, 10, 0.7);
   --sidebar-foreground: #d5dccd;
   --sidebar-primary: #9db392;
   --sidebar-primary-foreground: #0d100b;
-  --sidebar-accent: #1a2117;
+  --sidebar-accent: rgba(26, 33, 23, 0.6);
   --sidebar-accent-foreground: #e7ece1;
-  --sidebar-border: #22291d;
+  --sidebar-border: rgba(34, 41, 29, 0.5);
   --sidebar-ring: #9db392;
   --status-green: #86efac;
   --status-amber: #fbbf24;
@@ -136,13 +136,20 @@
   body {
     @apply bg-background text-foreground;
     letter-spacing: -0.01em;
-    /* PWA safe areas: in standalone mode the viewport can extend under the
-       status bar/notch (top) and the home indicator (bottom) on devices with
-       edge-to-edge displays. Pad the app so content sits below the system UI
-       instead of hiding behind it. Both default to 0 when the browser already
-       reserves those areas (e.g. iOS with the default status bar style). */
+    /* Ambient gradient background — gives glassmorphism depth */
+    background-image:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(143, 175, 138, 0.12), transparent 60%),
+      radial-gradient(ellipse 70% 50% at 80% 85%, rgba(168, 185, 142, 0.1), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 55% 45%, rgba(200, 145, 47, 0.04), transparent 50%);
+    background-attachment: fixed;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .dark body {
+    background-image:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(157, 179, 146, 0.08), transparent 60%),
+      radial-gradient(ellipse 70% 50% at 80% 85%, rgba(134, 178, 111, 0.06), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 55% 45%, rgba(217, 164, 65, 0.03), transparent 50%);
   }
   button:not([disabled]),
   [role="button"]:not([disabled]) {
@@ -204,6 +211,65 @@
       linear-gradient(90deg, #1a2016 1px, transparent 1px);
   }
   /* Fixed-dark terminal shell — stays a real terminal in both themes. */
+  /* ── Glass morphism utilities ── */
+  .glass-card {
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+  .dark .glass-card {
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .glass-sidebar {
+    backdrop-filter: blur(20px) saturate(1.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  .dark .glass-sidebar {
+    border-right-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .glass-topbar {
+    backdrop-filter: blur(14px) saturate(1.3);
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  .dark .glass-topbar {
+    border-bottom-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .glass-badge {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  .dark .glass-badge {
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .glass-dialog {
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow:
+      0 8px 40px rgba(0, 0, 0, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  .dark .glass-dialog {
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow:
+      0 8px 40px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* ── Terminal shell (unchanged opaque theme) ── */
   .term-shell.term-window {
     background-color: #0f130d;
     border-color: #2a3226;

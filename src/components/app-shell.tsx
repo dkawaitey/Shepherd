@@ -164,7 +164,7 @@ export function AppShell() {
   return (
     <div className="flex min-h-screen bg-background">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r bg-sidebar md:block">
+      <aside className="glass-sidebar fixed inset-y-0 left-0 z-30 hidden w-60 bg-sidebar md:block">
         <SidebarContent />
       </aside>
 
@@ -175,9 +175,17 @@ export function AppShell() {
         </SheetContent>
       </Sheet>
 
-      <div className="flex min-w-0 flex-1 flex-col md:pl-60">
+      {/* Content backdrop — ambient texture that shows through glass panels */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0 hidden md:block"
+        style={{
+          backgroundImage:
+            "radial-gradient(ellipse 50% 40% at 15% 20%, rgba(143,175,138,0.15), transparent 60%), radial-gradient(ellipse 45% 35% at 85% 75%, rgba(168,185,142,0.12), transparent 55%), radial-gradient(ellipse 35% 30% at 50% 50%, rgba(200,145,47,0.05), transparent 50%)",
+        }}
+      />
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col md:pl-60">
         {/* Topbar */}
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur md:px-6">
+        <header className="glass-topbar sticky top-0 z-20 flex h-14 items-center gap-3 bg-background/80 px-4 md:px-6">
           <Button variant="ghost" size="icon" className="-ml-1 md:hidden" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
