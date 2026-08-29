@@ -40,37 +40,39 @@ type SendArgs = {
 };
 
 /**
- * Transport: send one email through Resend and log the outcome.
- * Reads RESEND_API_KEY (and optional EMAIL_FROM) from the environment.
+ * Transport: send one email through Brevo (Sendinblue) SMTP API and log the outcome.
+ * Reads BREVO_API_KEY (and optional EMAIL_FROM / BREVO_SENDER_NAME) from the environment.
  * Never throws — failures are logged and returned so digest batches can continue.
  */
 async function sendEmail(
   ctx: ActionCtx,
   args: SendArgs,
 ): Promise<{ ok: boolean; error?: string }> {
-  const key = process.env.RESEND_API_KEY;
+  const key = process.env.BREVO_API_KEY;
   if (!key) {
-    return { ok: false, error: "RESEND_API_KEY is not configured" };
+    return { ok: false, error: "BREVO_API_KEY is not configured" };
   }
-  const from = process.env.EMAIL_FROM || "Shepherd <onboarding@resend.dev>";
+  const senderEmail = process.env.EMAIL_FROM || "shepherd@gethsemane.org";
+  const senderName = process.env.BREVO_SENDER_NAME || "Shepherd";
   try {
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${key}`,
+        "api-key": key,
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({
-        from,
-        to: [args.to],
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: args.to }],
         subject: args.subject,
-        html: args.html,
-        text: args.text,
+        htmlContent: args.html,
+        textContent: args.text || args.html.replace(/<[^>]+>/g, "").trim(),
       }),
     });
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Resend ${res.status}: ${body.slice(0, 200)}`);
+      throw new Error(`Brevo ${res.status}: ${body.slice(0, 200)}`);
     }
     await ctx.runMutation(internal.settings.logEmail, {
       to: args.to,
@@ -192,8 +194,8 @@ export const status = action({
   handler: async (ctx) => {
     await requireAdminAction(ctx);
     return {
-      configured: !!process.env.RESEND_API_KEY,
-      from: process.env.EMAIL_FROM || "Shepherd <onboarding@resend.dev>",
+      configured: !!process.env.BREVO_API_KEY,
+      from: `${process.env.BREVO_SENDER_NAME || "Shepherd"} <${process.env.EMAIL_FROM || "shepherd@gethsemane.org"}>`,
     };
   },
 });
