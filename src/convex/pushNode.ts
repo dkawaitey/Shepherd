@@ -57,9 +57,9 @@ export const deliverJob = internalAction({
               tag: job.payload.url || "shepherd",
               renotify: true,
               vibrate: [200, 100, 200],
-              badge: "/icons/icon-192.png",
-              icon: "/icons/icon-192.png",
-              requireInteraction: false,
+              badge: "/sidebarr-logo.png",
+              icon: "/sidebarr-logo.png",
+              requireInteraction: true,
               silent: false,
               timestamp: Date.now(),
             };

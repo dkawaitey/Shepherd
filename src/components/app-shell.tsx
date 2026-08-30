@@ -69,7 +69,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <img
           src="/sidebar-logo.png"
           alt="Shepherd"
-          className="h-8 w-8 object-contain brightness-0 invert dark:invert-0"
+          className="h-8 w-8 object-contain [filter:brightness(0)] dark:[filter:none]"
         />
         <span className="text-sm font-bold tracking-tight">Shepherd</span>
       </div>
