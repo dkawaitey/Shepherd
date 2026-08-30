@@ -349,7 +349,8 @@ export const remove = mutation({
 export const classLeaders = query({
   args: {},
   handler: async (ctx) => {
-    await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
     const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
     const users = await ctx.db.query("users").collect();
     const userByMember = new Map(

@@ -49,13 +49,27 @@ export const deliverJob = internalAction({
       const results = await Promise.allSettled(
         batch.map(async (sub) => {
           try {
+            const payload = {
+              title: job.payload.title,
+              body: job.payload.body,
+              url: job.payload.url,
+              // Android wake-screen fields
+              tag: job.payload.url || "shepherd",
+              renotify: true,
+              vibrate: [200, 100, 200],
+              badge: "/icons/icon-192.png",
+              icon: "/icons/icon-192.png",
+              requireInteraction: false,
+              silent: false,
+              timestamp: Date.now(),
+            };
             await webpush.sendNotification(
               {
                 endpoint: sub.endpoint,
                 keys: { p256dh: sub.p256dh, auth: sub.auth },
               },
-              JSON.stringify(job.payload),
-              { TTL: 60 * 60 * 24 }, // 24 hours
+              JSON.stringify(payload),
+              { TTL: 60 * 60 * 24, urgency: "high" as const }, // 24 hours, high priority for Android wake-screen
             );
             await ctx.runMutation(internal.push.logDelivery, {
               jobId,

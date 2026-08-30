@@ -64,7 +64,7 @@ export default function Settings() {
   const isAdmin = me?.role === ROLES.ADMIN || me?.roles?.includes(ROLES.ADMIN);
   const [tab, setTab] = useState(isAdmin ? "users" : "profile");
 
-  const tabs = isAdmin ? TABS : TABS.filter((t) => t.id === "profile");
+  const tabs = isAdmin ? TABS : TABS.filter((t) => t.id === "profile" || t.id === "notifications");
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -882,6 +882,7 @@ function NotificationsTab() {
 
   const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
   const inIframe = typeof window !== "undefined" && window.self !== window.top;
+  const isAdmin = me?.role === ROLES.ADMIN || me?.roles?.includes(ROLES.ADMIN);
 
   return (
     <div className="max-w-lg space-y-4">
@@ -958,7 +959,7 @@ function NotificationsTab() {
             </div>
           )}
 
-          {subscribed && (
+          {subscribed && isAdmin && (
             <div className="flex items-center gap-2 border-b border-dashed pb-3">
               <Button
                 size="sm"
@@ -995,8 +996,8 @@ function NotificationsTab() {
             </div>
           )}
 
-          {/* ── Diagnostics ── */}
-          {diag && (
+          {/* ── Diagnostics (admin only) ── */}
+          {diag && isAdmin && (
             <div className="rounded-md border bg-muted/40 px-3 py-2.5 text-[10px] leading-4">
               <div className="mb-1.5 text-[11px] font-semibold">Delivery Diagnostics</div>
               <div className="grid grid-cols-2 gap-1.5">

@@ -9,7 +9,7 @@
  */
 
 const NOTIFICATION_CHANNEL = "shepherd-notifications";
-const CACHE = "shepherd-shell-v2";
+const CACHE = "shepherd-shell-v3";
 const SHELL = [
   "/",
   "/index.html",
