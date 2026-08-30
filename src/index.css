@@ -136,6 +136,8 @@
   body {
     @apply bg-background text-foreground;
     letter-spacing: -0.01em;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
     /* Ambient gradient background — gives glassmorphism depth */
     background-image:
       radial-gradient(ellipse 80% 60% at 20% 10%, rgba(143, 175, 138, 0.12), transparent 60%),
@@ -154,6 +156,10 @@
   button:not([disabled]),
   [role="button"]:not([disabled]) {
     cursor: pointer;
+    touch-action: manipulation;
+  }
+  a {
+    touch-action: manipulation;
   }
   ::selection {
     background: #8faf8a;
@@ -212,6 +218,19 @@
   }
   /* Fixed-dark terminal shell — stays a real terminal in both themes. */
   /* ── Glass morphism utilities ── */
+  /* All glass utilities: force GPU compositing to prevent Android touch issues.
+     backdrop-filter creates a new compositing layer that can swallow touch
+     events on Android unless the element is explicitly promoted. */
+  .glass-card,
+  .glass-sidebar,
+  .glass-topbar,
+  .glass-badge,
+  .glass-dialog {
+    will-change: transform;
+    -webkit-transform: translate3d(0, 0, 0);
+    touch-action: auto;
+  }
+
   .glass-card {
     backdrop-filter: blur(16px) saturate(1.4);
     -webkit-backdrop-filter: blur(16px) saturate(1.4);

@@ -69,7 +69,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <img
           src="/sidebar-logo.png"
           alt="Shepherd"
-          className="h-8 w-8 object-contain"
+          className="h-8 w-8 object-contain brightness-0 invert dark:invert-0"
         />
         <span className="text-sm font-bold tracking-tight">Shepherd</span>
       </div>
@@ -178,6 +178,7 @@ export function AppShell() {
       {/* Content backdrop — ambient texture that shows through glass panels */}
       <div
         className="pointer-events-none fixed inset-0 z-0 hidden md:block"
+        aria-hidden="true"
         style={{
           backgroundImage:
             "radial-gradient(ellipse 50% 40% at 15% 20%, rgba(143,175,138,0.15), transparent 60%), radial-gradient(ellipse 45% 35% at 85% 75%, rgba(168,185,142,0.12), transparent 55%), radial-gradient(ellipse 35% 30% at 50% 50%, rgba(200,145,47,0.05), transparent 50%)",
