@@ -34,12 +34,12 @@ import {
   downloadPdf,
 } from "@/components/shared";
 import {
-  AlertTriangle,
-  CheckCircle2,
-  ClipboardList,
+  TriangleAlert,
+  CircleCheck,
+  ClipboardCheck,
   Download,
   FileText,
-  HandHeart,
+  Heart,
 } from "lucide-react";
 
 export default function Attendance() {
@@ -200,7 +200,7 @@ export default function Attendance() {
       {/* Low attendance alerts */}
       <div className="mt-6">
         <div className="mb-3 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-status-amber" />
+          <TriangleAlert className="h-4 w-4 text-status-amber" />
           <p className="term-label">members needing follow-up — low attendance</p>
         </div>
         {lowAttendance === undefined ? (
@@ -220,7 +220,7 @@ export default function Attendance() {
                   to={`/members/${r.member._id}`}
                   className="flex min-w-0 flex-1 items-center gap-3"
                 >
-                  <ClipboardList className="h-4 w-4 shrink-0 text-status-amber" />
+                  <ClipboardCheck className="h-4 w-4 shrink-0 text-status-amber" />
                   <div className="min-w-0">
                     <div className="text-[13px] font-semibold text-status-amber">{r.member.fullName}</div>
                     <div className="text-[10px] text-status-amber/80">
@@ -239,7 +239,7 @@ export default function Attendance() {
                       setFollowupBy(me?.name || me?.email || "");
                     }}
                   >
-                    <HandHeart className="mr-1.5 h-3.5 w-3.5" /> Mark followed up
+                    <Heart className="mr-1.5 h-3.5 w-3.5" /> Mark followed up
                   </Button>
                 )}
               </div>
@@ -252,7 +252,7 @@ export default function Attendance() {
       {recentFollowups.length > 0 && (
         <div className="mt-6">
           <div className="mb-3 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-status-green" />
+            <CircleCheck className="h-4 w-4 text-status-green" />
             <p className="term-label">recently followed up — low attendance</p>
           </div>
           <div className="space-y-2">
@@ -347,7 +347,7 @@ export default function Attendance() {
                 }
               }}
             >
-              <HandHeart className="mr-1.5 h-3.5 w-3.5" /> Save follow-up
+              <Heart className="mr-1.5 h-3.5 w-3.5" /> Save follow-up
             </Button>
           </DialogFooter>
         </DialogContent>

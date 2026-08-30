@@ -26,7 +26,7 @@ import {
 import { BIBLE_LESSONS } from "@/convex/constants";
 import { EmptyState, PageHeader, StatusPill, fmtDate } from "@/components/shared";
 import { cn } from "@/lib/utils";
-import { BookOpen } from "lucide-react";
+import { BookMarked } from "lucide-react";
 
 export default function BibleStudies() {
   const contacts = useQuery(api.contacts.list, {});
@@ -217,7 +217,7 @@ function BibleStudyDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            <BookOpen className="mr-1.5 inline h-4 w-4" /> Lesson {editing.lesson}: {editing.name}
+            <BookMarked className="mr-1.5 inline h-4 w-4" /> Lesson {editing.lesson}: {editing.name}
           </DialogTitle>
           <DialogDescription>
             The completion record is tied to this contact's discipleship file.

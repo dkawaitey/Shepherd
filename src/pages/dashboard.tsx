@@ -19,31 +19,31 @@ import {
 import { StatusPill, fmtDate, fmtDateTime } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
-  AlertTriangle,
+  TriangleAlert,
   Baby,
   Bell,
-  CalendarCheck2,
+  CalendarCheck,
   Church,
   ClipboardCheck,
-  Crown,
+  Award,
   Flame,
   HeartHandshake,
   MapPin,
   MessageCircle,
   Target,
   TrendingUp,
-  Users,
+  ContactRound,
 } from "lucide-react";
 import { Link } from "react-router";
 
 const CARDS = [
-  { key: "totalReached", label: "Total People Reached", to: "/contacts", icon: Users, accent: "#9db392" },
-  { key: "activeFollowups", label: "Active Follow-ups", to: "/followups?status=pending", icon: CalendarCheck2, accent: "#fbbf24" },
+  { key: "totalReached", label: "Total People Reached", to: "/contacts", icon: ContactRound, accent: "#9db392" },
+  { key: "activeFollowups", label: "Active Follow-ups", to: "/followups?status=pending", icon: CalendarCheck, accent: "#fbbf24" },
   { key: "newConverts", label: "New Converts", to: "/contacts?status=newConvert", icon: Target, accent: "#86b26f" },
   { key: "baptized", label: "Baptized Members", to: "/contacts?status=baptized", icon: Baby, accent: "#a8c49d" },
   { key: "joinedChurch", label: "Joined Church", to: "/contacts?status=joinedChurch", icon: Church, accent: "#bcd2b0" },
-  { key: "completedDiscipleship", label: "Completed Discipleship", to: "/contacts?status=completedDiscipleship", icon: Crown, accent: "#c2d4a8" },
-  { key: "missedFollowups", label: "Missed Follow-ups", to: "/followups?status=missed", icon: AlertTriangle, accent: "#f87171" },
+  { key: "completedDiscipleship", label: "Completed Discipleship", to: "/contacts?status=completedDiscipleship", icon: Award, accent: "#c2d4a8" },
+  { key: "missedFollowups", label: "Missed Follow-ups", to: "/followups?status=missed", icon: TriangleAlert, accent: "#f87171" },
   { key: "upcomingVisitsThisWeek", label: "Upcoming Visits This Week", to: "/followups?status=pending", icon: Flame, accent: "#fbbf24" },
 ];
 

@@ -10,7 +10,7 @@ import {
 } from "@/convex/constants";
 import { PageHeader, fmtDate } from "@/components/shared";
 import { cn } from "@/lib/utils";
-import { BookOpen, Sparkles } from "lucide-react";
+import { BookMarked, Sparkle } from "lucide-react";
 
 export default function Discipleship() {
   const contacts = useQuery(api.contacts.list, {});
@@ -63,7 +63,7 @@ export default function Discipleship() {
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-4 flex items-center justify-between">
             <p className="term-label">// bible study curriculum</p>
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <BookMarked className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="space-y-2.5">
             {bsCompletedByLesson.map((b) => (
@@ -86,7 +86,7 @@ export default function Discipleship() {
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-4 flex items-center justify-between">
             <p className="term-label">// recent journey activity</p>
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            <Sparkle className="h-4 w-4 text-muted-foreground" />
           </div>
           {recentEvents.length === 0 ? (
             <p className="py-8 text-center text-[11px] text-muted-foreground">

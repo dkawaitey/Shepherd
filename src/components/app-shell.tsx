@@ -9,22 +9,20 @@ import { toast } from "sonner";
 import {
   BarChart3,
   BellRing,
-  BookOpen,
-  CalendarCheck2,
-  ClipboardList,
+  BookMarked,
+  CalendarCheck,
+  ClipboardCheck,
   DoorOpen,
   FileBarChart,
-  HandHeart,
+  Heart,
   LayoutDashboard,
   LogOut,
   Megaphone,
   Menu,
-  ScrollText,
   Settings,
-  Sparkles,
-  Users,
-  X,
-  UserPlus,
+  Sparkle,
+  UserRound,
+  ContactRound,
   FlaskConical,
 } from "lucide-react";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
@@ -46,13 +44,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, code: "D" },
-  { to: "/contacts", label: "Contacts", icon: Users, code: "C" },
-  { to: "/followups", label: "Follow-ups", icon: ClipboardList, code: "F" },
-  { to: "/discipleship", label: "Discipleship", icon: Sparkles, code: "DS" },
-  { to: "/bible-studies", label: "Bible Studies", icon: BookOpen, code: "B" },
-  { to: "/members", label: "Members", icon: Users, code: "M" },
-  { to: "/attendance", label: "Attendance", icon: CalendarCheck2, code: "A" },
-  { to: "/prayer-journal", label: "Prayer Journal", icon: HandHeart, code: "P" },
+  { to: "/contacts", label: "Contacts", icon: ContactRound, code: "C" },
+  { to: "/followups", label: "Follow-ups", icon: ClipboardCheck, code: "F" },
+  { to: "/discipleship", label: "Discipleship", icon: Sparkle, code: "DS" },
+  { to: "/bible-studies", label: "Bible Studies", icon: BookMarked, code: "B" },
+  { to: "/members", label: "Members", icon: UserRound, code: "M" },
+  { to: "/attendance", label: "Attendance", icon: CalendarCheck, code: "A" },
+  { to: "/prayer-journal", label: "Prayer Journal", icon: Heart, code: "P" },
   { to: "/announcements", label: "Announcements", icon: Megaphone, code: "AN" },
   { to: "/reports", label: "Reports", icon: FileBarChart, code: "R" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, code: "ANL" },
@@ -69,7 +67,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <img
           src="/sidebar-logo.png"
           alt="Shepherd"
-          className="h-8 w-8 object-contain [filter:brightness(0)] dark:[filter:none]"
+          className="h-8 w-8 object-contain dark:hidden"
+        />
+        <img
+          src="/sidebarr-logo.png"
+          alt="Shepherd"
+          className="hidden h-8 w-8 object-contain dark:block"
         />
         <span className="text-sm font-bold tracking-tight">Shepherd</span>
       </div>

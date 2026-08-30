@@ -58,10 +58,10 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   Baby,
-  BookOpen,
+  BookMarked,
   CalendarPlus,
   Church,
-  HandHeart,
+  Heart,
   Home,
   Lock,
   MapPin,
@@ -72,7 +72,7 @@ import {
   Phone,
   Plus,
   ScrollText,
-  Sparkles,
+  Sparkle,
   Trash2,
   Trophy,
   UserCheck,
@@ -81,11 +81,11 @@ import {
 } from "lucide-react";
 
 const STAGE_ICONS: Record<string, any> = {
-  [STAGES.REACHED]: HandHeart,
+  [STAGES.REACHED]: Heart,
   [STAGES.INTERESTED]: MessageSquareText,
   [STAGES.FOLLOWUP_STARTED]: Home,
-  [STAGES.ACCEPTED_CHRIST]: Sparkles,
-  [STAGES.BIBLE_STUDY]: BookOpen,
+  [STAGES.ACCEPTED_CHRIST]: Sparkle,
+  [STAGES.BIBLE_STUDY]: BookMarked,
   [STAGES.BAPTIZED]: Baby,
   [STAGES.JOINED_CHURCH]: Church,
   [STAGES.COMPLETED_DISCIPLESHIP]: ScrollText,
@@ -127,11 +127,11 @@ export default function ContactProfile() {
 
   const tabs = [
     { id: "overview", label: "Overview", icon: ScrollText },
-    { id: "timeline", label: "Timeline", icon: Sparkles },
+    { id: "timeline", label: "Timeline", icon: Sparkle },
     { id: "followups", label: `Follow-ups (${followUps.length})`, icon: CalendarPlus },
-    { id: "bible", label: "Bible Studies", icon: BookOpen },
+    { id: "bible", label: "Bible Studies", icon: BookMarked },
     { id: "attendance", label: "Attendance", icon: Home },
-    { id: "prayer", label: `Prayer Journal (${prayers.length})`, icon: HandHeart },
+    { id: "prayer", label: `Prayer Journal (${prayers.length})`, icon: Heart },
     { id: "notes", label: `Notes (${notes.length})`, icon: NotebookPen },
   ];
 
@@ -983,7 +983,7 @@ function PrayerTab({
           {rows.map((p) => (
             <div key={p._id} className="rounded-lg border bg-card p-3.5">
               <div className="flex flex-wrap items-center gap-2">
-                <HandHeart className="h-3.5 w-3.5 text-primary" />
+                <Heart className="h-3.5 w-3.5 text-primary" />
                 <span className="text-[13px] font-semibold">{p.title}</span>
                 <StatusPill status={p.status} />
                 {p.confidential && (

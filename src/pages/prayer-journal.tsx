@@ -25,7 +25,7 @@ import {
 import { PRAYER_STATUS } from "@/convex/constants";
 import { EmptyState, PageHeader, StatusPill, fmtDateTime } from "@/components/shared";
 import { cn } from "@/lib/utils";
-import { HandHeart, Search } from "lucide-react";
+import { Heart, Search } from "lucide-react";
 
 export default function PrayerJournal() {
   const [status, setStatus] = useState("all");
@@ -112,7 +112,7 @@ export default function PrayerJournal() {
           {prayers.map((p) => (
             <div key={p._id} className="rounded-lg border bg-card p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <HandHeart className="h-4 w-4 text-primary" />
+                <Heart className="h-4 w-4 text-primary" />
                 <span className="text-[13px] font-bold">{p.title}</span>
                 <StatusPill status={p.status} />
                 <span className="ml-auto text-[10px] text-muted-foreground">

@@ -65,7 +65,7 @@ import {
   Crown,
   Download,
   FileText,
-  HandHeart,
+  Heart,
   Link2,
   Lock,
   Mail,
@@ -591,7 +591,7 @@ export function MemberProfile() {
   const tabs = [
     { id: "profile", label: "Profile", icon: ScrollText },
     { id: "attendance", label: `Attendance (${attendance.length})`, icon: ClipboardList },
-    { id: "prayer", label: `Prayer Journal (${prayers.length})`, icon: HandHeart },
+    { id: "prayer", label: `Prayer Journal (${prayers.length})`, icon: Heart },
     { id: "notes", label: `Notes (${visibleNotes.length})`, icon: NotebookPen },
   ];
 
@@ -916,7 +916,7 @@ function AttendanceTab({
     <div className="space-y-4 p-5">
       {needsFollowUp && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-[12px] text-amber-800 dark:text-amber-300">
-          <HandHeart className="mt-0.5 h-4 w-4 shrink-0" />
+          <Heart className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-semibold">This member may need follow-up</p>
             <p className="mt-0.5 leading-5">
@@ -929,7 +929,7 @@ function AttendanceTab({
 
       {member.attendanceFollowup && (
         <div className="flex items-start gap-2 rounded-lg border border-[#86efac]/40 bg-[#15291c]/80 p-3 text-[11px] text-[#86efac]">
-          <HandHeart className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <Heart className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div>
             <p className="font-semibold">Last low-attendance follow-up</p>
             <p className="mt-0.5 leading-5">
@@ -1114,7 +1114,7 @@ function MemberPrayerTab({
           {rows.map((p) => (
             <div key={p._id} className="rounded-lg border bg-card p-3.5">
               <div className="flex flex-wrap items-center gap-2">
-                <HandHeart className="h-3.5 w-3.5 text-primary" />
+                <Heart className="h-3.5 w-3.5 text-primary" />
                 <span className="text-[13px] font-semibold">{p.title}</span>
                 <StatusPill status={p.status} />
                 {p.confidential && (

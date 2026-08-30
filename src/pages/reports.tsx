@@ -14,12 +14,12 @@ import {
   Download,
   FileText,
   Flame,
-  HandHeart,
+  Heart,
   Target,
   TrendingDown,
   TrendingUp,
-  Users,
-  XCircle,
+  ContactRound,
+  CircleX,
 } from "lucide-react";
 
 export default function Reports() {
@@ -129,12 +129,12 @@ export default function Reports() {
           {/* Counts */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { icon: Users, label: "People Reached", value: report.counts.reached, color: "#9db392" },
+              { icon: ContactRound, label: "People Reached", value: report.counts.reached, color: "#9db392" },
               { icon: Target, label: "New Converts", value: report.counts.accepted, color: "#86b26f" },
               { icon: Baby, label: "Baptisms", value: report.counts.baptized, color: "#a8c49d" },
-              { icon: HandHeart, label: "Answered Prayers", value: report.counts.answeredPrayers, color: "#c2d4a8" },
+              { icon: Heart, label: "Answered Prayers", value: report.counts.answeredPrayers, color: "#c2d4a8" },
               { icon: Award, label: "Follow-ups Completed", value: report.counts.completed, color: "#86b26f" },
-              { icon: XCircle, label: "Missed", value: report.counts.missed, color: "#f87171" },
+              { icon: CircleX, label: "Missed", value: report.counts.missed, color: "#f87171" },
               { icon: Flame, label: "Cancelled", value: report.counts.cancelled, color: "#fbbf24" },
               { icon: TrendingUp, label: "Active Follow-ups", value: report.counts.pending, color: "#fbbf24" },
             ].map((c) => (
@@ -156,11 +156,11 @@ export default function Reports() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 { label: "Conversion rate", value: report.rates.conversionRate, icon: TrendingUp, note: "accepted Christ / all contacts" },
-                { label: "Retention rate", value: report.rates.retention, icon: Users, note: "follow-ups completed / reached" },
+                { label: "Retention rate", value: report.rates.retention, icon: ContactRound, note: "follow-ups completed / reached" },
                 { label: "Response rate", value: report.rates.responseRate, icon: Award, note: "completed / (completed + missed)" },
                 { label: "Drop-off rate", value: report.rates.dropOff, icon: TrendingDown, note: "100 − retention" },
                 { label: "Avg time to baptism", value: report.rates.avgTimeToBaptismDays, icon: Baby, note: "days from first encounter", suffix: " days" },
-                { label: "Attendance rate", value: report.rates.attendanceRate, icon: Users, note: "present / recorded" },
+                { label: "Attendance rate", value: report.rates.attendanceRate, icon: ContactRound, note: "present / recorded" },
               ].map((r) => (
                 <div key={r.label}>
                   <div className="mb-1 flex justify-between text-[11px]">

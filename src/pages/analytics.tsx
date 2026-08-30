@@ -14,7 +14,7 @@ import {
   Gauge,
   TrendingDown,
   TrendingUp,
-  Users,
+  ContactRound,
 } from "lucide-react";
 
 export default function Analytics() {
@@ -53,7 +53,7 @@ export default function Analytics() {
       tone: "text-[#9db392]",
     },
     {
-      icon: Users,
+      icon: ContactRound,
       label: "Retention rate",
       value: `${report.rates.retention}%`,
       note: "Follow-up completion relative to people reached.",
