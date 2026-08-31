@@ -66,21 +66,19 @@ export const generateUploadUrl = mutation({
   },
 });
 
-/** Get a signed URL for a stored file (media attachment). Verifies
- *  the requesting user can access the parent post. */
+/** Get a signed URL for a stored file (media attachment). Requires postId
+ *  to verify the requesting user can access the parent post — prevents
+ *  storageId enumeration by any authenticated user. */
 export const getMediaUrl = query({
-  args: { storageId: v.string(), postId: v.optional(v.id("posts")) },
+  args: { storageId: v.string(), postId: v.id("posts") },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return null;
-    // If a postId is provided, verify the user can access the post
-    if (args.postId) {
-      const post = await ctx.db.get(args.postId);
-      if (!post) return null;
-      // Verify the storageId actually belongs to this post's media
-      const owns = post.media?.some((m) => m.storageId === args.storageId);
-      if (!owns) return null;
-    }
+    const post = await ctx.db.get(args.postId);
+    if (!post) return null;
+    // Verify the storageId actually belongs to this post's media
+    const owns = post.media?.some((m) => m.storageId === args.storageId);
+    if (!owns) return null;
     return await ctx.storage.getUrl(args.storageId as any);
   },
 });
@@ -174,7 +172,9 @@ export const create = mutation({
       ROLES.LEADER,
     ]);
     if (!args.title.trim()) throw new Error("Title is required");
+    if (args.title.trim().length > 500) throw new Error("Title must be under 500 characters");
     if (!args.body.trim()) throw new Error("Content is required");
+    if (args.body.trim().length > 10000) throw new Error("Content must be under 10,000 characters");
 
     // Validate media attachments server-side
     if (args.media) {
@@ -271,6 +271,7 @@ export const addComment = mutation({
     const post = await ctx.db.get(args.postId);
     if (!post) throw new Error("Post not found");
     if (!args.body.trim()) throw new Error("Comment is required");
+    if (args.body.trim().length > 5000) throw new Error("Comment must be under 5,000 characters");
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
       if (!parent || parent.postId !== args.postId) {

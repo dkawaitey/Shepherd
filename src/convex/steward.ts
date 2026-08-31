@@ -40,7 +40,7 @@ type ActionUser = {
 };
 
 /** Only admins pass — for actions (auth identity + role lookup via runQuery). */
-async function requireAdminAction(ctx: ActionCtx): Promise<ActionUser> {
+export async function requireAdminAction(ctx: ActionCtx): Promise<ActionUser> {
   const me = (await ctx.runQuery(
     internal.users.meByAuth,
     {},

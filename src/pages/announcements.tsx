@@ -219,7 +219,7 @@ export default function Announcements() {
                   {p.media && p.media.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {p.media.map((m, i) => (
-                        <PostMediaItem key={i} media={m} />
+                        <PostMediaItem key={i} media={m} postId={p._id} />
                       ))}
                     </div>
                   )}
@@ -258,8 +258,8 @@ export default function Announcements() {
   );
 }
 
-function PostMediaItem({ media }: { media: { storageId: string; type: string; name: string } }) {
-  const url = useQuery(api.posts.getMediaUrl, { storageId: media.storageId });
+function PostMediaItem({ media, postId }: { media: { storageId: string; type: string; name: string }; postId: string }) {
+  const url = useQuery(api.posts.getMediaUrl, { storageId: media.storageId, postId: postId as any });
 
   if (!url) {
     return (

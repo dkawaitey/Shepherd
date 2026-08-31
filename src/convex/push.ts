@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { requireAdmin, getCurrentUser } from "./helpers";
 
 /** Return the VAPID public key so the browser can subscribe. */
 export const getPublicKey = query({
@@ -178,10 +179,12 @@ export const logDelivery = internalMutation({
   },
 });
 
-/** Return VAPID key configuration status and recent delivery logs. */
+/** Return VAPID key configuration status and recent delivery logs. Admin only —
+ *  exposes endpoint URLs, delivery errors, and VAPID key presence. */
 export const deliveryDiagnostics = query({
   args: {},
   handler: async (ctx) => {
+    await requireAdmin(ctx);
     const publicKey = !!process.env.VAPID_PUBLIC_KEY;
     const privateKey = !!process.env.VAPID_PRIVATE_KEY;
     const subject = !!process.env.VAPID_SUBJECT;

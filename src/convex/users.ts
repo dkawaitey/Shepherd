@@ -452,7 +452,9 @@ export const bootstrapAdmin = mutation({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user || user.role) return;
+    // Prevent anonymous / unverified users from becoming admin
+    if (!user || user.isAnonymous || !user.email) return;
+    if (user.role) return;
     const admins = await ctx.db.query("users").collect();
     const hasAdmin = admins.some((u) => u.role === ROLES.ADMIN || hasRole(u, ROLES.ADMIN));
     if (!hasAdmin) {

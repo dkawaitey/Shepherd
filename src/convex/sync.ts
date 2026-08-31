@@ -11,6 +11,7 @@
 import { action, internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireAdminAction } from "./steward";
 
 /** Return all non-deleted members for the batch sync. */
 export const listMembersForSync = internalQuery({
@@ -96,8 +97,8 @@ export const pushMemberToAppB = internalAction({
     const url = process.env.APP_B_SYNC_URL;
     const secret = process.env.SYNC_SHARED_SECRET;
 
-    console.log(`[Sync] pushMemberToAppB called: sourceId=${args.sourceId}, name=${args.name}`);
-    console.log(`[Sync] APP_B_SYNC_URL=${url ? "SET" : "MISSING"}, SYNC_SHARED_SECRET=${secret ? "SET" : "MISSING"}`);
+    // Avoid logging member names/IDs in production — only log presence of config.
+    console.log(`[Sync] pushMemberToAppB: url=${url ? "configured" : "missing"}, secret=${secret ? "configured" : "missing"}`);
 
     if (!url || !secret) {
       console.error(
@@ -129,7 +130,10 @@ export const pushMemberToAppB = internalAction({
 /** Public action: test sync by pushing a dummy member to Steward and reporting the result. */
 export const testSync = action({
   args: {},
-  handler: async () => {
+  handler: async (ctx) => {
+    // Admin only: prevents anonymous/unprivileged users from triggering sync
+    // or leaking the shared secret via error responses.
+    await requireAdminAction(ctx);
     const url = process.env.APP_B_SYNC_URL;
     const secret = process.env.SYNC_SHARED_SECRET;
     if (!url || !secret) {
@@ -149,7 +153,7 @@ export const testSync = action({
       }),
     });
     const body = await res.text();
-    return { ok: res.ok, status: res.status, body };
+    return { ok: res.ok, status: res.status, body: body.slice(0, 500) };
   },
 });
 
