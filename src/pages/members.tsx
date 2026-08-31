@@ -1285,6 +1285,7 @@ function EditMemberDialog({
   const update = useMutation(api.members.update);
   const addNote = useMutation(api.discipleship.addNote);
   const me = useQuery(api.users.currentUser);
+  const leaders = useQuery(api.members.classLeaders);
   const isAdmin = me?.role === ROLES.ADMIN;
   const [form, setForm] = useState<Record<string, string>>({
     fullName: member.fullName ?? "",
@@ -1292,6 +1293,8 @@ function EditMemberDialog({
     klass: member.klass ?? "",
     position: member.position ?? effectivePosition(member.position, member.isClassLeader),
     status: member.status ?? "active",
+    classLeader: member.classLeader ?? "",
+    classLeaderId: (leaders ?? []).find((l) => l.name === member.classLeader)?._id ?? "",
   });
   const [isClassLeader, setIsClassLeader] = useState(!!member.isClassLeader);
   const [busy, setBusy] = useState(false);
@@ -1314,6 +1317,7 @@ function EditMemberDialog({
         gender: form.gender || undefined,
         klass: form.klass || undefined,
         position: form.position || undefined,
+        classLeader: form.classLeader || undefined,
         status: form.status === "active" ? "active" : "inactive",
         isClassLeader,
       } as any);
@@ -1420,6 +1424,39 @@ function EditMemberDialog({
                 <SelectContent>
                   {POSITION_OPTIONS.map((p) => (
                     <SelectItem key={p} value={p}>{POSITION_LABELS[p]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {isAdmin && (
+            <div>
+              <Label htmlFor="e-leader">Class leader</Label>
+              <Select
+                value={form.classLeaderId || undefined}
+                onValueChange={(v) => {
+                  if (v === "none") {
+                    setForm((f) => ({ ...f, classLeaderId: "", classLeader: "" }));
+                  } else {
+                    const leader = (leaders ?? []).find((l) => l._id === v);
+                    setForm((f) => ({
+                      ...f,
+                      classLeaderId: v,
+                      classLeader: leader?.name ?? "",
+                    }));
+                  }
+                }}
+              >
+                <SelectTrigger id="e-leader" className="mt-1 w-full">
+                  <SelectValue placeholder="Select class leader" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— No leader —</SelectItem>
+                  {(leaders ?? []).map((l) => (
+                    <SelectItem key={l._id} value={l._id}>
+                      {l.name}
+                      {l.klass ? ` · ${l.klass} Class` : ""}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
