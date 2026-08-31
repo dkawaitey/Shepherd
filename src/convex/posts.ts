@@ -4,19 +4,83 @@ import { mutation, query } from "./_generated/server";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
 import { ROLES } from "./constants";
 
+// ── Media validation constants ───────────────────────────────────────
+const ALLOWED_MIME_TYPES = new Set([
+  // images
+  "image/jpeg", "image/png", "image/webp", "image/avif",
+  // video
+  "video/mp4", "video/webm",
+  // audio
+  "audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm",
+  // documents
+  "application/pdf",
+]);
+
+// Fallback MIME mapping for browsers that send generic types
+const EXT_TO_MIME: Record<string, string> = {
+  ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+  ".webp": "image/webp", ".avif": "image/avif",
+  ".mp4": "video/mp4", ".webm": "video/webm",
+  ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav",
+  ".ogg": "audio/ogg", ".pdf": "application/pdf",
+};
+
+const MAX_FILE_SIZES: Record<string, number> = {
+  image: 8 * 1024 * 1024,   // 8 MB
+  video: 18 * 1024 * 1024,  // 18 MB (Convex limit ~20)
+  audio: 12 * 1024 * 1024,  // 12 MB
+  file: 10 * 1024 * 1024,   // 10 MB
+};
+
+const MAX_MEDIA_PER_POST = 5;
+
+function classifyMime(mime: string): "image" | "video" | "audio" | "file" {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "file";
+}
+
+function validateMediaItem(m: { storageId: string; type: string; name: string; mimeType: string; size: number }) {
+  if (!ALLOWED_MIME_TYPES.has(m.mimeType)) {
+    throw new Error(`Unsupported file type: ${m.mimeType} (${m.name})`);
+  }
+  const category = classifyMime(m.mimeType);
+  const maxSize = MAX_FILE_SIZES[category] ?? MAX_FILE_SIZES.file;
+  if (m.size > maxSize) {
+    const mb = (maxSize / 1024 / 1024).toFixed(0);
+    throw new Error(`${m.name} exceeds the ${mb} MB limit for ${category}s`);
+  }
+  if (m.size <= 0) {
+    throw new Error(`${m.name} is empty`);
+  }
+}
+
 /** Generate a storage upload URL for post media (images, videos, files). */
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    await getCurrentUser(ctx);
+    const user = await getCurrentUser(ctx);
+    if (!user) throw new Error("Sign in to upload media");
     return await ctx.storage.generateUploadUrl();
   },
 });
 
-/** Get a signed URL for a stored file (media attachment). */
+/** Get a signed URL for a stored file (media attachment). Verifies
+ *  the requesting user can access the parent post. */
 export const getMediaUrl = query({
-  args: { storageId: v.string() },
+  args: { storageId: v.string(), postId: v.optional(v.id("posts")) },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return null;
+    // If a postId is provided, verify the user can access the post
+    if (args.postId) {
+      const post = await ctx.db.get(args.postId);
+      if (!post) return null;
+      // Verify the storageId actually belongs to this post's media
+      const owns = post.media?.some((m) => m.storageId === args.storageId);
+      if (!owns) return null;
+    }
     return await ctx.storage.getUrl(args.storageId as any);
   },
 });
@@ -93,6 +157,14 @@ export const create = mutation({
       storageId: v.string(),
       type: v.string(),
       name: v.string(),
+      mimeType: v.string(),
+      size: v.number(),
+      width: v.optional(v.number()),
+      height: v.optional(v.number()),
+      duration: v.optional(v.number()),
+      thumbnailStorageId: v.optional(v.string()),
+      status: v.string(),
+      uploadedAt: v.number(),
     }))),
   },
   handler: async (ctx, args) => {
@@ -103,6 +175,17 @@ export const create = mutation({
     ]);
     if (!args.title.trim()) throw new Error("Title is required");
     if (!args.body.trim()) throw new Error("Content is required");
+
+    // Validate media attachments server-side
+    if (args.media) {
+      if (args.media.length > MAX_MEDIA_PER_POST) {
+        throw new Error(`Maximum ${MAX_MEDIA_PER_POST} files per post`);
+      }
+      for (const m of args.media) {
+        validateMediaItem(m);
+      }
+    }
+
     const now = Date.now();
     const id = await ctx.db.insert("posts", {
       author: user.name ?? user.email,

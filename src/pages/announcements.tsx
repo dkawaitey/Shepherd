@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import {
   EmptyState,
   PageHeader,
@@ -23,7 +24,6 @@ import {
 
 import {
   FileIcon,
-  Image as ImageIcon,
   MessageSquare,
   Paperclip,
   Pin,
@@ -31,10 +31,60 @@ import {
   Search,
   Send,
   Trash2,
-  Video,
   X,
   UserRound,
+  Music,
+  AlertCircle,
 } from "lucide-react";
+
+// ── Client-side media helpers ──────────────────────────────────────
+const ALLOWED_MIME = new Set([
+  "image/jpeg", "image/png", "image/webp", "image/avif",
+  "video/mp4", "video/webm",
+  "audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm",
+  "application/pdf",
+]);
+const MAX_SIZES: Record<string, number> = { image: 8 * 1024 * 1024, video: 18 * 1024 * 1024, audio: 12 * 1024 * 1024, file: 10 * 1024 * 1024 };
+const MAX_MEDIA = 5;
+const MAX_IMAGE_DIM = 1920;
+const THUMB_SIZE = 320;
+
+function classifyMime(m: string): "image" | "video" | "audio" | "file" {
+  if (m.startsWith("image/")) return "image";
+  if (m.startsWith("video/")) return "video";
+  if (m.startsWith("audio/")) return "audio";
+  return "file";
+}
+function formatBytes(b: number) { return b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`; }
+
+async function optimizeImage(file: File): Promise<{ blob: Blob; width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(url); let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX_IMAGE_DIM || h > MAX_IMAGE_DIM) { const s = MAX_IMAGE_DIM / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+      const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      c.toBlob((b) => b ? resolve({ blob: b, width: w, height: h }) : reject(new Error("Compress failed")), "image/jpeg", 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Load failed")); };
+    img.src = url;
+  });
+}
+
+async function generateThumbnail(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(url); let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > THUMB_SIZE || h > THUMB_SIZE) { const s = THUMB_SIZE / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+      const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      c.toBlob((b) => b ? resolve(b) : reject(new Error("Thumb failed")), "image/jpeg", 0.75);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Thumb load failed")); };
+    img.src = url;
+  });
+}
+
+type MediaItem = { storageId: string; type: string; name: string; mimeType: string; size: number; width?: number; height?: number; thumbnailStorageId?: string; status: string; uploadedAt: number; };
+
 
 export default function Announcements() {
   const [search, setSearch] = useState("");
@@ -545,20 +595,49 @@ function CreatePostDialog({
             setBusy(true);
             setError(null);
             try {
-              // Upload media files
-              const uploadedMedia: { storageId: string; type: string; name: string }[] = [];
+              // Upload media files with validation + optimization
+              const uploadedMedia: MediaItem[] = [];
               for (const pf of pendingFiles) {
+                let fileToUpload = pf.file;
+                let width: number | undefined;
+                let height: number | undefined;
+                let thumbStorageId: string | undefined;
+                const category = detectType(pf.file);
+
+                // Client-side image optimization + thumbnail
+                if (category === "image" && pf.file.type.startsWith("image/")) {
+                  try {
+                    const optimized = await optimizeImage(pf.file);
+                    fileToUpload = new File([optimized.blob], pf.file.name, { type: "image/jpeg" });
+                    width = optimized.width;
+                    height = optimized.height;
+                    const thumbBlob = await generateThumbnail(pf.file);
+                    const thumbFile = new File([thumbBlob], `thumb_${pf.file.name}`, { type: "image/jpeg" });
+                    const thumbUrl = await generateUploadUrl();
+                    const thumbRes = await fetch(thumbUrl, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: thumbFile });
+                    const thumbData = await thumbRes.json();
+                    thumbStorageId = thumbData.storageId;
+                  } catch { /* proceed with original file */ }
+                }
+
                 const url = await generateUploadUrl();
                 const res = await fetch(url, {
                   method: "POST",
-                  headers: { "Content-Type": pf.file.type },
-                  body: pf.file,
+                  headers: { "Content-Type": fileToUpload.type },
+                  body: fileToUpload,
                 });
                 const { storageId } = await res.json();
                 uploadedMedia.push({
                   storageId,
-                  type: detectType(pf.file),
+                  type: category,
                   name: pf.file.name,
+                  mimeType: fileToUpload.type,
+                  size: fileToUpload.size,
+                  width,
+                  height,
+                  thumbnailStorageId: thumbStorageId,
+                  status: "ready",
+                  uploadedAt: Date.now(),
                 });
               }
 

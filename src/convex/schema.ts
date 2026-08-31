@@ -323,8 +323,16 @@ const schema = defineSchema(
       tags: v.optional(v.array(v.string())),
       media: v.optional(v.array(v.object({
         storageId: v.string(),
-        type: v.string(), // "image" | "video" | "file"
+        type: v.string(), // "image" | "video" | "audio" | "file"
         name: v.string(),
+        mimeType: v.string(),
+        size: v.number(), // bytes
+        width: v.optional(v.number()),
+        height: v.optional(v.number()),
+        duration: v.optional(v.number()), // seconds (audio/video)
+        thumbnailStorageId: v.optional(v.string()),
+        status: v.string(), // "pending" | "uploading" | "processing" | "ready" | "failed"
+        uploadedAt: v.number(),
       }))),
       isPinned: v.optional(v.boolean()),
       isDeleted: v.optional(v.boolean()),
