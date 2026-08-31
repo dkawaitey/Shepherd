@@ -25,7 +25,7 @@ export const list = query({
     if (!user) return [];
 
     let all = await ctx.db.query("followUps").collect();
-    all = all.filter((f) => !f.isDeleted);
+    // Hard deletes: no isDeleted filter needed
 
     if (args.status) all = all.filter((f) => f.status === args.status);
     if (args.worker) all = all.filter((f) => f.assignedWorker === args.worker);
@@ -40,9 +40,8 @@ export const list = query({
         )
           .filter(
             (c) =>
-              !c.isDeleted &&
-              (c.fullName.toLowerCase().includes(q) ||
-                c.membershipId.toLowerCase().includes(q)),
+              c.fullName.toLowerCase().includes(q) ||
+                c.membershipId.toLowerCase().includes(q),
           )
           .map((c) => c._id),
       );
@@ -75,7 +74,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.contactId);
-    if (!contact || contact.isDeleted) throw new Error("Contact not found");
+    if (!contact) throw new Error("Contact not found");
     assertClassScope(user, contact.klass);
     if (!FOLLOWUP_TYPE_LABELS[args.type]) throw new Error("Invalid follow-up type");
 
@@ -88,7 +87,7 @@ export const create = mutation({
       reminder: args.reminder ?? false,
       status: FOLLOWUP_STATUS.PENDING,
       locked: false,
-      isDeleted: false,
+
       createdAt: Date.now(),
     });
     await logAudit(ctx, {
@@ -133,7 +132,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const f = await ctx.db.get(args.id);
-    if (!f || f.isDeleted) throw new Error("Follow-up not found");
+    if (!f) throw new Error("Follow-up not found");
     if (f.status !== FOLLOWUP_STATUS.PENDING) {
       throw new Error("Only pending follow-ups can be edited");
     }
@@ -170,7 +169,7 @@ export const changeStatus = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const f = await ctx.db.get(args.id);
-    if (!f || f.isDeleted) throw new Error("Follow-up not found");
+    if (!f) throw new Error("Follow-up not found");
     const fuContact = await ctx.db.get(f.contactId);
     assertClassScope(user, fuContact?.klass);
 
@@ -302,7 +301,7 @@ export const remove = mutation({
     if (f.status !== FOLLOWUP_STATUS.PENDING && !hasRole(user, ROLES.ADMIN)) {
       throw new Error("Only pending follow-ups can be deleted");
     }
-    await ctx.db.patch(args.id, { isDeleted: true });
+    await ctx.db.delete(args.id);
     await logAudit(ctx, {
       action: "followup.delete",
       entityType: "followUps",

@@ -32,7 +32,7 @@ export const list = query({
     if (!user) return [];
 
     let posts = await ctx.db.query("posts").collect();
-    posts = posts.filter((p) => !p.isDeleted);
+    // Hard deletes: no isDeleted filter needed
 
     if (args.search) {
       const q = args.search.toLowerCase();
@@ -54,7 +54,6 @@ export const list = query({
     const comments = await ctx.db.query("comments").collect();
     const commentCount = new Map<string, number>();
     for (const c of comments) {
-      if (c.isDeleted) continue;
       commentCount.set(c.postId, (commentCount.get(c.postId) ?? 0) + 1);
     }
 
@@ -72,16 +71,14 @@ export const get = query({
     const user = await getCurrentUser(ctx);
     if (!user) return null;
     const post = await ctx.db.get(args.id);
-    if (!post || post.isDeleted) return null;
+    if (!post) return null;
     const comments = await ctx.db
       .query("comments")
       .withIndex("postId", (q) => q.eq("postId", args.id))
       .collect();
     return {
       ...post,
-      comments: comments
-        .filter((c) => !c.isDeleted)
-        .sort((a, b) => a.createdAt - b.createdAt),
+      comments: comments.sort((a, b) => a.createdAt - b.createdAt),
     };
   },
 });
@@ -115,7 +112,6 @@ export const create = mutation({
       tags: args.tags,
       media: args.media,
       isPinned: false,
-      isDeleted: false,
       createdAt: now,
       updatedAt: now,
     });
@@ -190,11 +186,11 @@ export const addComment = mutation({
     const user = await getCurrentUser(ctx);
     if (!user || user.isAnonymous) throw new Error("Sign in to comment");
     const post = await ctx.db.get(args.postId);
-    if (!post || post.isDeleted) throw new Error("Post not found");
+    if (!post) throw new Error("Post not found");
     if (!args.body.trim()) throw new Error("Comment is required");
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
-      if (!parent || parent.isDeleted || parent.postId !== args.postId) {
+      if (!parent || parent.postId !== args.postId) {
         throw new Error("The comment you are replying to no longer exists");
       }
     }
@@ -204,7 +200,6 @@ export const addComment = mutation({
       author: user.name ?? user.email ?? "Member",
       authorId: user._id,
       body: args.body.trim(),
-      isDeleted: false,
       createdAt: Date.now(),
     });
 
@@ -271,7 +266,8 @@ export const addComment = mutation({
   },
 });
 
-/** Remove own post, or any post as admin. */
+/** Remove own post, or any post as admin. Hard-deletes the post,
+ *  its media blobs from Convex storage, and all comments. */
 export const remove = mutation({
   args: { id: v.id("posts") },
   handler: async (ctx, args) => {
@@ -285,7 +281,27 @@ export const remove = mutation({
     if (user.role !== ROLES.ADMIN && post.authorId !== user._id) {
       throw new Error("You can only remove your own posts");
     }
-    await ctx.db.patch(args.id, { isDeleted: true });
+
+    // Delete attached media files from Convex storage
+    if (post.media && post.media.length > 0) {
+      for (const m of post.media) {
+        try {
+          await ctx.storage.delete(m.storageId as any);
+        } catch { /* best-effort: file may already be gone */ }
+      }
+    }
+
+    // Hard-delete all comments on this post
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("postId", (q) => q.eq("postId", args.id))
+      .collect();
+    for (const c of comments) {
+      await ctx.db.delete(c._id);
+    }
+
+    // Hard-delete the post itself
+    await ctx.db.delete(args.id);
     await logAudit(ctx, {
       action: "post.delete",
       entityType: "posts",
@@ -295,7 +311,7 @@ export const remove = mutation({
   },
 });
 
-/** Remove own comment, or any comment as admin. */
+/** Remove own comment, or any comment as admin. Hard-deletes. */
 export const removeComment = mutation({
   args: { id: v.id("comments") },
   handler: async (ctx, args) => {
@@ -309,7 +325,16 @@ export const removeComment = mutation({
     if (user.role !== ROLES.ADMIN && comment.authorId !== user._id) {
       throw new Error("You can only remove your own comments");
     }
-    await ctx.db.patch(args.id, { isDeleted: true });
+    // Hard-delete any replies to this comment first
+    const replies = await ctx.db
+      .query("comments")
+      .collect();
+    for (const r of replies) {
+      if (r.parentId === args.id) {
+        await ctx.db.delete(r._id);
+      }
+    }
+    await ctx.db.delete(args.id);
   },
 });
 
