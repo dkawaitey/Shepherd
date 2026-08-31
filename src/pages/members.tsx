@@ -1287,6 +1287,7 @@ function EditMemberDialog({
   const isAdmin = me?.role === ROLES.ADMIN;
   const [form, setForm] = useState<Record<string, string>>({
     fullName: member.fullName ?? "",
+    gender: member.gender ?? "",
     klass: member.klass ?? "",
     position: member.position ?? effectivePosition(member.position, member.isClassLeader),
     status: member.status ?? "active",
@@ -1308,6 +1309,7 @@ function EditMemberDialog({
       await update({
         id: member._id,
         fullName: form.fullName.trim(),
+        gender: form.gender || undefined,
         klass: form.klass || undefined,
         position: form.position || undefined,
         status: form.status === "active" ? "active" : "inactive",
@@ -1343,6 +1345,21 @@ function EditMemberDialog({
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="e-gender">Gender</Label>
+              <Select
+                value={form.gender || undefined}
+                onValueChange={(v) => setForm((f) => ({ ...f, gender: v }))}
+              >
+                <SelectTrigger id="e-gender" className="mt-1 w-full">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label htmlFor="e-class">Class</Label>
               <Select
