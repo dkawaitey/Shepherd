@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { requireAdmin, getCurrentUser } from "./helpers";
+import { checkRateLimit } from "./rateLimit";
 
 /** Return the VAPID public key so the browser can subscribe. */
 export const getPublicKey = query({
@@ -101,6 +102,7 @@ export const mySubscriptionStatus = query({
 export const sendTestNotification = mutation({
   args: {},
   handler: async (ctx) => {
+    await checkRateLimit(ctx, "push.sendTestNotification");
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new ConvexError("Sign in to send a test notification.");
 

@@ -13,6 +13,8 @@ import {
 } from "./constants";
 import { nextMembershipId } from "./contacts";
 import { getCurrentUser, hasRole, logAudit, nowIso, requireRole, classScoped } from "./helpers";
+import { checkRateLimit } from "./rateLimit";
+import { validateName, validateEmail, validatePhone } from "./validate";
 
 /** Validate + normalize a member's position / class-leader flag (admin-only
  *  values). Prevents contradictory combinations, e.g. Read-only Leader + Class
@@ -124,7 +126,11 @@ export const create = mutation({
     isClassLeader: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "members.create");
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    args.fullName = validateName(args.fullName);
+    if (args.email) args.email = validateEmail(args.email);
+    if (args.phone) args.phone = validatePhone(args.phone);
     const isAdminCaller = hasRole(user, ROLES.ADMIN);
     // Only administrators may appoint ministry positions / class leadership.
     const classLeader = isAdminCaller ? args.classLeader : undefined;
@@ -217,7 +223,11 @@ export const update = mutation({
     isClassLeader: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "members.update");
     const user = await requireRole(ctx, []);
+    if (args.fullName) args.fullName = validateName(args.fullName);
+    if (args.email) args.email = validateEmail(args.email);
+    if (args.phone) args.phone = validatePhone(args.phone);
     const isAdminCaller = hasRole(user, ROLES.ADMIN);
     const { id, ...data } = args;
     const member = await ctx.db.get(id);

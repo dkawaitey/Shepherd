@@ -3,6 +3,8 @@ import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
 import { ROLES } from "./constants";
+import { checkRateLimit } from "./rateLimit";
+import { validatePostTitle, validatePostBody, validateCommentBody } from "./validate";
 
 // ── Media validation constants ───────────────────────────────────────
 const ALLOWED_MIME_TYPES = new Set([
@@ -171,10 +173,9 @@ export const create = mutation({
       ROLES.WORKER,
       ROLES.LEADER,
     ]);
-    if (!args.title.trim()) throw new Error("Title is required");
-    if (args.title.trim().length > 500) throw new Error("Title must be under 500 characters");
-    if (!args.body.trim()) throw new Error("Content is required");
-    if (args.body.trim().length > 10000) throw new Error("Content must be under 10,000 characters");
+    await checkRateLimit(ctx, "post.create");
+    const title = validatePostTitle(args.title);
+    const body = validatePostBody(args.body);
 
     // Validate media attachments server-side
     if (args.media) {
@@ -190,8 +191,8 @@ export const create = mutation({
     const id = await ctx.db.insert("posts", {
       author: user.name ?? user.email,
       authorId: user._id,
-      title: args.title.trim(),
-      body: args.body.trim(),
+      title,
+      body,
       tags: args.tags,
       media: args.media,
       isPinned: false,
@@ -202,7 +203,7 @@ export const create = mutation({
       action: "post.create",
       entityType: "posts",
       entityId: id,
-      details: args.title.trim(),
+      details: title,
     });
 
     // Schedule push notification for all active users including the author
@@ -222,7 +223,7 @@ export const create = mutation({
           status: "scheduled",
           payload: {
             title: "New announcement",
-            body: `${user.name ?? user.email ?? "Someone"}: ${args.title.trim()}`,
+            body: `${user.name ?? user.email ?? "Someone"}: ${title}`,
             url: "/announcements",
           },
           recipientUserIds: recipientIds as any,
@@ -270,8 +271,8 @@ export const addComment = mutation({
     if (!user || user.isAnonymous) throw new Error("Sign in to comment");
     const post = await ctx.db.get(args.postId);
     if (!post) throw new Error("Post not found");
-    if (!args.body.trim()) throw new Error("Comment is required");
-    if (args.body.trim().length > 5000) throw new Error("Comment must be under 5,000 characters");
+    await checkRateLimit(ctx, "post.addComment");
+    const body = validateCommentBody(args.body);
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
       if (!parent || parent.postId !== args.postId) {
@@ -283,7 +284,7 @@ export const addComment = mutation({
       parentId: args.parentId,
       author: user.name ?? user.email ?? "Member",
       authorId: user._id,
-      body: args.body.trim(),
+      body,
       createdAt: Date.now(),
     });
 
@@ -320,7 +321,7 @@ export const addComment = mutation({
           status: "scheduled",
           payload: {
             title: label,
-            body: `${user.name ?? user.email ?? "Someone"}: ${args.body.trim().slice(0, 120)}`,
+            body: `${user.name ?? user.email ?? "Someone"}: ${body.slice(0, 120)}`,
             url: "/announcements",
           },
           recipientUserIds: recipientIds as any,

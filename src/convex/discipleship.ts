@@ -10,6 +10,8 @@ import {
   assertClassScope,
   isScopedClassLeader,
 } from "./helpers";
+import { checkRateLimit } from "./rateLimit";
+import { validateText, validateOptionalText } from "./validate";
 
 // ================= Bible Studies =================
 
@@ -328,7 +330,10 @@ export const addPrayer = mutation({
     confidential: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "discipleship.recordAttendance");
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    args.title = validateText(args.title, "Prayer title", 200);
+    args.summary = validateText(args.summary, "Prayer summary", 5000);
     if (!args.contactId && !args.memberId) throw new Error("A contact or member is required");
     let subjectName = "";
     if (args.contactId) {

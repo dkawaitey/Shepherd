@@ -9,6 +9,7 @@ import {
   ROLES,
 } from "./constants";
 import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, assertClassScope } from "./helpers";
+import { checkRateLimit } from "./rateLimit";
 
 /** List follow-ups (optionally joined with contact name). Workers see their assigned contacts' follow-ups. */
 export const list = query({
@@ -72,6 +73,7 @@ export const create = mutation({
     reminder: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "followup.create");
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.contactId);
     if (!contact) throw new Error("Contact not found");

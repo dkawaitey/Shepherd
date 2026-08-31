@@ -2,6 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, internalQuery, query, QueryCtx } from "./_generated/server";
 import { logAudit, requireAdmin, requireRole, hasRole, validClassScope } from "./helpers";
+import { checkRateLimit } from "./rateLimit";
+import { validateName, validatePhone } from "./validate";
 import {
   ROLES,
   ROLE_LABELS,
@@ -439,8 +441,11 @@ export const setRole = mutation({
 export const updateProfile = mutation({
   args: { name: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "users.updateProfile");
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.LEADER, ROLES.CLASS_LEADER]);
-    await ctx.db.patch(user._id, { name: args.name, phone: args.phone });
+    const name = validateName(args.name, "Name");
+    const phone = args.phone.trim();
+    await ctx.db.patch(user._id, { name, phone });
   },
 });
 
@@ -451,6 +456,7 @@ export const updateProfile = mutation({
 export const bootstrapAdmin = mutation({
   args: {},
   handler: async (ctx) => {
+    await checkRateLimit(ctx, "users.bootstrapAdmin");
     const user = await getCurrentUser(ctx);
     // Prevent anonymous / unverified users from becoming admin
     if (!user || user.isAnonymous || !user.email) return;

@@ -3,6 +3,8 @@ import { mutation, query, MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { STAGE_ORDER, STAGES, STAGE_LABELS, ROLES } from "./constants";
 import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, classScoped, assertClassScope } from "./helpers";
+import { checkRateLimit } from "./rateLimit";
+import { validateName, validateEmail, validatePhone, validateOptionalText } from "./validate";
 
 const contactFields = {
   fullName: v.string(),
@@ -182,8 +184,12 @@ export const get = query({
 export const create = mutation({
   args: { ...contactFields, dateMetRequired: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "contacts.create");
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const { dateMetRequired: _unused, ...data } = args;
+    data.fullName = validateName(data.fullName);
+    if (data.email) data.email = validateEmail(data.email);
+    if (data.phone) data.phone = validatePhone(data.phone);
     const scope = classScoped(user);
     if (scope) data.klass = scope; // class leaders can only create within their own class
     const dateMet = data.dateMet || nowIso();
@@ -268,7 +274,10 @@ export const quickAdd = mutation({
     dateMet: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "contacts.quickAdd");
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    args.fullName = validateName(args.fullName);
+    if (args.phone) args.phone = validatePhone(args.phone);
     const scope = classScoped(user);
     if (scope) {
       args.klass = scope; // class leaders can only create within their own class

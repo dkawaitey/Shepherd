@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, internalMutation, internalQuery, query } from "./_generated/server";
 import { getCurrentUser, requireAdmin } from "./helpers";
+import { checkRateLimit } from "./rateLimit";
 
 // ================= Settings =================
 
