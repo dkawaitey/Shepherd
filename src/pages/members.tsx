@@ -1283,6 +1283,7 @@ function EditMemberDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const update = useMutation(api.members.update);
+  const addNote = useMutation(api.discipleship.addNote);
   const me = useQuery(api.users.currentUser);
   const isAdmin = me?.role === ROLES.ADMIN;
   const [form, setForm] = useState<Record<string, string>>({
@@ -1295,6 +1296,7 @@ function EditMemberDialog({
   const [isClassLeader, setIsClassLeader] = useState(!!member.isClassLeader);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noteContent, setNoteContent] = useState("");
   const position = effectivePosition(form.position, isClassLeader);
 
   const save = async (e: React.FormEvent) => {
@@ -1315,6 +1317,13 @@ function EditMemberDialog({
         status: form.status === "active" ? "active" : "inactive",
         isClassLeader,
       } as any);
+      if (noteContent.trim()) {
+        await addNote({
+          memberId: member._id as any,
+          type: "ministry",
+          content: noteContent.trim(),
+        });
+      }
       toast.success("Member updated — linked account permissions synced");
       onOpenChange(false);
     } catch (err: any) {
@@ -1448,6 +1457,17 @@ function EditMemberDialog({
               />
             </div>
           )}
+          <div>
+            <Label htmlFor="e-note">Add a note</Label>
+            <Textarea
+              id="e-note"
+              className="mt-1"
+              rows={3}
+              placeholder="Quick ministry note, counselling observation..."
+              value={noteContent}
+              onChange={(e) => setNoteContent(e.target.value)}
+            />
+          </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
