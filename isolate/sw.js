@@ -9,7 +9,7 @@
  */
 
 const NOTIFICATION_CHANNEL = "shepherd-notifications";
-const CACHE = "shepherd-shell-v3";
+const CACHE = "shepherd-shell-v4";
 const SHELL = [
   "/",
   "/index.html",
@@ -106,7 +106,7 @@ self.addEventListener("push", (event) => {
       data: { url },
       tag,
       renotify: true,
-      requireInteraction: false,
+      requireInteraction: true,
       silent: false,
       vibrate: [200, 100, 200],
     }),
