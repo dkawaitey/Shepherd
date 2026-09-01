@@ -291,10 +291,6 @@ const schema = defineSchema(
       ), // last low-attendance follow-up (recorded from the Attendance page)
       isDeleted: v.optional(v.boolean()),
 
-      // Steward member sync (cross-app member exchange)
-      stewardId: v.optional(v.string()), // the member's id in the Steward app
-      stewardUpdatedAt: v.optional(v.number()), // last-modified timestamp from Steward (conflict resolution)
-      syncedAt: v.optional(v.number()), // last time this record was written by the sync
 
       createdAt: v.number(),
       updatedAt: v.number(),

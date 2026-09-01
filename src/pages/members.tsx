@@ -66,7 +66,6 @@ import {
   Download,
   FileText,
   Heart,
-  Link2,
   Lock,
   Mail,
   MessageCircle,
@@ -251,12 +250,7 @@ export default function Members() {
                     Promoted from contacts
                   </span>
                 )}
-                {m.stewardId && (
-                  <span className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
-                    <Link2 className="h-2.5 w-2.5" />
-                    Synced with Steward
-                  </span>
-                )}
+
                 <span>{m.klass} Class</span>
                 {m.area && <span>Area: {m.area}</span>}
                 {m.classLeader && <span>Leader: {m.classLeader}</span>}

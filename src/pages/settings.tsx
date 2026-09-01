@@ -40,9 +40,7 @@ import {
   Bell,
   Download,
   FileText,
-  Link2,
   MailCheck,
-  RefreshCw,
   Send,
   ContactRound,
 } from "lucide-react";
@@ -529,7 +527,6 @@ function IntegrationsTab() {
   return (
     <div className="max-w-lg space-y-4">
       <EmailRemindersSection />
-      <StewardSyncSection />
     </div>
   );
 }
@@ -699,178 +696,7 @@ function EmailRemindersSection() {
   );
 }
 
-function TestSyncButton() {
-  const testSync = useAction(api.sync.testSync);
-  const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
 
-  return (
-    <div>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={testing}
-        onClick={async () => {
-          setTesting(true);
-          setResult(null);
-          try {
-            const res = await testSync();
-            if (res.ok) {
-              setResult(`✅ Success (${res.status}): ${res.body}`);
-              toast.success("Test sync succeeded — check Steward!");
-            } else {
-              setResult(`❌ Failed (${res.status ?? "N/A"}): ${res.error ?? res.body}`);
-              toast.error("Test sync failed — see details below");
-            }
-          } catch (e) {
-            setResult(`❌ Error: ${e instanceof Error ? e.message : String(e)}`);
-            toast.error("Test sync threw an error");
-          } finally {
-            setTesting(false);
-          }
-        }}
-      >
-        {testing ? "Testing…" : "Test Sync"}
-      </Button>
-      {result && (
-        <p className="mt-1.5 text-[10px] text-muted-foreground break-all">{result}</p>
-      )}
-    </div>
-  );
-}
-
-function StewardSyncSection() {
-  const settings = useQuery(api.settings.get);
-  const setSetting = useMutation(api.settings.set);
-  const getStatus = useAction(api.steward.status);
-  const runSync = useAction(api.steward.syncNow);
-
-  const [status, setStatus] = useState<{
-    configured: boolean;
-    baseUrl?: string;
-    enabled: boolean;
-    lastSync?: string;
-    lastResult?: string;
-    total: number;
-    synced: number;
-    unsynced: number;
-  } | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [enabled, setEnabled] = useState(true);
-
-  useEffect(() => {
-    getStatus().then(setStatus).catch(() => undefined);
-  }, [getStatus]);
-
-  useEffect(() => {
-    if (settings && settings["steward.enabled"] !== undefined) {
-      setEnabled(settings["steward.enabled"] !== "false");
-    }
-  }, [settings]);
-
-  let lastResultText = "Never synced yet — run a sync or wait for the hourly job.";
-  if (status?.lastResult) {
-    try {
-      const r = JSON.parse(status.lastResult) as { sent?: number; matched?: number };
-      lastResultText = `Last push sent ${r.sent ?? 0} members and linked ${r.matched ?? 0} Steward records.`;
-    } catch {
-      // keep the default text if the stored result is unreadable
-    }
-  }
-
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Link2 className="h-4 w-4 text-primary" />
-        <p className="term-label">// steward member sync</p>
-      </div>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
-          <div>
-            <div className="text-xs font-semibold">Steward connection</div>
-            <div className="text-[10px] text-muted-foreground">
-              {status === null
-                ? "Checking connection…"
-                : status.configured
-                  ? `Connected — pushing to ${status.baseUrl}`
-                  : "Not connected — APP_B_SYNC_URL or SYNC_SHARED_SECRET missing in Convex env vars"}
-            </div>
-          </div>
-          <span
-            className={cn(
-              "h-2 w-2 shrink-0 rounded-full",
-              status?.configured ? "bg-[#86efac]" : "bg-[#fbbf24]",
-            )}
-          />
-        </div>
-
-        <div className="flex items-center justify-between border-b border-dashed pb-3">
-          <div>
-            <div className="text-[13px] font-medium">Automatic background sync</div>
-
-          </div>
-          <Switch
-            checked={enabled}
-            onCheckedChange={async (v) => {
-              setEnabled(v);
-              await setSetting({ key: "steward.enabled", value: String(v) });
-              toast.success(v ? "Automatic sync enabled" : "Automatic sync paused");
-            }}
-          />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { label: "total members", value: status?.total ?? 0 },
-            { label: "synced", value: status?.synced ?? 0 },
-            { label: "not yet synced", value: status?.unsynced ?? 0 },
-          ].map((it) => (
-            <div key={it.label} className="rounded-md border bg-muted/40 px-2.5 py-2">
-              <div className="font-mono text-sm font-bold">{it.value}</div>
-              <div className="text-[9px] leading-3 text-muted-foreground">{it.label}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            disabled={!status?.configured || syncing}
-            onClick={async () => {
-              setSyncing(true);
-              try {
-                const res = await runSync();
-                if (res.ok) {
-                  toast.success("Sync complete — members pushed to Steward");
-                } else {
-                  toast.error(res.push?.reason || "Sync failed");
-                }
-                const s = await getStatus();
-                setStatus(s);
-              } finally {
-                setSyncing(false);
-              }
-            }}
-          >
-            <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", syncing && "animate-spin")} />
-            {syncing ? "Syncing…" : "Sync now"}
-          </Button>
-          <TestSyncButton />
-        </div>
-
-        <div>
-          <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">last sync</p>
-          <p className="text-[11px] leading-4 text-muted-foreground">
-            {status?.lastSync ? fmtDateTime(new Date(Number(status.lastSync)).toISOString()) : "Never"} ·{" "}
-            {lastResultText}
-          </p>
-        </div>
-
-
-      </div>
-    </div>
-  );
-}
 
 function NotificationsTab() {
   const me = useQuery(api.users.currentUser);

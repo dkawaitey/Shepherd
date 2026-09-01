@@ -49,7 +49,6 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   // Notification/broadcast — very strict
   "push.sendTestNotification": { maxRequests: 3, windowMs: 60_000 },
   "emails.sendNow": { maxRequests: 2, windowMs: 300_000 },
-  "steward.syncNow": { maxRequests: 3, windowMs: 300_000 },
 
   // Destructive operations — controlled
   "contacts.remove": { maxRequests: 5, windowMs: 60_000 },
