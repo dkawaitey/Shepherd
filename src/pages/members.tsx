@@ -565,6 +565,10 @@ export function MemberProfile() {
   }
   const { member, attendance, prayers, notes } = data;
   const linked = (accounts ?? []).find((a) => a.memberId === member._id);
+  // Only show unlinked accounts + the currently linked one (so it can be unlinked)
+  const availableAccounts = (accounts ?? []).filter(
+    (a) => !a.memberId || a.memberId === member._id,
+  );
   const chip = positionChip(member);
   const visibleNotes = notes.filter((n) => !n.isPrivate || canSeeConfidential);
 
@@ -803,10 +807,9 @@ export function MemberProfile() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">— No account —</SelectItem>
-                    {(accounts ?? []).map((a) => (
+                    {availableAccounts.map((a) => (
                       <SelectItem key={a._id} value={a._id}>
                         {a.name || a.email}
-                        {a.memberId && a.memberId !== member._id ? " · linked elsewhere" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
