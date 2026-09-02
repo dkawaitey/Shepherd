@@ -450,7 +450,7 @@ function AddMemberDialog({
                 }}
               >
                 <SelectTrigger id="m-position" className="mt-1 w-full">
-                  <SelectValue placeholder="Ordinary Member" />
+                  <SelectValue placeholder="Member" />
                 </SelectTrigger>
                 <SelectContent>
                   {POSITION_OPTIONS.map((p) => (
@@ -1416,7 +1416,7 @@ function EditMemberDialog({
                 }}
               >
                 <SelectTrigger id="e-position" className="mt-1 w-full">
-                  <SelectValue placeholder="Ordinary Member" />
+                  <SelectValue placeholder="Member" />
                 </SelectTrigger>
                 <SelectContent>
                   {POSITION_OPTIONS.map((p) => (
