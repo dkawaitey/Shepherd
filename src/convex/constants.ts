@@ -45,7 +45,7 @@ export const POSITION_LABELS: Record<string, string> = {
   [POSITIONS.CLASS_LEADER]: "Class Leader",
   [POSITIONS.WORKER]: "Follow-up Worker",
   [POSITIONS.LEADER]: "Read-only Leader",
-  [POSITIONS.MEMBER]: "Ordinary Member",
+  [POSITIONS.MEMBER]: "Member",
 };
 
 export const POSITION_OPTIONS: Position[] = [
