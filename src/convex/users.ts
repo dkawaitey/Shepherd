@@ -475,14 +475,52 @@ export const bootstrapAdmin = mutation({
   },
 });
 
-/** Remove a user account (admin only). */
+/**
+ * Remove a user account (admin only).
+ *
+ * Deleting only the user document would leave the sign-in behind: Convex Auth
+ * keeps the account, its sessions and refresh tokens, so the same email could
+ * sign back in as a ghost account with no profile. This purges the Convex Auth
+ * records too, so a mistakenly signed-in email is fully removed.
+ */
 export const removeUser = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "users.removeUser");
     const admin = await requireAdmin(ctx);
     if (args.userId === admin._id) throw new Error("You cannot remove yourself");
     const target = await ctx.db.get(args.userId);
     if (!target) throw new Error("User not found");
+
+    // Sign-in accounts (email OTP, guest, federated) plus any pending codes.
+    const accounts = await ctx.db
+      .query("authAccounts")
+      .withIndex("userIdAndProvider", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const account of accounts) {
+      const codes = await ctx.db
+        .query("authVerificationCodes")
+        .withIndex("accountId", (q) => q.eq("accountId", account._id))
+        .collect();
+      for (const code of codes) await ctx.db.delete(code._id);
+      await ctx.db.delete(account._id);
+    }
+
+    // Active sessions and their refresh tokens — signs the account out
+    // everywhere as soon as the current access token expires.
+    const sessions = await ctx.db
+      .query("authSessions")
+      .withIndex("userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const session of sessions) {
+      const tokens = await ctx.db
+        .query("authRefreshTokens")
+        .withIndex("sessionId", (q) => q.eq("sessionId", session._id))
+        .collect();
+      for (const token of tokens) await ctx.db.delete(token._id);
+      await ctx.db.delete(session._id);
+    }
+
     await ctx.db.delete(args.userId);
     await logAudit(ctx, {
       action: "user.delete",

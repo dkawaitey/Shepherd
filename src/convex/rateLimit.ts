@@ -53,7 +53,8 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   // Destructive operations — controlled
   "contacts.remove": { maxRequests: 5, windowMs: 60_000 },
   "members.remove": { maxRequests: 5, windowMs: 60_000 },
-  "users.removeUser": { maxRequests: 3, windowMs: 300_000 },
+  // Bumped so an admin can clean up a batch of mistaken sign-ins (2x for admins).
+  "users.removeUser": { maxRequests: 10, windowMs: 300_000 },
   "users.setRoles": { maxRequests: 10, windowMs: 60_000 },
   "users.setRole": { maxRequests: 10, windowMs: 60_000 },
   "users.bootstrapAdmin": { maxRequests: 1, windowMs: 600_000 },

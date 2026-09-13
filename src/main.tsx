@@ -2,6 +2,7 @@ import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { AppShell } from "@/components/app-shell";
+import { useAuth } from "@/hooks/use-auth";
 import { InstallPrompt } from "@/components/install-prompt";
 import { ThemeProvider } from "@/components/theme-provider";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
@@ -9,7 +10,7 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 
 // Lazy load route components for better code splitting
@@ -40,6 +41,19 @@ function RouteLoading() {
       <div className="animate-pulse text-muted-foreground">Loading...</div>
     </div>
   );
+}
+
+/**
+ * The landing page is only for visitors. Signed-in users opening the app (or
+ * the installed PWA, whose start_url is "/") go straight into the dashboard
+ * instead of seeing the marketing page again.
+ */
+function LandingRoute() {
+  const { isLoading, isAuthenticated } = useAuth();
+
+  if (isLoading) return <RouteLoading />;
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <Landing />;
 }
 
 /** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
@@ -145,7 +159,7 @@ createRoot(document.getElementById("root")!).render(
               <RouteSyncer />
               <Suspense fallback={<RouteLoading />}>
                 <Routes>
-                  <Route path="/" element={<Landing />} />
+                  <Route path="/" element={<LandingRoute />} />
                   <Route
                     path="/auth"
                     element={<AuthPage redirectAfterAuth="/dashboard" />}

@@ -108,6 +108,8 @@ function UsersTab() {
     memberId: string;
     override: boolean;
   } | null>(null);
+  const [removing, setRemoving] = useState<NonNullable<typeof users>[number] | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const openEditor = (u: NonNullable<typeof users>[number]) => {
     const current = u.roles?.length ? [...u.roles] : u.role ? [u.role] : [];
@@ -260,15 +262,12 @@ function UsersTab() {
                           {u._id === me?._id && (
                             <span className="pr-2 text-[10px] text-muted-foreground">You</span>
                           )}
-                          {u._id !== me?._id && roleList.length > 0 && (
+                          {u._id !== me?._id && (
                             <Button
                               variant="ghost"
                               size="sm"
                               className="text-destructive hover:text-destructive"
-                              onClick={async () => {
-                                await removeUser({ userId: u._id });
-                                toast.success("User removed");
-                              }}
+                              onClick={() => setRemoving(u)}
                             >
                               Remove
                             </Button>
@@ -423,9 +422,59 @@ function UsersTab() {
             <Button onClick={saveRoles} disabled={!editing?.roles.length || !rolesEditable}>
               Save roles
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DialogFooter>          </DialogContent>
+        </Dialog>
+
+        {/* Remove-account confirmation — works for roleless accounts too, so a
+            mistaken sign-in can be cleaned up. */}
+        <Dialog
+          open={!!removing}
+          onOpenChange={(v) => {
+            if (!v && !isRemoving) setRemoving(null);
+          }}
+        >
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Remove account</DialogTitle>
+              <DialogDescription>
+                {removing?.email ?? removing?.name ?? "This account"} will lose
+                access to Shepherd and its sign-in email will be deleted, so it
+                must sign in again to be re-added. Any linked member record is
+                kept.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                disabled={isRemoving}
+                onClick={() => setRemoving(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={isRemoving}
+                onClick={async () => {
+                  if (!removing) return;
+                  setIsRemoving(true);
+                  try {
+                    await removeUser({ userId: removing._id });
+                    toast.success("Account removed");
+                    setRemoving(null);
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error ? err.message : "Could not remove account",
+                    );
+                  } finally {
+                    setIsRemoving(false);
+                  }
+                }}
+              >
+                {isRemoving ? "Removing..." : "Remove account"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
     </div>
   );
 }
