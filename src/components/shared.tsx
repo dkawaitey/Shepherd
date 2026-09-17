@@ -8,7 +8,16 @@ import {
   Stage,
 } from "@/convex/constants";
 import { ReactNode } from "react";
-import { Inbox } from "lucide-react";
+import { ChevronDown, Inbox, MessageCircle, MessageSquareText, Phone } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /** Human-readable labels for every role a user holds (e.g. "Administrator + Class Leader"). */
 export function formatRoles(user?: {
@@ -201,27 +210,225 @@ export function fmtDateTime(iso?: string) {
 export function formatError(err: unknown, fallback = "Something went wrong"): string {
   const data = (err as { data?: unknown } | null)?.data;
   if (typeof data === "string" && data.trim()) return data;
+  // Some libraries (Convex Auth) throw ConvexError with a `{ message }` payload.
+  if (data && typeof data === "object") {
+    const inner = (data as { message?: unknown }).message;
+    if (typeof inner === "string" && inner.trim()) return inner;
+  }
   const message = err instanceof Error ? err.message : undefined;
   if (message && message.trim()) return message;
   return fallback;
 }
 
+export type PhoneNumber = { label: string; digits: string };
+
+/**
+ * Pull every phone number out of a stored value.
+ *
+ * Volunteers often save two numbers in one box — "024 000 0000 / 055 000 0000"
+ * — so callers get each number separately instead of one unusable digit blob.
+ */
+export function parsePhoneNumbers(value?: string | null): PhoneNumber[] {
+  if (!value) return [];
+  const matches = value.match(/\+?\d[\d\s\-().]{4,}\d/g) ?? [];
+  const seen = new Set<string>();
+  const numbers: PhoneNumber[] = [];
+  for (const raw of matches) {
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length < 6 || digits.length > 20) continue;
+    if (seen.has(digits)) continue;
+    seen.add(digits);
+    numbers.push({
+      digits,
+      label: raw.replace(/[()]/g, " ").replace(/\s+/g, " ").trim(),
+    });
+  }
+  return numbers;
+}
+
 export function waLink(number?: string, text?: string) {
-  if (!number) return "#";
-  const digits = number.replace(/[^0-9]/g, "");
+  const digits = parsePhoneNumbers(number)[0]?.digits;
+  if (!digits) return "#";
   const url = `https://wa.me/${digits}`;
   return text ? `${url}?text=${encodeURIComponent(text)}` : url;
 }
 
 export function smsLink(number?: string, text?: string) {
-  if (!number) return "#";
-  const digits = number.replace(/[^0-9]/g, "");
+  const digits = parsePhoneNumbers(number)[0]?.digits;
+  if (!digits) return "#";
   return `sms:${digits}${text ? `?body=${encodeURIComponent(text)}` : ""}`;
 }
 
 export function telLink(number?: string) {
-  if (!number) return "#";
-  return `tel:${number.replace(/[^0-9+]/g, "")}`;
+  const digits = parsePhoneNumbers(number)[0]?.digits;
+  if (!digits) return "#";
+  return `tel:${digits}`;
+}
+
+type Channel = "call" | "whatsapp" | "sms";
+
+const CHANNEL_META: Record<
+  Channel,
+  { icon: typeof Phone; label: string; pickerVerb: string; external: boolean }
+> = {
+  call: { icon: Phone, label: "Call", pickerVerb: "Call", external: false },
+  whatsapp: {
+    icon: MessageCircle,
+    label: "WhatsApp",
+    pickerVerb: "Message on WhatsApp",
+    external: true,
+  },
+  sms: { icon: MessageSquareText, label: "SMS", pickerVerb: "Text", external: false },
+};
+
+const channelHref = (channel: Channel, digits: string, text?: string) => {
+  if (channel === "call") return `tel:${digits}`;
+  if (channel === "whatsapp")
+    return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
+  return `sms:${digits}${text ? `?body=${encodeURIComponent(text)}` : ""}`;
+};
+
+/**
+ * Call / WhatsApp / SMS buttons for a contact or member.
+ *
+ * One number on file → the button acts directly. Two or more (the ministry
+ * stores a primary and a backup number, sometimes both in one field) → the
+ * button asks which number to use before dialling.
+ */
+export function ContactChannelActions({
+  phone,
+  whatsapp,
+  whatsappText,
+  smsText,
+  compact = false,
+  className,
+}: {
+  phone?: string | null;
+  whatsapp?: string | null;
+  whatsappText?: string;
+  smsText?: string;
+  /** Icon-only square buttons (for cards) instead of labelled buttons. */
+  compact?: boolean;
+  className?: string;
+}) {
+  const callNumbers = parsePhoneNumbers(phone);
+  const whatsappNumbers = parsePhoneNumbers(whatsapp).length
+    ? parsePhoneNumbers(whatsapp)
+    : callNumbers;
+
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      <ChannelAction channel="call" numbers={callNumbers} compact={compact} />
+      <ChannelAction
+        channel="whatsapp"
+        numbers={whatsappNumbers}
+        compact={compact}
+        text={whatsappText}
+      />
+      <ChannelAction
+        channel="sms"
+        numbers={callNumbers}
+        compact={compact}
+        text={smsText}
+      />
+    </div>
+  );
+}
+
+function ChannelAction({
+  channel,
+  numbers,
+  text,
+  compact = false,
+}: {
+  channel: Channel;
+  numbers: PhoneNumber[];
+  text?: string;
+  compact?: boolean;
+}) {
+  const meta = CHANNEL_META[channel];
+  const Icon = meta.icon;
+  if (numbers.length === 0) return null;
+
+  const hover =
+    channel === "whatsapp"
+      ? "hover:border-status-green/50 hover:text-status-green"
+      : "hover:border-primary/50 hover:text-primary";
+
+  const triggerClass = compact
+    ? cn(
+        "flex h-7 items-center justify-center gap-0.5 rounded-md border text-muted-foreground transition-colors",
+        numbers.length > 1 ? "px-1.5" : "w-7",
+        hover,
+      )
+    : cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5", hover);
+
+  const iconEl = <Icon className="h-3.5 w-3.5" />;
+
+  // Single number: act immediately.
+  if (numbers.length === 1) {
+    const n = numbers[0]!;
+    return (
+      <a
+        href={channelHref(channel, n.digits, text)}
+        target={meta.external ? "_blank" : undefined}
+        rel={meta.external ? "noreferrer" : undefined}
+        title={`${meta.label} ${n.label}`}
+        onClick={(e) => e.stopPropagation()}
+        className={triggerClass}
+      >
+        {iconEl}
+        {!compact && meta.label}
+      </a>
+    );
+  }
+
+  // Several numbers: ask which one to use.
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title={`${numbers.length} numbers on file — choose one`}
+          onClick={(e) => e.stopPropagation()}
+          className={triggerClass}
+        >
+          {iconEl}
+          {!compact && meta.label}
+          <ChevronDown className="h-3 w-3 opacity-70" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="w-56"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <DropdownMenuLabel className="text-[11px] font-medium text-muted-foreground">
+          {numbers.length} numbers on file
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {numbers.map((n, i) => (
+          <DropdownMenuItem key={n.digits} asChild>
+            <a
+              href={channelHref(channel, n.digits, text)}
+              target={meta.external ? "_blank" : undefined}
+              rel={meta.external ? "noreferrer" : undefined}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="flex flex-col">
+                <span className="text-[12px] font-semibold">{n.label}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {meta.pickerVerb}
+                  {i === 0 ? " · primary" : " · backup"}
+                </span>
+              </span>
+            </a>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function mapsLink(location?: string) {

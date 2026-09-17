@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { STAGE_ORDER, STAGES, STAGE_LABELS, ROLES } from "./constants";
@@ -344,10 +344,10 @@ export const update = mutation({
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const { id, ...data } = args;
     const existing = await ctx.db.get(id);
-    if (!existing || existing.isDeleted) throw new Error("Contact not found");
+    if (!existing || existing.isDeleted) throw new ConvexError("Contact not found");
     assertClassScope(user, existing.klass);
     if (hasRole(user, ROLES.WORKER) && existing.assignedWorkerId !== user._id) {
-      throw new Error("You can only edit contacts assigned to you");
+      throw new ConvexError("You can only edit contacts assigned to you");
     }
     const scope = classScoped(user);
     if (scope) data.klass = scope; // a class leader cannot move a contact out of their class
@@ -368,7 +368,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Contact not found");
+    if (!existing) throw new ConvexError("Contact not found");
 
     // Clear every record attached to this contact: journey, follow-ups, bible
     // studies, attendance, prayer requests and notes.
@@ -407,9 +407,9 @@ export const setStage = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
-    if (!contact) throw new Error("Contact not found");
+    if (!contact) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);
-    if (!STAGE_ORDER.includes(args.stage as any)) throw new Error("Invalid stage");
+    if (!STAGE_ORDER.includes(args.stage as any)) throw new ConvexError("Invalid stage");
     const stage = args.stage as (typeof STAGE_ORDER)[number];
     const date = (args.date || nowIso()).slice(0, 10);
     const wasBaptized = contact.status !== STAGES.BAPTIZED && stage === STAGES.BAPTIZED;
@@ -490,7 +490,7 @@ export const addJourneyEvent = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
-    if (!contact) throw new Error("Contact not found");
+    if (!contact) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);
     await ctx.db.insert("journeyEvents", {
       contactId: args.id,
@@ -534,10 +534,10 @@ export const merge = mutation({
   args: { primaryId: v.id("contacts"), duplicateId: v.id("contacts") },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
-    if (args.primaryId === args.duplicateId) throw new Error("Cannot merge a contact with itself");
+    if (args.primaryId === args.duplicateId) throw new ConvexError("Cannot merge a contact with itself");
     const primary = await ctx.db.get(args.primaryId);
     const dup = await ctx.db.get(args.duplicateId);
-    if (!primary || !dup) throw new Error("Contact not found");
+    if (!primary || !dup) throw new ConvexError("Contact not found");
 
     // Re-point all related records to the primary contact
     for (const table of ["journeyEvents", "followUps", "bibleStudies", "attendance", "prayerRequests", "notes"] as const) {
@@ -566,9 +566,9 @@ export const promoteToMember = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
-    if (!contact || contact.isDeleted) throw new Error("Contact not found");
+    if (!contact || contact.isDeleted) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);
-    if (contact.promotedToMemberId) throw new Error("Contact already promoted");
+    if (contact.promotedToMemberId) throw new ConvexError("Contact already promoted");
 
     const dateJoined = nowIso();
     const membershipId = await nextMembershipId(ctx, deriveShortcut(contact.area), dateJoined);

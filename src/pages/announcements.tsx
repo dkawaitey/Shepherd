@@ -20,6 +20,7 @@ import {
   EmptyState,
   PageHeader,
   fmtDateTime,
+  formatError,
 } from "@/components/shared";
 
 import {
@@ -655,7 +656,7 @@ function CreatePostDialog({
               reset();
               onOpenChange(false);
             } catch (err: any) {
-              setError(err?.message ?? "Failed to post");
+              setError(formatError(err, "Failed to post"));
             } finally {
               setBusy(false);
             }

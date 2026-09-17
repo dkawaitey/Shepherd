@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import {
@@ -25,10 +25,10 @@ const normalizePosition = (
 ) => {
   const pos = position?.trim() || undefined;
   if (pos && !POSITION_OPTIONS.includes(pos as (typeof POSITION_OPTIONS)[number])) {
-    throw new Error("Invalid ministry position");
+    throw new ConvexError("Invalid ministry position");
   }
   if (pos === POSITIONS.LEADER && requestedClassLeader) {
-    throw new Error("A Read-only Leader cannot also be a Class Leader");
+    throw new ConvexError("A Read-only Leader cannot also be a Class Leader");
   }
   if (
     requestedClassLeader &&
@@ -37,7 +37,7 @@ const normalizePosition = (
     pos !== POSITIONS.ADMIN &&
     pos !== POSITIONS.COORDINATOR
   ) {
-    throw new Error(
+    throw new ConvexError(
       "Only a Class Leader, Administrator or Evangelism Coordinator position can include class leadership",
     );
   }
@@ -223,7 +223,7 @@ export const update = mutation({
     const isAdminCaller = hasRole(user, ROLES.ADMIN);
     const { id, ...data } = args;
     const member = await ctx.db.get(id);
-    if (!member) throw new Error("Member not found");
+    if (!member) throw new ConvexError("Member not found");
     const cleaned: Record<string, unknown> = { updatedAt: Date.now() };
     for (const [k, val] of Object.entries(data)) {
       if (val !== undefined) cleaned[k] = val;
@@ -287,7 +287,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
     const member = await ctx.db.get(args.id);
-    if (!member) throw new Error("Member not found");
+    if (!member) throw new ConvexError("Member not found");
 
     // Clear every record attached to this member: attendance, prayer requests
     // and notes.
@@ -467,8 +467,8 @@ export const markAttendanceFollowup = mutation({
       ROLES.CLASS_LEADER,
     ]);
     const member = await ctx.db.get(args.memberId);
-    if (!member || member.isDeleted) throw new Error("Member not found");
-    if (!args.outcome.trim()) throw new Error("Outcome is required");
+    if (!member || member.isDeleted) throw new ConvexError("Member not found");
+    if (!args.outcome.trim()) throw new ConvexError("Outcome is required");
     const now = nowIso();
     await ctx.db.patch(args.memberId, {
       attendanceFollowup: {

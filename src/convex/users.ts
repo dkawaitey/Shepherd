@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, internalQuery, query, QueryCtx } from "./_generated/server";
 import { logAudit, requireAdmin, requireRole, hasRole, validClassScope } from "./helpers";
 import { checkRateLimit } from "./rateLimit";
@@ -61,10 +61,10 @@ export const setTestAs = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Not authenticated");
+    if (userId === null) throw new ConvexError("Not authenticated");
     const user = await ctx.db.get(userId);
     if (!user || user.role !== ROLES.ADMIN) {
-      throw new Error("Only administrators can test the app as other roles");
+      throw new ConvexError("Only administrators can test the app as other roles");
     }
     const role = args.role?.trim() || undefined;
     const valid: Role[] = [
@@ -74,13 +74,13 @@ export const setTestAs = mutation({
       ROLES.CLASS_LEADER,
     ];
     if (role && !valid.includes(role as Role)) {
-      throw new Error("Invalid test role");
+      throw new ConvexError("Invalid test role");
     }
     let classScope: string | undefined;
     if (role === ROLES.CLASS_LEADER) {
       const scope = args.classScope?.trim();
       if (!validClassScope(scope)) {
-        throw new Error("Pick one of the four classes for the class leader test");
+        throw new ConvexError("Pick one of the four classes for the class leader test");
       }
       classScope = scope;
     }
@@ -213,16 +213,16 @@ export const linkMember = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const target = await ctx.db.get(args.userId);
-    if (!target) throw new Error("User not found");
+    if (!target) throw new ConvexError("User not found");
 
     if (args.memberId) {
       const member = await ctx.db.get(args.memberId);
-      if (!member || member.isDeleted) throw new Error("Member not found");
+      if (!member || member.isDeleted) throw new ConvexError("Member not found");
       const alreadyLinked = (await ctx.db.query("users").collect()).find(
         (u) => u.memberId === args.memberId && u._id !== args.userId,
       );
       if (alreadyLinked) {
-        throw new Error(
+        throw new ConvexError(
           `${member.fullName} is already linked to ${alreadyLinked.email ?? alreadyLinked.name ?? "another account"}`,
         );
       }
@@ -274,7 +274,7 @@ export const autoLinkAccount = mutation({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new ConvexError("Not authenticated");
     if (user.memberId) return { linked: false, reason: "alreadyLinked" };
     const email = (user.email ?? "").trim().toLowerCase();
     if (!email) return { linked: false, reason: "noEmail" };
@@ -323,7 +323,7 @@ export const revertRoleOverride = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const target = await ctx.db.get(args.userId);
-    if (!target) throw new Error("User not found");
+    if (!target) throw new ConvexError("User not found");
 
     let details = "role override cleared";
     if (target.memberId) {
@@ -378,17 +378,17 @@ export const setRoles = mutation({
       ROLES.CLASS_LEADER,
     ];
     const unique = [...new Set(args.roles)];
-    if (unique.length === 0) throw new Error("At least one role is required");
+    if (unique.length === 0) throw new ConvexError("At least one role is required");
     if (unique.some((r) => !valid.includes(r as Role))) {
-      throw new Error("Invalid role");
+      throw new ConvexError("Invalid role");
     }
     const isClassLeader = unique.includes(ROLES.CLASS_LEADER);
     const scope = args.classScope?.trim() || undefined;
     if (isClassLeader && !validClassScope(scope)) {
-      throw new Error("A Class Leader must be assigned to one of the four classes");
+      throw new ConvexError("A Class Leader must be assigned to one of the four classes");
     }
     const target = await ctx.db.get(args.userId);
-    if (!target) throw new Error("User not found");
+    if (!target) throw new ConvexError("User not found");
     await ctx.db.patch(args.userId, {
       roles: unique,
       role: unique[0] as Role, // primary role for display / back-compat
@@ -418,10 +418,10 @@ export const setRole = mutation({
       ROLES.CLASS_LEADER,
     ];
     if (!valid.includes(args.role as Role)) {
-      throw new Error("Invalid role");
+      throw new ConvexError("Invalid role");
     }
     const target = await ctx.db.get(args.userId);
-    if (!target) throw new Error("User not found");
+    if (!target) throw new ConvexError("User not found");
     await ctx.db.patch(args.userId, {
       role: args.role as Role,
       roles: [args.role as Role],
@@ -488,9 +488,9 @@ export const removeUser = mutation({
   handler: async (ctx, args) => {
     await checkRateLimit(ctx, "users.removeUser");
     const admin = await requireAdmin(ctx);
-    if (args.userId === admin._id) throw new Error("You cannot remove yourself");
+    if (args.userId === admin._id) throw new ConvexError("You cannot remove yourself");
     const target = await ctx.db.get(args.userId);
-    if (!target) throw new Error("User not found");
+    if (!target) throw new ConvexError("User not found");
 
     // Sign-in accounts (email OTP, guest, federated) plus any pending codes.
     const accounts = await ctx.db

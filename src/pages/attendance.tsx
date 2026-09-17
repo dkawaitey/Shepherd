@@ -32,6 +32,7 @@ import {
   fmtDate,
   downloadCsv,
   downloadPdf,
+  formatError,
 } from "@/components/shared";
 import {
   TriangleAlert,
@@ -341,7 +342,7 @@ export default function Attendance() {
                   toast.success("Follow-up recorded — alert cleared");
                   setFollowupFor(null);
                 } catch (err: any) {
-                  toast.error(err?.message ?? "Could not record follow-up");
+                  toast.error(formatError(err, "Could not record follow-up"));
                 } finally {
                   setBusy(false);
                 }

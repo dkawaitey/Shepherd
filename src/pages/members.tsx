@@ -47,12 +47,12 @@ import {
   StatusPill,
   fmtDate,
   fmtDateTime,
-  telLink,
-  waLink,
   downloadCsv,
   downloadPdf,
   progressColor,
   canAddRecords,
+  formatError,
+  ContactChannelActions,
 } from "@/components/shared";
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
@@ -68,10 +68,8 @@ import {
   Heart,
   Lock,
   Mail,
-  MessageCircle,
   NotebookPen,
   Pencil,
-  Phone,
   Plus,
   ScrollText,
   Search,
@@ -383,7 +381,7 @@ function AddMemberDialog({
               toast.success(`Member added · ${res.membershipId}`);
               onOpenChange(false);
             } catch (err: any) {
-              setError(err?.message ?? "Failed to add member");
+              setError(formatError(err, "Failed to add member"));
             } finally {
               setBusy(false);
             }
@@ -645,25 +643,11 @@ export function MemberProfile() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              {member.phone && (
-                <a href={telLink(member.phone)} title={`Call ${member.phone}`}>
-                  <Button variant="outline" size="sm">
-                    <Phone className="mr-1 h-3.5 w-3.5" /> Call
-                  </Button>
-                </a>
-              )}
-              {(member.whatsapp || member.phone) && (
-                <a
-                  href={waLink(member.whatsapp || member.phone, `Shalom ${member.fullName}, this is the Gethsemane Youth Ministry.`)}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Open WhatsApp"
-                >
-                  <Button variant="outline" size="sm">
-                    <MessageCircle className="mr-1 h-3.5 w-3.5" /> WhatsApp
-                  </Button>
-                </a>
-              )}
+              <ContactChannelActions
+                phone={member.phone}
+                whatsapp={member.whatsapp || member.phone}
+                whatsappText={`Shalom ${member.fullName}, this is the Gethsemane Youth Ministry.`}
+              />
               {member.email && (
                 <a href={`mailto:${member.email}`} title={`Email ${member.email}`}>
                   <Button variant="outline" size="sm">
@@ -724,7 +708,7 @@ export function MemberProfile() {
                     toast.success("Member deleted");
                     navigate("/members");
                   } catch (err: any) {
-                    toast.error(err?.message ?? "Could not delete member");
+                    toast.error(formatError(err, "Could not delete member"));
                   }
                 }}
               >
@@ -798,7 +782,7 @@ export function MemberProfile() {
                         toast.success("Account link removed");
                       }
                     } catch (err: any) {
-                      toast.error(err?.message ?? "Could not link account");
+                      toast.error(formatError(err, "Could not link account"));
                     }
                   }}
                 >
@@ -1328,7 +1312,7 @@ function EditMemberDialog({
       toast.success("Member updated — linked account permissions synced");
       onOpenChange(false);
     } catch (err: any) {
-      setError(err?.message ?? "Failed to update member");
+      setError(formatError(err, "Failed to update member"));
     } finally {
       setBusy(false);
     }

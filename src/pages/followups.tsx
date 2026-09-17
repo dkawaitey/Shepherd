@@ -34,6 +34,7 @@ import {
   PageHeader,
   StatusPill,
   fmtDate,
+  formatError,
 } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
@@ -96,7 +97,7 @@ export function StatusChangeDialog({
       );
       onOpenChange(false);
     } catch (err: any) {
-      setError(err?.message ?? "Failed to update status");
+      setError(formatError(err, "Failed to update status"));
       setBusy(false);
     }
   };
@@ -278,7 +279,7 @@ export function ScheduleDialog({
         );
         onOpenChange(false);
       } else {
-        setError(err?.message ?? "Failed to schedule");
+        setError(formatError(err, "Failed to schedule"));
       }
     } finally {
       setBusy(false);

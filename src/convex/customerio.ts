@@ -1,6 +1,6 @@
 "use node";
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, internalAction, ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { userRoles } from "./helpers";
@@ -148,7 +148,7 @@ async function requireAdminAction(ctx: ActionCtx): Promise<ActionUser> {
     {},
   )) as unknown as ActionUser | null;
   if (!me || !userRoles(me).includes(ROLES.ADMIN)) {
-    throw new Error("Administrator access required");
+    throw new ConvexError("Administrator access required");
   }
   return me;
 }

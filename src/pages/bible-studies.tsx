@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BIBLE_LESSONS } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, fmtDate } from "@/components/shared";
+import { EmptyState, PageHeader, StatusPill, fmtDate, formatError } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import { BookMarked } from "lucide-react";
 
@@ -206,7 +206,7 @@ function BibleStudyDialog({
       toast.success(status === "completed" ? `Lesson ${editing.lesson} completed` : "Bible study updated");
       onClose();
     } catch (err: any) {
-      setError(err?.message ?? "Failed to save");
+      setError(formatError(err, "Failed to save"));
     } finally {
       setBusy(false);
     }

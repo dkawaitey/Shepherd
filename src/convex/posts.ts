@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { getCurrentUser, logAudit, requireRole } from "./helpers";
@@ -45,16 +45,16 @@ function classifyMime(mime: string): "image" | "video" | "audio" | "file" {
 
 function validateMediaItem(m: { storageId: string; type: string; name: string; mimeType: string; size: number }) {
   if (!ALLOWED_MIME_TYPES.has(m.mimeType)) {
-    throw new Error(`Unsupported file type: ${m.mimeType} (${m.name})`);
+    throw new ConvexError(`Unsupported file type: ${m.mimeType} (${m.name})`);
   }
   const category = classifyMime(m.mimeType);
   const maxSize = MAX_FILE_SIZES[category] ?? MAX_FILE_SIZES.file;
   if (m.size > maxSize) {
     const mb = (maxSize / 1024 / 1024).toFixed(0);
-    throw new Error(`${m.name} exceeds the ${mb} MB limit for ${category}s`);
+    throw new ConvexError(`${m.name} exceeds the ${mb} MB limit for ${category}s`);
   }
   if (m.size <= 0) {
-    throw new Error(`${m.name} is empty`);
+    throw new ConvexError(`${m.name} is empty`);
   }
 }
 
@@ -63,7 +63,7 @@ export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) throw new Error("Sign in to upload media");
+    if (!user) throw new ConvexError("Sign in to upload media");
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -180,7 +180,7 @@ export const create = mutation({
     // Validate media attachments server-side
     if (args.media) {
       if (args.media.length > MAX_MEDIA_PER_POST) {
-        throw new Error(`Maximum ${MAX_MEDIA_PER_POST} files per post`);
+        throw new ConvexError(`Maximum ${MAX_MEDIA_PER_POST} files per post`);
       }
       for (const m of args.media) {
         validateMediaItem(m);
@@ -268,15 +268,15 @@ export const addComment = mutation({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user || user.isAnonymous) throw new Error("Sign in to comment");
+    if (!user || user.isAnonymous) throw new ConvexError("Sign in to comment");
     const post = await ctx.db.get(args.postId);
-    if (!post) throw new Error("Post not found");
+    if (!post) throw new ConvexError("Post not found");
     await checkRateLimit(ctx, "post.addComment");
     const body = validateCommentBody(args.body);
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
       if (!parent || parent.postId !== args.postId) {
-        throw new Error("The comment you are replying to no longer exists");
+        throw new ConvexError("The comment you are replying to no longer exists");
       }
     }
     const id = await ctx.db.insert("comments", {
@@ -362,9 +362,9 @@ export const remove = mutation({
       ROLES.LEADER,
     ]);
     const post = await ctx.db.get(args.id);
-    if (!post) throw new Error("Post not found");
+    if (!post) throw new ConvexError("Post not found");
     if (user.role !== ROLES.ADMIN && post.authorId !== user._id) {
-      throw new Error("You can only remove your own posts");
+      throw new ConvexError("You can only remove your own posts");
     }
 
     // Delete attached media files from Convex storage
@@ -406,9 +406,9 @@ export const removeComment = mutation({
       ROLES.LEADER,
     ]);
     const comment = await ctx.db.get(args.id);
-    if (!comment) throw new Error("Comment not found");
+    if (!comment) throw new ConvexError("Comment not found");
     if (user.role !== ROLES.ADMIN && comment.authorId !== user._id) {
-      throw new Error("You can only remove your own comments");
+      throw new ConvexError("You can only remove your own comments");
     }
     // Hard-delete any replies to this comment first
     const replies = await ctx.db
@@ -429,7 +429,7 @@ export const setPinned = mutation({
   handler: async (ctx, args) => {
     await requireRole(ctx, []);
     const post = await ctx.db.get(args.id);
-    if (!post) throw new Error("Post not found");
+    if (!post) throw new ConvexError("Post not found");
     await ctx.db.patch(args.id, { isPinned: args.pinned });
   },
 });

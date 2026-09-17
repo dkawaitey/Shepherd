@@ -1,6 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatError } from "@/components/shared";
 
 type PushState = {
   subscribed: boolean;
@@ -73,7 +74,7 @@ export function usePushNotifications(enabled: boolean) {
       });
       return { ok: true };
     } catch (err: any) {
-      const reason = err?.message || String(err);
+      const reason = formatError(err, String(err));
       console.warn("[push] sync failed:", reason);
       return { ok: false, reason };
     }
@@ -160,7 +161,7 @@ export function usePushNotifications(enabled: boolean) {
       });
       return { ok: true };
     } catch (err: any) {
-      const reason = err?.message || String(err);
+      const reason = formatError(err, String(err));
       console.warn("[push] enable failed:", reason);
       return { ok: false, reason };
     } finally {
@@ -202,7 +203,7 @@ export function usePushNotifications(enabled: boolean) {
       });
       return { ok: true };
     } catch (err: any) {
-      return { ok: false, reason: err?.message || String(err) };
+      return { ok: false, reason: formatError(err, String(err)) };
     } finally {
       setLoading(false);
     }

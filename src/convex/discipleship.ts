@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { BIBLE_LESSONS, ROLES } from "./constants";
 import {
@@ -66,18 +66,18 @@ export const updateBibleStudy = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     if (args.lesson < 1 || args.lesson > BIBLE_LESSONS.length) {
-      throw new Error("Invalid lesson number");
+      throw new ConvexError("Invalid lesson number");
     }
     const contact = await ctx.db.get(args.contactId);
-    if (!contact) throw new Error("Contact not found");
+    if (!contact) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);
 
     if (args.status === "completed") {
       if (!args.instructorObservations?.trim()) {
-        throw new Error("Instructor observations are required to complete a lesson");
+        throw new ConvexError("Instructor observations are required to complete a lesson");
       }
       if (!args.scriptureUsed?.trim()) {
-        throw new Error("Scripture used is required to complete a lesson");
+        throw new ConvexError("Scripture used is required to complete a lesson");
       }
     }
 
@@ -155,7 +155,7 @@ export const recordAttendance = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     if (args.memberId && isScopedClassLeader(user)) {
-      throw new Error("Member attendance can only be recorded by administrators or coordinators");
+      throw new ConvexError("Member attendance can only be recorded by administrators or coordinators");
     }
     if (args.contactId) {
       const contact = await ctx.db.get(args.contactId);
@@ -198,7 +198,7 @@ export const setAttendance = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     if (args.memberId && isScopedClassLeader(user)) {
-      throw new Error("Member attendance can only be recorded by administrators or coordinators");
+      throw new ConvexError("Member attendance can only be recorded by administrators or coordinators");
     }
     if (args.contactId) {
       const contact = await ctx.db.get(args.contactId);
@@ -284,7 +284,7 @@ export const updateAttendance = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.ADMIN]);
     const row = await ctx.db.get(args.id);
-    if (!row) throw new Error("Attendance record not found");
+    if (!row) throw new ConvexError("Attendance record not found");
     const patch: Record<string, unknown> = {};
     if (args.date !== undefined) patch.date = args.date;
     if (args.type !== undefined) patch.type = args.type;
@@ -308,7 +308,7 @@ export const deleteAttendance = mutation({
   handler: async (ctx, args) => {
     await requireRole(ctx, [ROLES.ADMIN]);
     const row = await ctx.db.get(args.id);
-    if (!row) throw new Error("Attendance record not found");
+    if (!row) throw new ConvexError("Attendance record not found");
     await ctx.db.delete(args.id);
     await logAudit(ctx, {
       action: "attendance.delete",
@@ -334,16 +334,16 @@ export const addPrayer = mutation({
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     args.title = validateText(args.title, "Prayer title", 200);
     args.summary = validateText(args.summary, "Prayer summary", 5000);
-    if (!args.contactId && !args.memberId) throw new Error("A contact or member is required");
+    if (!args.contactId && !args.memberId) throw new ConvexError("A contact or member is required");
     let subjectName = "";
     if (args.contactId) {
       const contact = await ctx.db.get(args.contactId);
-      if (!contact) throw new Error("Contact not found");
+      if (!contact) throw new ConvexError("Contact not found");
       assertClassScope(user, contact.klass);
       subjectName = contact.fullName;
     } else if (args.memberId) {
       const member = await ctx.db.get(args.memberId);
-      if (!member) throw new Error("Member not found");
+      if (!member) throw new ConvexError("Member not found");
       assertClassScope(user, member.klass);
       subjectName = member.fullName;
     }
@@ -378,7 +378,7 @@ export const updatePrayerStatus = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const p = await ctx.db.get(args.id);
-    if (!p) throw new Error("Prayer request not found");
+    if (!p) throw new ConvexError("Prayer request not found");
     const scopeKlass = p.memberId
       ? (await ctx.db.get(p.memberId))?.klass
       : p.contactId
@@ -386,7 +386,7 @@ export const updatePrayerStatus = mutation({
         : undefined;
     assertClassScope(user, scopeKlass);
     if (args.status === "answered" && !args.answer?.trim()) {
-      throw new Error("Describe how the prayer was answered");
+      throw new ConvexError("Describe how the prayer was answered");
     }
     await ctx.db.patch(args.id, {
       status: args.status,
@@ -459,16 +459,16 @@ export const addNote = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
-    if (!args.contactId && !args.memberId) throw new Error("A contact or member is required");
+    if (!args.contactId && !args.memberId) throw new ConvexError("A contact or member is required");
     let subjectName = "";
     if (args.contactId) {
       const contact = await ctx.db.get(args.contactId);
-      if (!contact) throw new Error("Contact not found");
+      if (!contact) throw new ConvexError("Contact not found");
       assertClassScope(user, contact.klass);
       subjectName = contact.fullName;
     } else if (args.memberId) {
       const member = await ctx.db.get(args.memberId);
-      if (!member) throw new Error("Member not found");
+      if (!member) throw new ConvexError("Member not found");
       assertClassScope(user, member.klass);
       subjectName = member.fullName;
     }

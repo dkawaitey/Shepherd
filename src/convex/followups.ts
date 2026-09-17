@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
@@ -76,9 +76,9 @@ export const create = mutation({
     await checkRateLimit(ctx, "followup.create");
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.contactId);
-    if (!contact) throw new Error("Contact not found");
+    if (!contact) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);
-    if (!FOLLOWUP_TYPE_LABELS[args.type]) throw new Error("Invalid follow-up type");
+    if (!FOLLOWUP_TYPE_LABELS[args.type]) throw new ConvexError("Invalid follow-up type");
 
     const id = await ctx.db.insert("followUps", {
       contactId: args.contactId,
@@ -134,9 +134,9 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const f = await ctx.db.get(args.id);
-    if (!f) throw new Error("Follow-up not found");
+    if (!f) throw new ConvexError("Follow-up not found");
     if (f.status !== FOLLOWUP_STATUS.PENDING) {
-      throw new Error("Only pending follow-ups can be edited");
+      throw new ConvexError("Only pending follow-ups can be edited");
     }
     const fuContact = await ctx.db.get(f.contactId);
     assertClassScope(user, fuContact?.klass);
@@ -171,26 +171,26 @@ export const changeStatus = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const f = await ctx.db.get(args.id);
-    if (!f) throw new Error("Follow-up not found");
+    if (!f) throw new ConvexError("Follow-up not found");
     const fuContact = await ctx.db.get(f.contactId);
     assertClassScope(user, fuContact?.klass);
 
     if (f.locked && !hasRole(user, ROLES.ADMIN)) {
-      throw new Error("This follow-up status is locked. Only an administrator can override it.");
+      throw new ConvexError("This follow-up status is locked. Only an administrator can override it.");
     }
 
     const valid = [FOLLOWUP_STATUS.COMPLETED, FOLLOWUP_STATUS.MISSED, FOLLOWUP_STATUS.CANCELLED];
-    if (!valid.includes(args.status as any)) throw new Error("Invalid status transition");
+    if (!valid.includes(args.status as any)) throw new ConvexError("Invalid status transition");
 
     // Required-field validation — nothing is saved until this passes
     if (args.status === FOLLOWUP_STATUS.COMPLETED && !args.outcome?.trim()) {
-      throw new Error("The outcome of the follow-up is required");
+      throw new ConvexError("The outcome of the follow-up is required");
     }
     if (args.status === FOLLOWUP_STATUS.MISSED && !args.reasonMissed?.trim()) {
-      throw new Error("The reason for missing is required");
+      throw new ConvexError("The reason for missing is required");
     }
     if (args.status === FOLLOWUP_STATUS.CANCELLED && !args.reasonCancelled?.trim()) {
-      throw new Error("The reason for cancellation is required");
+      throw new ConvexError("The reason for cancellation is required");
     }
 
     const contact = await ctx.db.get(f.contactId);
@@ -274,9 +274,9 @@ export const adminOverride = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, []);
     const f = await ctx.db.get(args.id);
-    if (!f) throw new Error("Follow-up not found");
+    if (!f) throw new ConvexError("Follow-up not found");
     if (![FOLLOWUP_STATUS.PENDING, FOLLOWUP_STATUS.COMPLETED, FOLLOWUP_STATUS.MISSED, FOLLOWUP_STATUS.CANCELLED].includes(args.status as any)) {
-      throw new Error("Invalid status");
+      throw new ConvexError("Invalid status");
     }
     await ctx.db.patch(args.id, {
       status: args.status as any,
@@ -297,11 +297,11 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
     const f = await ctx.db.get(args.id);
-    if (!f) throw new Error("Follow-up not found");
+    if (!f) throw new ConvexError("Follow-up not found");
     const fuContact = await ctx.db.get(f.contactId);
     assertClassScope(user, fuContact?.klass);
     if (f.status !== FOLLOWUP_STATUS.PENDING && !hasRole(user, ROLES.ADMIN)) {
-      throw new Error("Only pending follow-ups can be deleted");
+      throw new ConvexError("Only pending follow-ups can be deleted");
     }
     await ctx.db.delete(args.id);
     await logAudit(ctx, {

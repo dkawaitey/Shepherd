@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { canAddRecords, formatRoles } from "@/components/shared";
+import { canAddRecords, formatRoles, formatError } from "@/components/shared";
 import { ROLES, ROLE_LABELS, Role } from "@/convex/constants";
 import { TestAsDialog } from "@/components/test-as-dialog";
 import { useMutation, useQuery } from "convex/react";
@@ -134,7 +134,7 @@ export function AppShell() {
     setTestAs({ role: undefined })
       .then(() => toast.success("Test ended — back to your normal role"))
       .catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Failed to end test"),
+        toast.error(formatError(err, "Failed to end test")),
       );
   };
 

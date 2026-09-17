@@ -33,7 +33,7 @@ import {
   Role,
   effectivePosition,
 } from "@/convex/constants";
-import { PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles } from "@/components/shared";
+import { PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles, formatError } from "@/components/shared";
 import { cn } from "@/lib/utils";
 
 import {
@@ -304,7 +304,7 @@ function UsersTab() {
                     toast.success(memberId ? "Member linked — permissions inherited" : "Account unlinked from member");
                     setEditing((e) => (e ? { ...e, memberId: memberId ?? "" } : e));
                   } catch (err: any) {
-                    toast.error(err?.message ?? "Could not link member");
+                    toast.error(formatError(err, "Could not link member"));
                   }
                 }}
               >
@@ -463,7 +463,7 @@ function UsersTab() {
                     setRemoving(null);
                   } catch (err) {
                     toast.error(
-                      err instanceof Error ? err.message : "Could not remove account",
+                      formatError(err, "Could not remove account"),
                     );
                   } finally {
                     setIsRemoving(false);
@@ -847,7 +847,7 @@ function NotificationsTab() {
                     await sendTestNotif();
                     toast.success("Test notification sent — check your device");
                   } catch (err: any) {
-                    const msg = err?.data?.message ?? err?.message ?? "Failed";
+                    const msg = formatError(err, "Failed");
                     setActionError(msg);
                   } finally {
                     setTesting(false);

@@ -35,14 +35,12 @@ import {
   MINISTRIES,
   STAGE_LABELS,
 } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, telLink, waLink, StagePill, downloadCsv, downloadPdf, canAddRecords, formatError } from "@/components/shared";
+import { EmptyState, PageHeader, StatusPill, ContactChannelActions, StagePill, downloadCsv, downloadPdf, canAddRecords, formatError } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import {
   FileText,
   MapPin,
-  MessageCircle,
-  Phone,
   Plus,
   Search,
   UserCheck,
@@ -86,28 +84,11 @@ function ContactCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {contact.phone && (
-            <a
-              href={telLink(contact.phone)}
-              onClick={(e) => e.stopPropagation()}
-              title={`Call ${contact.phone}`}
-              className="flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-            >
-              <Phone className="h-3.5 w-3.5" />
-            </a>
-          )}
-          {contact.whatsapp && (
-            <a
-              href={waLink(contact.whatsapp)}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Open WhatsApp"
-              className="flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:border-status-green/50 hover:text-status-green"
-            >
-              <MessageCircle className="h-3.5 w-3.5" />
-            </a>
-          )}
+          <ContactChannelActions
+            phone={contact.phone}
+            whatsapp={contact.whatsapp}
+            compact
+          />
         </div>
       </div>
 

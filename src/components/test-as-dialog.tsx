@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CLASS_OPTIONS, ROLE_LABELS, Role } from "@/convex/constants";
+import { formatError } from "@/components/shared";
 import { FlaskConical } from "lucide-react";
 
 const TEST_ROLES: Role[] = ["coordinator", "worker", "leader", "classLeader"];
@@ -52,7 +53,7 @@ export function TestAsDialog({
       toast.success(`Testing as ${ROLE_LABELS[role]}`);
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start test");
+      toast.error(formatError(err, "Failed to start test"));
     } finally {
       setBusy(false);
     }
@@ -65,7 +66,7 @@ export function TestAsDialog({
       toast.success("Test ended — back to your normal role");
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to end test");
+      toast.error(formatError(err, "Failed to end test"));
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,6 @@
 "use node";
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, internalAction, ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { userRoles } from "./helpers";
@@ -25,7 +25,7 @@ async function requireAdminAction(ctx: ActionCtx): Promise<ActionUser> {
     {},
   )) as unknown as ActionUser | null;
   if (!me || !userRoles(me).includes(ROLES.ADMIN)) {
-    throw new Error("Administrator access required");
+    throw new ConvexError("Administrator access required");
   }
   return me;
 }
@@ -72,7 +72,7 @@ async function sendEmail(
     });
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Brevo ${res.status}: ${body.slice(0, 200)}`);
+      throw new ConvexError(`Brevo ${res.status}: ${body.slice(0, 200)}`);
     }
     await ctx.runMutation(internal.settings.logEmail, {
       to: args.to,
@@ -133,7 +133,7 @@ async function sendSms(
     });
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Brevo SMS ${res.status}: ${body.slice(0, 200)}`);
+      throw new ConvexError(`Brevo SMS ${res.status}: ${body.slice(0, 200)}`);
     }
     await ctx.runMutation(internal.settings.logEmail, {
       to: args.to,
@@ -175,7 +175,7 @@ export const sendTest = action({
   handler: async (ctx, args) => {
     const me = await requireAdminAction(ctx);
     const to = args.to?.trim() || me.email;
-    if (!to) throw new Error("No recipient email — add one or set it on your profile");
+    if (!to) throw new ConvexError("No recipient email — add one or set it on your profile");
     const { html, text } = buildTestEmail(me.name);
     return sendEmail(ctx, {
       to,

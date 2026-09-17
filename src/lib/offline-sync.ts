@@ -2,6 +2,7 @@ import { api } from "@/convex/_generated/api";
 import { useMutation } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { formatError } from "@/components/shared";
 
 /**
  * Offline-first data entry for volunteers.
@@ -135,9 +136,7 @@ export function useOfflineSync() {
           if (isOfflineError(err)) break; // still offline — stop, retry later
           // Permanent rejection (validation/permission): keep the entry so the
           // data isn't lost, surface the reason, and stop.
-          setLastError(
-            err instanceof Error ? err.message : "Sync failed for a queued record",
-          );
+          setLastError(formatError(err, "Sync failed for a queued record"));
           break;
         }
       }

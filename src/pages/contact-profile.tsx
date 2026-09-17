@@ -47,10 +47,9 @@ import {
   fmtDate,
   fmtDateTime,
   mapsLink,
-  smsLink,
-  telLink,
-  waLink,
   progressColor,
+  formatError,
+  ContactChannelActions,
 } from "@/components/shared";
 import { StatusChangeDialog, ScheduleDialog } from "./followups";
 import { ContactFormDialog } from "./contacts";
@@ -65,11 +64,9 @@ import {
   Home,
   Lock,
   MapPin,
-  MessageCircle,
   MessageSquareText,
   NotebookPen,
   Pencil,
-  Phone,
   Plus,
   ScrollText,
   Sparkle,
@@ -164,21 +161,12 @@ export default function ContactProfile() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              {contact.phone && (
-                <a href={telLink(contact.phone)} title={`Call ${contact.phone}`}>
-                  <Button variant="outline" size="sm"><Phone className="mr-1 h-3.5 w-3.5" /> Call</Button>
-                </a>
-              )}
-              {contact.whatsapp && (
-                <a href={waLink(contact.whatsapp, `Shalom ${contact.fullName}, this is the Gethsemane Youth Ministry.`)} target="_blank" rel="noreferrer" title="Open WhatsApp">
-                  <Button variant="outline" size="sm"><MessageCircle className="mr-1 h-3.5 w-3.5" /> WhatsApp</Button>
-                </a>
-              )}
-              {contact.phone && (
-                <a href={smsLink(contact.phone, "Shalom, this is the Gethsemane Youth Ministry.")} title="Send SMS">
-                  <Button variant="outline" size="sm"><MessageSquareText className="mr-1 h-3.5 w-3.5" /> SMS</Button>
-                </a>
-              )}
+              <ContactChannelActions
+                phone={contact.phone}
+                whatsapp={contact.whatsapp}
+                whatsappText={`Shalom ${contact.fullName}, this is the Gethsemane Youth Ministry.`}
+                smsText="Shalom, this is the Gethsemane Youth Ministry."
+              />
               <a
                 href={mapsLink([contact.community, contact.homeAddress, contact.area].filter(Boolean).join(", ") || contact.gpsLocation)}
                 target="_blank"
@@ -211,7 +199,7 @@ export default function ContactProfile() {
                         );
                       } catch (err) {
                         toast.error(
-                          err instanceof Error ? err.message : "Promotion failed",
+                          formatError(err, "Promotion failed"),
                         );
                       } finally {
                         setPromoting(false);
@@ -739,7 +727,7 @@ function BibleStudyDialog({
       toast.success(status === "completed" ? `Lesson ${editing.lesson} completed` : "Bible study updated");
       onClose();
     } catch (err: any) {
-      setError(err?.message ?? "Failed to save");
+      setError(formatError(err, "Failed to save"));
     } finally {
       setBusy(false);
     }
