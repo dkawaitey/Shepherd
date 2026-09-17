@@ -306,6 +306,23 @@ export function QuickAddContact({
   );
 }
 
+/**
+ * Fields the `contacts.update` / `contacts.create` mutations accept.
+ * Keep in sync with `contactFields` in src/convex/contacts.ts — Convex
+ * rejects any extra argument, so the edit form must not send whole documents
+ * (which carry `_creationTime`, `status`, `promotedToMemberId`, etc.).
+ */
+const CONTACT_EDITABLE_FIELDS = [
+  "fullName", "gender", "dateOfBirth", "phone", "whatsapp", "email",
+  "homeAddress", "landmark", "gpsLocation", "region", "district", "community",
+  "occupation", "school", "maritalStatus", "emergencyContact", "preferredLanguage",
+  "religion", "churchBackground", "area", "areaShortcut", "dateMet", "locationMet",
+  "evangelismTeam", "klass", "street", "event", "conversationSummary", "questionsAsked",
+  "needsIdentified", "prayerOffered", "outreachPrayerRequests", "bibleVersesShared",
+  "gospelShared", "decision", "interestLevel", "assignedWorker", "assignedWorkerId",
+  "mentor", "ministry", "tags",
+] as const;
+
 // ============ Full Create/Edit Dialog ============
 export function ContactFormDialog({
   open,
@@ -357,8 +374,9 @@ export function ContactFormDialog({
     let payload: Record<string, any> = {};
     try {
       payload = {};
-      for (const [k, v] of Object.entries(form)) {
-        if (k === "_id" || k === "membershipId" || k === "createdAt" || k === "updatedAt" || k === "isDeleted" || k === "age") continue;
+      for (const k of CONTACT_EDITABLE_FIELDS) {
+        if (!(k in form)) continue;
+        const v = form[k];
         payload[k] = v === "" ? undefined : v;
       }
       if (contact) {

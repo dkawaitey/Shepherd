@@ -351,6 +351,7 @@ export const update = mutation({
     }
     const scope = classScoped(user);
     if (scope) data.klass = scope; // a class leader cannot move a contact out of their class
+    data.fullName = validateName(data.fullName);
     await ctx.db.patch(id, { ...data, updatedAt: Date.now() });
     await logAudit(ctx, {
       action: "contact.update",
