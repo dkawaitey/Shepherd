@@ -26,6 +26,7 @@ import {
   ContactRound,
   FlaskConical,
   ShieldAlert,
+  UserCog,
 } from "lucide-react";
 import { releaseDevicePush, usePushNotifications } from "@/hooks/use-push-notifications";
 import { clearOfflineQueue, useOfflineSync } from "@/lib/offline-sync";
@@ -70,6 +71,14 @@ const NAV: NavItem[] = [
   { to: "/analytics", label: "Analytics", icon: BarChart3, code: "ANL", ministryOnly: true },
   { to: "/settings", label: "Settings", icon: Settings, code: "S" },
   {
+    to: "/access",
+    label: "Access",
+    icon: UserCog,
+    code: "AC",
+    adminOnly: true,
+    ministryOnly: true,
+  },
+  {
     to: "/error-log",
     label: "Error Log",
     icon: ShieldAlert,
@@ -90,6 +99,18 @@ function hasMinistryAccess(user: {
 } | null | undefined) {
   if (!user || user.isAnonymous) return false;
   return user.roles?.length ? true : !!user.role;
+}
+
+/** Administrator check that honours every role an account holds. */
+function isAdminUser(user: {
+  role?: string;
+  roles?: string[];
+  isAnonymous?: boolean;
+} | null | undefined) {
+  if (!user || user.isAnonymous) return false;
+  return user.roles?.length
+    ? user.roles.includes(ROLES.ADMIN)
+    : user.role === ROLES.ADMIN;
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -116,8 +137,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           // Ministry records need a ministry role; guests and plain members
           // only get announcements and their own settings.
           if (item.ministryOnly && !hasMinistryAccess(user)) return null;
-          // Analytics and the error log are administrator-only screens.
-          if ((item.adminOnly || item.to === "/analytics") && user?.role !== ROLES.ADMIN)
+          // Analytics, access review and the error log are administrator-only.
+          if ((item.adminOnly || item.to === "/analytics") && !isAdminUser(user))
             return null;
           const Icon = item.icon;
           const active =

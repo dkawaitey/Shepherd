@@ -187,6 +187,137 @@ export const list = query({
   },
 });
 
+/**
+ * Access review for administrators: every account that has ever signed in,
+ * including guest accounts, with the data needed to clean roles up — system
+ * roles (derived from the linked member's position, or manually assigned), the
+ * member link, and when the account last signed in (from its auth sessions).
+ */
+export const accessReview = query({
+  args: {},
+  handler: async (ctx) => {
+    // Returns null (rather than throwing) for anyone else, so a direct link to
+    // the page shows an explanation instead of a crashed screen.
+    const admin = await getCurrentUser(ctx);
+    if (!admin || !hasRole(admin, ROLES.ADMIN)) return null;
+
+    const [users, members, sessions] = await Promise.all([
+      ctx.db.query("users").collect(),
+      ctx.db.query("members").collect(),
+      ctx.db.query("authSessions").take(2000),
+    ]);
+    const memberById = new Map(members.map((m) => [m._id, m]));
+
+    const now = Date.now();
+    const byUser = new Map<
+      string,
+      { last: number; sessions: number; active: number }
+    >();
+    for (const session of sessions) {
+      const entry = byUser.get(session.userId) ?? {
+        last: 0,
+        sessions: 0,
+        active: 0,
+      };
+      entry.sessions += 1;
+      if (session._creationTime > entry.last) entry.last = session._creationTime;
+      if (session.expirationTime > now) entry.active += 1;
+      byUser.set(session.userId, entry);
+    }
+
+    return users
+      .map((u) => {
+        const linked = u.memberId ? memberById.get(u.memberId) : undefined;
+        const assigned = u.roles?.length ? u.roles : u.role ? [u.role] : [];
+        const derived = linked
+          ? deriveMemberRoles(linked.position, linked.isClassLeader)
+          : [];
+        const overridden = !!u.rolesOverridden && !!linked;
+        const effective = linked && !overridden ? derived : assigned;
+        const session = byUser.get(u._id);
+
+        return {
+          _id: u._id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone,
+          isAnonymous: !!u.isAnonymous,
+          accountCreatedAt: (u as { _creationTime?: number })._creationTime ?? 0,
+          lastSignInAt: session?.last ?? null,
+          sessionCount: session?.sessions ?? 0,
+          activeSessionCount: session?.active ?? 0,
+          // Roles
+          roles: assigned,
+          classScope: u.classScope,
+          rolesOverridden: overridden,
+          // Member link
+          memberId: u.memberId,
+          member: linked
+            ? {
+                _id: linked._id,
+                fullName: linked.fullName,
+                membershipId: linked.membershipId,
+                klass: linked.klass,
+                position: linked.position,
+                isClassLeader: linked.isClassLeader,
+                isDeleted: !!linked.isDeleted,
+              }
+            : undefined,
+          derivedRoles: linked ? derived : undefined,
+          derivedClassScope: linked
+            ? deriveMemberClassScope(
+                linked.position,
+                linked.isClassLeader,
+                linked.klass,
+              )
+            : undefined,
+          effectiveRoles: effective,
+          hasAccess: !u.isAnonymous && effective.length > 0,
+        };
+      })
+      .sort((a, b) => (b.lastSignInAt ?? 0) - (a.lastSignInAt ?? 0));
+  },
+});
+
+/**
+ * Revoke every role from an account (administrator only).
+ *
+ * Used to clean up accounts that should not reach ministry data — an unlinked
+ * account that was given a role by mistake, for example. The account is marked
+ * as an explicit override so re-linking it later does not quietly re-derive
+ * permissions from a member's ministry position.
+ */
+export const clearAccess = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "users.setRoles");
+    const admin = await requireAdmin(ctx);
+    if (args.userId === admin._id) {
+      throw new ConvexError(
+        "You cannot revoke your own access — ask another administrator",
+      );
+    }
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new ConvexError("User not found");
+
+    await ctx.db.patch(args.userId, {
+      role: undefined,
+      roles: undefined,
+      classScope: undefined,
+      testAs: undefined,
+      testClassScope: undefined,
+      rolesOverridden: true,
+    });
+    await logAudit(ctx, {
+      action: "role.revokeAll",
+      entityType: "users",
+      entityId: args.userId,
+      details: `${target.email ?? target.name ?? "account"} — all roles revoked (no ministry access)`,
+    });
+    return { ok: true };
+  },
+});
+
 /** Class leader users, for selecting a class leader when creating a member. */
 export const classLeaders = query({
   args: {},

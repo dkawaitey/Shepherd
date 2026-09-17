@@ -34,6 +34,7 @@ const Reports = lazy(() => import("./pages/reports.tsx"));
 const Analytics = lazy(() => import("./pages/analytics.tsx"));
 const Settings = lazy(() => import("./pages/settings.tsx"));
 const ErrorLog = lazy(() => import("./pages/error-log.tsx"));
+const AccessReview = lazy(() => import("./pages/access-review.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -193,6 +194,7 @@ createRoot(document.getElementById("root")!).render(
                     <Route path="/analytics" element={<Analytics />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/error-log" element={<ErrorLog />} />
+                    <Route path="/access" element={<AccessReview />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
                 </Routes>
