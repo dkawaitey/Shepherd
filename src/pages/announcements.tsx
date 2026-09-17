@@ -63,6 +63,9 @@ const ALLOWED_MIME = new Set([
 ]);
 const MAX_SIZES: Record<string, number> = { image: 8 * 1024 * 1024, video: 18 * 1024 * 1024, audio: 12 * 1024 * 1024, file: 10 * 1024 * 1024 };
 const MAX_MEDIA = 5;
+/** How many posts the feed loads at a time — "Load older posts" grows it. */
+const FEED_PAGE_SIZE = 20;
+const MAX_FEED_POSTS = 100;
 const MAX_IMAGE_DIM = 1920;
 const THUMB_SIZE = 320;
 
@@ -108,6 +111,7 @@ export default function Announcements() {
   const [author, setAuthor] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [limit, setLimit] = useState(FEED_PAGE_SIZE);
 
   // Deep link from a notification: /announcements?post=<id>[&c=<commentId>]
   // opens that thread and scrolls to the post (or the exact comment/reply).
@@ -126,15 +130,25 @@ export default function Announcements() {
     return () => clearTimeout(t);
   }, [urlPost, urlComment]);
 
+  // Growing window instead of loading every announcement: the feed stays fast
+  // as the ministry accumulates posts.
   const posts = useQuery(api.posts.list, {
     search: search || undefined,
     author: author || undefined,
+    limit,
   });
   const me = useQuery(api.users.currentUser);
   const isAdmin = me?.role === "admin";
   const removePost = useMutation(api.posts.remove);
 
-  const authors = [...new Set((posts ?? []).map((p) => p.author).filter(Boolean))];
+  // A new search or author filter starts from the first page again.
+  useEffect(() => {
+    setLimit(FEED_PAGE_SIZE);
+  }, [search, author]);
+
+  // Author list comes from its own bounded query, not from the loaded page, so
+  // filters keep working when older posts aren't loaded yet.
+  const authors = useQuery(api.posts.authors) ?? [];
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -202,6 +216,19 @@ export default function Announcements() {
               }}
             />
           ))}
+          {posts.length >= limit && limit < MAX_FEED_POSTS && (
+            <div className="flex justify-center pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setLimit((l) => Math.min(MAX_FEED_POSTS, l + FEED_PAGE_SIZE))
+                }
+              >
+                Load older posts
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

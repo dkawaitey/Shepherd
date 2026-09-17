@@ -203,7 +203,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const me = useQuery(api.users.currentUser);
   const stats = useQuery(api.dashboard.stats);
-  const posts = useQuery(api.posts.list, {});
+  // Only the latest few are shown here, so don't load the whole feed.
+  const posts = useQuery(api.posts.list, { limit: 5 });
 
   const rawName = (me?.name || me?.email || "").split(/[\s@.]/).filter(Boolean)[0];
   const firstName = rawName

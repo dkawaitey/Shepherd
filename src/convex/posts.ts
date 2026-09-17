@@ -1,6 +1,13 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
+import {
+  MutationCtx,
+  QueryCtx,
+  internalMutation,
+  mutation,
+  query,
+} from "./_generated/server";
 import { getCurrentUser, hasRole, logAudit, requireRole } from "./helpers";
 import { REACTION_KINDS, ROLES } from "./constants";
 import { checkRateLimit } from "./rateLimit";
@@ -38,6 +45,77 @@ const MAX_MEDIA_PER_POST = 5;
 
 /** How long a repeat visit stops counting as a new view. */
 const VIEW_WINDOW_MS = 30 * 60 * 1000;
+
+type Ctx = QueryCtx | MutationCtx;
+
+type Engagement = {
+  commentCount: number;
+  reactionCount: number;
+  reactionKinds: Record<string, number>;
+  viewCount: number;
+  viewerCount: number;
+};
+
+/**
+ * Engagement totals for one post, read from the source rows.
+ *
+ * Only used for posts created before the denormalized counters existed (and to
+ * self-heal them), so the hot feed path never touches the reactions, views or
+ * comments tables.
+ */
+async function computeEngagement(ctx: Ctx, postId: Id<"posts">): Promise<Engagement> {
+  const [comments, reactions, views] = await Promise.all([
+    ctx.db
+      .query("comments")
+      .withIndex("postId", (q) => q.eq("postId", postId))
+      .collect(),
+    ctx.db
+      .query("postReactions")
+      .withIndex("by_post", (q) => q.eq("postId", postId))
+      .collect(),
+    ctx.db
+      .query("postViews")
+      .withIndex("by_post", (q) => q.eq("postId", postId))
+      .collect(),
+  ]);
+
+  const reactionKinds: Record<string, number> = {};
+  let reactionCount = 0;
+  for (const r of reactions) {
+    if (r.targetType !== "post") continue;
+    reactionCount += 1;
+    reactionKinds[r.kind] = (reactionKinds[r.kind] ?? 0) + 1;
+  }
+
+  return {
+    commentCount: comments.length,
+    reactionCount,
+    reactionKinds,
+    viewCount: views.reduce((sum, row) => sum + row.views, 0),
+    viewerCount: views.length,
+  };
+}
+
+/** The post's engagement counters, computing (and later persisting) them for
+ *  legacy posts that predate the denormalized fields. */
+async function engagementFor(ctx: Ctx, post: Doc<"posts">): Promise<Engagement> {
+  if (
+    post.commentCount !== undefined &&
+    post.reactionCount !== undefined &&
+    post.reactionKinds !== undefined &&
+    post.viewCount !== undefined &&
+    post.viewerCount !== undefined
+  ) {
+    return {
+      commentCount: post.commentCount,
+      reactionCount: post.reactionCount,
+      reactionKinds: post.reactionKinds,
+      viewCount: post.viewCount,
+      viewerCount: post.viewerCount,
+    };
+  }
+  return await computeEngagement(ctx, post._id);
+}
 
 function classifyMime(mime: string): "image" | "video" | "audio" | "file" {
   if (mime.startsWith("image/")) return "image";
@@ -88,78 +166,105 @@ export const getMediaUrl = query({
   },
 });
 
-/** Browse/search all team posts (any signed-in user can read). */
+/**
+ * Browse/search team posts (any signed-in user can read).
+ *
+ * The feed is paginated and reads engagement from the denormalized counters on
+ * each post, so a busy feed never scans the comments/reactions/views tables —
+ * those grow with usage while this stays proportional to the page size.
+ */
 export const list = query({
   args: {
     search: v.optional(v.string()),
     author: v.optional(v.string()),
+    /** How many posts to load (default 20, max 100). The feed grows this
+     *  window when the reader asks for more instead of loading everything. */
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
 
-    let posts = await ctx.db.query("posts").collect();
-    // Hard deletes: no isDeleted filter needed
+    const limit = Math.min(Math.max(Math.trunc(args.limit ?? 20), 1), 100);
 
-    if (args.search) {
-      const q = args.search.toLowerCase();
-      posts = posts.filter(
-        (p) =>
-          p.title.toLowerCase().includes(q) ||
-          p.body.toLowerCase().includes(q) ||
-          (p.tags ?? []).some((t) => t.toLowerCase().includes(q)),
-      );
-    }
-    if (args.author) posts = posts.filter((p) => p.author === args.author);
-
-    posts.sort((a, b) => {
+    // Sorting: pinned first, then newest.
+    const byPinnedThenRecent = (a: Doc<"posts">, b: Doc<"posts">) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
       return b.createdAt - a.createdAt;
-    });
+    };
 
-    const comments = await ctx.db.query("comments").collect();
-    const commentCount = new Map<string, number>();
-    for (const c of comments) {
-      commentCount.set(c.postId, (commentCount.get(c.postId) ?? 0) + 1);
+    let page: Doc<"posts">[];
+    if (args.search || args.author) {
+      // Filtered browsing inspects the posts table, which holds one row per
+      // announcement. Engagement is still only loaded for the returned page.
+      let posts = await ctx.db.query("posts").collect();
+      if (args.search) {
+        const q = args.search.toLowerCase();
+        posts = posts.filter(
+          (p) =>
+            p.title.toLowerCase().includes(q) ||
+            p.body.toLowerCase().includes(q) ||
+            (p.tags ?? []).some((t) => t.toLowerCase().includes(q)),
+        );
+      }
+      if (args.author) posts = posts.filter((p) => p.author === args.author);
+      posts.sort(byPinnedThenRecent);
+      page = posts.slice(0, limit);
+    } else {
+      const recent = await ctx.db
+        .query("posts")
+        .withIndex("createdAt")
+        .order("desc")
+        .take(limit);
+      // Pinned announcements stay at the top of the first page, however old.
+      const pinned = await ctx.db
+        .query("posts")
+        .withIndex("by_pinned", (q) => q.eq("isPinned", true))
+        .order("desc")
+        .take(5);
+      const seen = new Set(recent.map((p) => p._id));
+      page = [...pinned.filter((p) => !seen.has(p._id)), ...recent];
     }
 
-    // Engagement aggregates are computed here so every list gets them live —
-    // a reaction or a view anywhere updates all subscribed clients instantly.
-    const reactions = await ctx.db.query("postReactions").collect();
-    type Tally = { total: number; byKind: Record<string, number>; mine: string | null };
-    const postEngagement = new Map<string, Tally>();
-    for (const r of reactions) {
-      if (r.targetType !== "post") continue;
-      const tally = postEngagement.get(r.targetId) ?? { total: 0, byKind: {}, mine: null };
-      tally.total += 1;
-      tally.byKind[r.kind] = (tally.byKind[r.kind] ?? 0) + 1;
-      if (r.userId === user._id) tally.mine = r.kind;
-      postEngagement.set(r.targetId, tally);
+    // This user's own reactions: one lookup, bounded by their own activity.
+    const myReactions = await ctx.db
+      .query("postReactions")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const mine = new Map<string, string>();
+    for (const r of myReactions) {
+      if (r.targetType === "post") mine.set(r.targetId, r.kind);
     }
 
-    const views = await ctx.db.query("postViews").collect();
-    const viewTotals = new Map<string, { views: number; viewers: number }>();
-    for (const v of views) {
-      const agg = viewTotals.get(v.postId) ?? { views: 0, viewers: 0 };
-      agg.views += v.views;
-      agg.viewers += 1;
-      viewTotals.set(v.postId, agg);
-    }
-
-    return posts.map((p) => {
-      const eng = postEngagement.get(p._id);
-      const vw = viewTotals.get(p._id);
-      return {
+    return await Promise.all(
+      page.map(async (p) => ({
         ...p,
-        commentCount: commentCount.get(p._id) ?? 0,
-        reactionCount: eng?.total ?? 0,
-        reactionKinds: eng?.byKind ?? {},
-        myReaction: eng?.mine ?? null,
-        viewCount: vw?.views ?? 0,
-        viewerCount: vw?.viewers ?? 0,
-      };
-    });
+        ...(await engagementFor(ctx, p)),
+        myReaction: mine.get(p._id) ?? null,
+      })),
+    );
+  },
+});
+
+/**
+ * Distinct post authors, for the feed's author filter. Bounded to the most
+ * recent announcements and never touches the engagement tables, so it stays a
+ * cheap read even as reactions and views pile up.
+ */
+export const authors = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+    const posts = await ctx.db
+      .query("posts")
+      .withIndex("createdAt")
+      .order("desc")
+      .take(200);
+    const names = new Set<string>();
+    for (const p of posts) if (p.author) names.add(p.author);
+    return [...names].sort((a, b) => a.localeCompare(b));
   },
 });
 
@@ -248,13 +353,16 @@ export const react = mutation({
       )
       .first();
 
-    if (existing && existing.kind === args.kind) {
-      await ctx.db.delete(existing._id);
-      return { kind: null };
-    }
+    // Read the post's counters before touching the reaction row, so the deltas
+    // applied below are relative to the pre-change totals.
+    const eng = args.targetType === "post" ? await engagementFor(ctx, post) : null;
 
+    const removing = !!existing && existing.kind === args.kind;
     const userName = user.name ?? user.email ?? "Member";
-    if (existing) {
+
+    if (removing) {
+      await ctx.db.delete(existing!._id);
+    } else if (existing) {
       await ctx.db.patch(existing._id, {
         kind: args.kind,
         userName,
@@ -272,7 +380,27 @@ export const react = mutation({
       });
     }
 
-    return { kind: args.kind };
+    // Keep the post's denormalized counters in step (one extra write, no scans).
+    if (eng) {
+      const summary = { ...eng.reactionKinds };
+      const bump = (k: string, delta: number) => {
+        const next = (summary[k] ?? 0) + delta;
+        if (next > 0) summary[k] = next;
+        else delete summary[k];
+      };
+      if (removing) bump(args.kind, -1);
+      else {
+        if (existing) bump(existing.kind, -1);
+        bump(args.kind, 1);
+      }
+      await ctx.db.patch(args.postId, {
+        ...eng,
+        reactionCount: Object.values(summary).reduce((a, b) => a + b, 0),
+        reactionKinds: summary,
+      });
+    }
+
+    return { kind: removing ? null : args.kind };
   },
 });
 
@@ -299,6 +427,10 @@ export const recordView = mutation({
 
     const userName = user.name ?? user.email ?? "Member";
 
+    // Read the counters before the view row changes so the deltas below are
+    // exact even for posts that predate the denormalized fields.
+    const eng = await engagementFor(ctx, post);
+
     if (existing) {
       if (now - existing.lastViewedAt < VIEW_WINDOW_MS) return { recorded: false };
       await ctx.db.patch(existing._id, {
@@ -306,6 +438,7 @@ export const recordView = mutation({
         lastViewedAt: now,
         userName,
       });
+      await ctx.db.patch(args.postId, { ...eng, viewCount: eng.viewCount + 1 });
       return { recorded: true };
     }
 
@@ -316,6 +449,11 @@ export const recordView = mutation({
       views: 1,
       firstViewedAt: now,
       lastViewedAt: now,
+    });
+    await ctx.db.patch(args.postId, {
+      ...eng,
+      viewCount: eng.viewCount + 1,
+      viewerCount: eng.viewerCount + 1,
     });
     return { recorded: true };
   },
@@ -451,6 +589,12 @@ export const create = mutation({
       tags: args.tags,
       media: args.media,
       isPinned: false,
+      // Denormalized engagement counters start at zero.
+      commentCount: 0,
+      reactionCount: 0,
+      reactionKinds: {},
+      viewCount: 0,
+      viewerCount: 0,
       createdAt: now,
       updatedAt: now,
     });
@@ -534,6 +678,10 @@ export const addComment = mutation({
         throw new ConvexError("The comment you are replying to no longer exists");
       }
     }
+    // Read the post counters before inserting the comment so the increment is
+    // exact even for posts that predate the denormalized fields.
+    const eng = await engagementFor(ctx, post);
+
     const id = await ctx.db.insert("comments", {
       postId: args.postId,
       parentId: args.parentId,
@@ -541,6 +689,11 @@ export const addComment = mutation({
       authorId: user._id,
       body,
       createdAt: Date.now(),
+    });
+
+    await ctx.db.patch(args.postId, {
+      ...eng,
+      commentCount: eng.commentCount + 1,
     });
 
     // Schedule push notification: everyone (including the commenter) so
@@ -681,9 +834,15 @@ export const removeComment = mutation({
     if (user.role !== ROLES.ADMIN && comment.authorId !== user._id) {
       throw new ConvexError("You can only remove your own comments");
     }
-    // Hard-delete any replies to this comment first
+    // Read the post counters before deleting anything so the decrement is
+    // exact, then hard-delete the replies and the comment itself. Only this
+    // post's comments are fetched, via the postId index.
+    const post = await ctx.db.get(comment.postId);
+    const eng = post ? await engagementFor(ctx, post) : null;
+
     const replies = await ctx.db
       .query("comments")
+      .withIndex("postId", (q) => q.eq("postId", comment.postId))
       .collect();
     const removedIds = new Set<string>([args.id]);
     for (const r of replies) {
@@ -693,6 +852,13 @@ export const removeComment = mutation({
       }
     }
     await ctx.db.delete(args.id);
+
+    if (post && eng) {
+      await ctx.db.patch(post._id, {
+        ...eng,
+        commentCount: Math.max(0, eng.commentCount - removedIds.size),
+      });
+    }
 
     // Reactions left on the comment or its replies go with them.
     const reactions = await ctx.db
@@ -704,6 +870,31 @@ export const removeComment = mutation({
         await ctx.db.delete(r._id);
       }
     }
+  },
+});
+
+/**
+ * Repair posts created before the denormalized engagement counters existed.
+ * Safe to re-run: it only touches documents that are missing counters, and
+ * every value is recomputed from the source rows.
+ */
+export const backfillEngagement = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const posts = await ctx.db.query("posts").collect();
+    const stale = posts.filter(
+      (p) =>
+        p.commentCount === undefined ||
+        p.reactionCount === undefined ||
+        p.reactionKinds === undefined ||
+        p.viewCount === undefined ||
+        p.viewerCount === undefined,
+    );
+    const batch = stale.slice(0, args.limit ?? 50);
+    for (const p of batch) {
+      await ctx.db.patch(p._id, await computeEngagement(ctx, p._id));
+    }
+    return { repaired: batch.length, remaining: stale.length - batch.length };
   },
 });
 

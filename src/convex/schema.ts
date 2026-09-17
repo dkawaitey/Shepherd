@@ -334,7 +334,20 @@ const schema = defineSchema(
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),
       updatedAt: v.number(),
-    }).index("createdAt", ["createdAt"]),
+
+      // Denormalized engagement counters. The post-reactions, post-views and
+      // comments tables grow with usage, so the feed must never scan them:
+      // every like/view/comment patches these numbers instead, and clients see
+      // the change live because they subscribe to the post document.
+      commentCount: v.optional(v.number()),
+      reactionCount: v.optional(v.number()),
+      /** kind -> count, e.g. { like: 3, amen: 1 } */
+      reactionKinds: v.optional(v.record(v.string(), v.number())),
+      viewCount: v.optional(v.number()),
+      viewerCount: v.optional(v.number()),
+    })
+      .index("createdAt", ["createdAt"])
+      .index("by_pinned", ["isPinned", "createdAt"]),
 
     comments: defineTable({
       postId: v.id("posts"),
