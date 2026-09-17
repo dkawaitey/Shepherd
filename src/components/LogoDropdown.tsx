@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import logo from "@/assets/logo.svg";
 import { useAuth } from "@/hooks/use-auth";
+import { releaseDevicePush } from "@/hooks/use-push-notifications";
 import { Home, LogOut } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -19,6 +20,7 @@ export function LogoDropdown() {
 
   const handleSignOut = async () => {
     try {
+      await releaseDevicePush();
       await signOut();
       navigate("/");
     } catch (error) {

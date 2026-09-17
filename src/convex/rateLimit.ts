@@ -45,6 +45,7 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
 
   // Expensive operations — stricter
   "post.generateUploadUrl": { maxRequests: 20, windowMs: 60_000 },
+  "post.react": { maxRequests: 60, windowMs: 60_000 },
   "contacts.merge": { maxRequests: 5, windowMs: 60_000 },
 
   // Notification/broadcast — very strict

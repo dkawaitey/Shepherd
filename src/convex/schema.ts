@@ -346,6 +346,41 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("postId", ["postId"]),
 
+    // ===== Engagement: reactions on posts and comments =====
+    // One row per (target, user). Reacting with a different kind replaces the
+    // row; reacting with the same kind removes it (see posts.react).
+    postReactions: defineTable({
+      targetType: v.union(v.literal("post"), v.literal("comment")),
+      /** posts._id or comments._id as a string. */
+      targetId: v.string(),
+      /** Parent post — lets us aggregate a whole thread without extra lookups. */
+      postId: v.id("posts"),
+      userId: v.id("users"),
+      userName: v.optional(v.string()),
+      /** "like" | "amen" | "pray" | "celebrate" */
+      kind: v.string(),
+      createdAt: v.number(),
+    })
+      .index("by_target", ["targetType", "targetId"])
+      .index("by_target_user", ["targetType", "targetId", "userId"])
+      .index("by_post", ["postId"])
+      .index("by_user", ["userId"]),
+
+    // ===== Engagement: per-user view records (unique viewers + view counts) =====
+    postViews: defineTable({
+      postId: v.id("posts"),
+      userId: v.id("users"),
+      userName: v.optional(v.string()),
+      /** Total times this user has opened the post. */
+      views: v.number(),
+      firstViewedAt: v.number(),
+      lastViewedAt: v.number(),
+    })
+      .index("by_post", ["postId"])
+      .index("by_post_user", ["postId", "userId"])
+      .index("by_user", ["userId"])
+      .index("by_last_viewed", ["lastViewedAt"]),
+
     // ===== Ministry settings (key/value) =====
     settings: defineTable({
       key: v.string(),
@@ -378,6 +413,19 @@ const schema = defineSchema(
       .index("by_endpoint", ["endpoint"])
       .index("by_email", ["email"])
       .index("by_user", ["userId"]),
+
+    // ===== Push preference (the user's *intent*, not the browser state) =====
+    // Persisted so a browser that drops or rotates its push subscription
+    // re-subscribes automatically instead of silently switching off.
+    pushPreferences: defineTable({
+      userId: v.id("users"),
+      email: v.optional(v.string()),
+      /// True once the user has enabled device notifications on any device.
+      enabled: v.boolean(),
+      /// Last device the user enabled from (for diagnostics).
+      userAgent: v.optional(v.string()),
+      updatedAt: v.number(),
+    }).index("by_user", ["userId"]),
 
     // ===== Scheduled notification jobs =====
     notificationJobs: defineTable({

@@ -1,8 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
-import { getCurrentUser, logAudit, requireRole } from "./helpers";
-import { ROLES } from "./constants";
+import { getCurrentUser, hasRole, logAudit, requireRole } from "./helpers";
+import { REACTION_KINDS, ROLES } from "./constants";
 import { checkRateLimit } from "./rateLimit";
 import { validatePostTitle, validatePostBody, validateCommentBody } from "./validate";
 
@@ -35,6 +35,9 @@ const MAX_FILE_SIZES: Record<string, number> = {
 };
 
 const MAX_MEDIA_PER_POST = 5;
+
+/** How long a repeat visit stops counting as a new view. */
+const VIEW_WINDOW_MS = 30 * 60 * 1000;
 
 function classifyMime(mime: string): "image" | "video" | "audio" | "file" {
   if (mime.startsWith("image/")) return "image";
@@ -121,10 +124,42 @@ export const list = query({
       commentCount.set(c.postId, (commentCount.get(c.postId) ?? 0) + 1);
     }
 
-    return posts.map((p) => ({
-      ...p,
-      commentCount: commentCount.get(p._id) ?? 0,
-    }));
+    // Engagement aggregates are computed here so every list gets them live —
+    // a reaction or a view anywhere updates all subscribed clients instantly.
+    const reactions = await ctx.db.query("postReactions").collect();
+    type Tally = { total: number; byKind: Record<string, number>; mine: string | null };
+    const postEngagement = new Map<string, Tally>();
+    for (const r of reactions) {
+      if (r.targetType !== "post") continue;
+      const tally = postEngagement.get(r.targetId) ?? { total: 0, byKind: {}, mine: null };
+      tally.total += 1;
+      tally.byKind[r.kind] = (tally.byKind[r.kind] ?? 0) + 1;
+      if (r.userId === user._id) tally.mine = r.kind;
+      postEngagement.set(r.targetId, tally);
+    }
+
+    const views = await ctx.db.query("postViews").collect();
+    const viewTotals = new Map<string, { views: number; viewers: number }>();
+    for (const v of views) {
+      const agg = viewTotals.get(v.postId) ?? { views: 0, viewers: 0 };
+      agg.views += v.views;
+      agg.viewers += 1;
+      viewTotals.set(v.postId, agg);
+    }
+
+    return posts.map((p) => {
+      const eng = postEngagement.get(p._id);
+      const vw = viewTotals.get(p._id);
+      return {
+        ...p,
+        commentCount: commentCount.get(p._id) ?? 0,
+        reactionCount: eng?.total ?? 0,
+        reactionKinds: eng?.byKind ?? {},
+        myReaction: eng?.mine ?? null,
+        viewCount: vw?.views ?? 0,
+        viewerCount: vw?.viewers ?? 0,
+      };
+    });
   },
 });
 
@@ -140,9 +175,229 @@ export const get = query({
       .query("comments")
       .withIndex("postId", (q) => q.eq("postId", args.id))
       .collect();
+
+    // Per-comment reactions so each comment/reply can show its own tally.
+    const reactions = await ctx.db
+      .query("postReactions")
+      .withIndex("by_post", (q) => q.eq("postId", args.id))
+      .collect();
+    const commentReactions: Record<
+      string,
+      { count: number; byKind: Record<string, number>; mine: string | null }
+    > = {};
+    for (const r of reactions) {
+      if (r.targetType !== "comment") continue;
+      const entry =
+        commentReactions[r.targetId] ?? { count: 0, byKind: {}, mine: null };
+      entry.count += 1;
+      entry.byKind[r.kind] = (entry.byKind[r.kind] ?? 0) + 1;
+      if (r.userId === user._id) entry.mine = r.kind;
+      commentReactions[r.targetId] = entry;
+    }
+
     return {
       ...post,
       comments: comments.sort((a, b) => a.createdAt - b.createdAt),
+      commentReactions,
+    };
+  },
+});
+
+/**
+ * Leave, change or clear a reaction on a post or a comment/reply.
+ * Same reaction twice clears it; a different one replaces it.
+ */
+export const react = mutation({
+  args: {
+    postId: v.id("posts"),
+    targetType: v.union(v.literal("post"), v.literal("comment")),
+    targetId: v.string(),
+    kind: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) throw new ConvexError("Sign in to react");
+    await checkRateLimit(ctx, "post.react");
+
+    if (!REACTION_KINDS.includes(args.kind)) {
+      throw new ConvexError("Unknown reaction");
+    }
+
+    const post = await ctx.db.get(args.postId);
+    if (!post) throw new ConvexError("Post not found");
+
+    // The target must exist and belong to the post it claims to.
+    if (args.targetType === "post") {
+      if (args.targetId !== args.postId) {
+        throw new ConvexError("That post no longer exists");
+      }
+    } else {
+      const comment = await ctx.db.get(args.targetId as any);
+      if (!comment || (comment as any).postId !== args.postId) {
+        throw new ConvexError("That comment no longer exists");
+      }
+    }
+
+    const existing = await ctx.db
+      .query("postReactions")
+      .withIndex("by_target_user", (q) =>
+        q
+          .eq("targetType", args.targetType)
+          .eq("targetId", args.targetId)
+          .eq("userId", user._id),
+      )
+      .first();
+
+    if (existing && existing.kind === args.kind) {
+      await ctx.db.delete(existing._id);
+      return { kind: null };
+    }
+
+    const userName = user.name ?? user.email ?? "Member";
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        kind: args.kind,
+        userName,
+        createdAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("postReactions", {
+        targetType: args.targetType,
+        targetId: args.targetId,
+        postId: args.postId,
+        userId: user._id,
+        userName,
+        kind: args.kind,
+        createdAt: Date.now(),
+      });
+    }
+
+    return { kind: args.kind };
+  },
+});
+
+/**
+ * Count a view of a post. Repeat visits inside the same 30-minute window
+ * don't inflate the counter, so the number stays honest while still ticking
+ * up live as new people open the post.
+ */
+export const recordView = mutation({
+  args: { postId: v.id("posts") },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) return { recorded: false };
+    const post = await ctx.db.get(args.postId);
+    if (!post) return { recorded: false };
+
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("postViews")
+      .withIndex("by_post_user", (q) =>
+        q.eq("postId", args.postId).eq("userId", user._id),
+      )
+      .first();
+
+    const userName = user.name ?? user.email ?? "Member";
+
+    if (existing) {
+      if (now - existing.lastViewedAt < VIEW_WINDOW_MS) return { recorded: false };
+      await ctx.db.patch(existing._id, {
+        views: existing.views + 1,
+        lastViewedAt: now,
+        userName,
+      });
+      return { recorded: true };
+    }
+
+    await ctx.db.insert("postViews", {
+      postId: args.postId,
+      userId: user._id,
+      userName,
+      views: 1,
+      firstViewedAt: now,
+      lastViewedAt: now,
+    });
+    return { recorded: true };
+  },
+});
+
+/**
+ * Full engagement detail for one post: who reacted, how it breaks down, who
+ * viewed it and the comment/reply activity. Viewer identities are only
+ * returned to leaders and above.
+ */
+export const engagementDetails = query({
+  args: { postId: v.id("posts") },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return null;
+    const post = await ctx.db.get(args.postId);
+    if (!post) return null;
+
+    const reactions = await ctx.db
+      .query("postReactions")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .collect();
+    const views = await ctx.db
+      .query("postViews")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .collect();
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("postId", (q) => q.eq("postId", args.postId))
+      .collect();
+
+    const canSeeViewers = [ROLES.COORDINATOR, ROLES.WORKER, ROLES.LEADER].some((r) =>
+      hasRole(user, r),
+    );
+
+    const breakdown: Record<string, number> = {};
+    const reactors: { name: string; kind: string; at: number }[] = [];
+    for (const r of reactions) {
+      breakdown[r.kind] = (breakdown[r.kind] ?? 0) + 1;
+      if (r.targetType === "post") {
+        reactors.push({ name: r.userName ?? "Member", kind: r.kind, at: r.createdAt });
+      }
+    }
+    reactors.sort((a, b) => b.at - a.at);
+
+    const roots = comments.filter((c) => !c.parentId);
+    const commenters = new Set<string>();
+    for (const c of comments) {
+      if (c.authorId) commenters.add(c.authorId);
+    }
+
+    return {
+      postId: args.postId,
+      title: post.title,
+      createdAt: post.createdAt,
+      // views
+      viewCount: views.reduce((sum, v) => sum + v.views, 0),
+      viewerCount: views.length,
+      canSeeViewers,
+      viewers: canSeeViewers
+        ? views
+            .sort((a, b) => b.lastViewedAt - a.lastViewedAt)
+            .map((v) => ({
+              name: v.userName ?? "Member",
+              views: v.views,
+              lastViewedAt: v.lastViewedAt,
+            }))
+        : [],
+      // reactions
+      reactionCount: reactions.length,
+      reactionBreakdown: (Object.entries(breakdown) as [string, number][])
+        .map(([kind, count]) => ({ kind, count }))
+        .sort((a, b) => b.count - a.count),
+      reactors,
+      // conversation
+      commentCount: comments.length,
+      replyCount: comments.length - roots.length,
+      participantCount: commenters.size,
+      commenterNames: [...comments]
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 50)
+        .map((c) => c.author ?? "Member"),
     };
   },
 });
@@ -385,6 +640,22 @@ export const remove = mutation({
       await ctx.db.delete(c._id);
     }
 
+    // Hard-delete engagement rows (reactions + views) for the post
+    const reactions = await ctx.db
+      .query("postReactions")
+      .withIndex("by_post", (q) => q.eq("postId", args.id))
+      .collect();
+    for (const r of reactions) {
+      await ctx.db.delete(r._id);
+    }
+    const views = await ctx.db
+      .query("postViews")
+      .withIndex("by_post", (q) => q.eq("postId", args.id))
+      .collect();
+    for (const v of views) {
+      await ctx.db.delete(v._id);
+    }
+
     // Hard-delete the post itself
     await ctx.db.delete(args.id);
     await logAudit(ctx, {
@@ -414,12 +685,25 @@ export const removeComment = mutation({
     const replies = await ctx.db
       .query("comments")
       .collect();
+    const removedIds = new Set<string>([args.id]);
     for (const r of replies) {
       if (r.parentId === args.id) {
+        removedIds.add(r._id);
         await ctx.db.delete(r._id);
       }
     }
     await ctx.db.delete(args.id);
+
+    // Reactions left on the comment or its replies go with them.
+    const reactions = await ctx.db
+      .query("postReactions")
+      .withIndex("by_post", (q) => q.eq("postId", comment.postId))
+      .collect();
+    for (const r of reactions) {
+      if (r.targetType === "comment" && removedIds.has(r.targetId)) {
+        await ctx.db.delete(r._id);
+      }
+    }
   },
 });
 

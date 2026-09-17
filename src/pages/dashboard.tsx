@@ -437,9 +437,11 @@ export default function Dashboard() {
                     {p.author} · {fmtDate(new Date(p.createdAt).toISOString())}
                   </span>
                 </span>
-                {p.commentCount > 0 && (
-                  <span className="ml-auto shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                    {p.commentCount} 💬
+                {(p.viewCount > 0 || p.reactionCount > 0 || p.commentCount > 0) && (
+                  <span className="ml-auto flex shrink-0 items-center gap-2 self-center text-[9px] tabular-nums text-muted-foreground">
+                    {p.viewCount > 0 && <span title="views">👁 {p.viewCount}</span>}
+                    {p.reactionCount > 0 && <span title="reactions">❤ {p.reactionCount}</span>}
+                    {p.commentCount > 0 && <span title="comments">💬 {p.commentCount}</span>}
                   </span>
                 )}
               </Link>

@@ -521,6 +521,32 @@ export const removeUser = mutation({
       await ctx.db.delete(session._id);
     }
 
+    // Device registrations and the saved notification intent go with the account.
+    const subscriptions = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const sub of subscriptions) await ctx.db.delete(sub._id);
+
+    const prefs = await ctx.db
+      .query("pushPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const pref of prefs) await ctx.db.delete(pref._id);
+
+    // Engagement left by the account: reactions and view records.
+    const reactions = await ctx.db
+      .query("postReactions")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const r of reactions) await ctx.db.delete(r._id);
+
+    const views = await ctx.db
+      .query("postViews")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const v of views) await ctx.db.delete(v._id);
+
     await ctx.db.delete(args.userId);
     await logAudit(ctx, {
       action: "user.delete",

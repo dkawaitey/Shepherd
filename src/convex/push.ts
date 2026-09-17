@@ -1,7 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
+import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, MutationCtx } from "./_generated/server";
 import { requireAdmin, getCurrentUser } from "./helpers";
 import { checkRateLimit } from "./rateLimit";
 
@@ -9,6 +10,64 @@ import { checkRateLimit } from "./rateLimit";
 export const getPublicKey = query({
   args: {},
   handler: () => process.env.VAPID_PUBLIC_KEY ?? null,
+});
+
+/**
+ * The user's persisted notification intent. This is what keeps the "enable"
+ * toggle on even after the browser drops or rotates its push subscription:
+ * the client re-subscribes automatically while `enabled` is true.
+ */
+export const myPreference = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return { enabled: false as boolean, exists: false };
+
+    const pref = await ctx.db
+      .query("pushPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const devices = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    return {
+      enabled: pref?.enabled ?? false,
+      exists: !!pref,
+      deviceCount: devices.length,
+      updatedAt: pref?.updatedAt ?? null,
+    };
+  },
+});
+
+/** Record the user's notification intent (on/off). */
+export const setPreference = mutation({
+  args: { enabled: v.boolean(), userAgent: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new ConvexError("Sign in to manage notifications.");
+    const user = await ctx.db.get(userId);
+
+    const existing = await ctx.db
+      .query("pushPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const fields = {
+      userId,
+      email: user?.email,
+      enabled: args.enabled,
+      userAgent: args.userAgent,
+      updatedAt: Date.now(),
+    };
+
+    if (existing) await ctx.db.patch(existing._id, fields);
+    else await ctx.db.insert("pushPreferences", fields);
+
+    return { enabled: args.enabled };
+  },
 });
 
 /** Save (or update) the current user's push subscription. */
@@ -53,6 +112,10 @@ export const saveSubscription = mutation({
         createdAt: Date.now(),
       });
     }
+
+    // Registering a device is an explicit opt-in — persist that intent so the
+    // client can silently re-subscribe if the browser ever drops the endpoint.
+    await setPreferenceHandler(ctx, userId, true, args.userAgent, user?.email);
   },
 });
 
@@ -72,8 +135,37 @@ export const removeSubscription = mutation({
     if (row && row.userId === userId) {
       await ctx.db.delete(row._id);
     }
+
+    // Turning notifications off on this device is an explicit opt-out, so the
+    // intent is cleared too (otherwise the auto-heal would switch it back on).
+    await setPreferenceHandler(ctx, userId, false, undefined, undefined);
   },
 });
+
+/** Shared upsert for the per-user notification intent row. */
+async function setPreferenceHandler(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  enabled: boolean,
+  userAgent?: string,
+  email?: string,
+) {
+  const existing = await ctx.db
+    .query("pushPreferences")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .first();
+
+  const fields = {
+    userId,
+    email,
+    enabled,
+    userAgent,
+    updatedAt: Date.now(),
+  };
+
+  if (existing) await ctx.db.patch(existing._id, fields);
+  else await ctx.db.insert("pushPreferences", fields);
+}
 
 /** Return the current user's subscription count and last subscription info (for debugging). */
 export const mySubscriptionStatus = query({
@@ -87,8 +179,14 @@ export const mySubscriptionStatus = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
+    const pref = await ctx.db
+      .query("pushPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
     return {
       subscribed: devices.length > 0,
+      enabled: pref?.enabled ?? false,
       count: devices.length,
       permission: typeof Notification !== "undefined" ? Notification.permission : "unavailable",
     };

@@ -8,8 +8,8 @@
  *  - Notification clicks: focus or open the app to the notification URL.
  */
 
-const NOTIFICATION_CHANNEL = "shepherd-notifications";
 const CACHE = "shepherd-shell-v4";
+const PUSH_CACHE = "shepherd-push-v1";
 const SHELL = [
   "/",
   "/index.html",
@@ -33,7 +33,11 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
+        Promise.all(
+          keys
+            .filter((k) => k !== CACHE && k !== PUSH_CACHE)
+            .map((k) => caches.delete(k)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -82,12 +86,82 @@ self.addEventListener("fetch", (event) => {
 
 /* ===================== Push Notifications ===================== */
 
-/* Android notification channel — must be created before showing notifications. */
-if (typeof self.registration !== "undefined" && self.registration.pushManager) {
-  // Channel creation is handled by the notification itself; however, we
-  // ensure the tag is unique per notification kind so Android groups them
-  // properly instead of collapsing everything into one.
+/*
+ * Browsers silently rotate or drop push subscriptions (OS updates, storage
+ * pressure, PWA updates). When that happens the app would stop receiving
+ * notifications and the user had to switch them back on by hand. To prevent
+ * that, the VAPID public key is cached here by the page, so the worker can
+ * re-subscribe all on its own and hand the new endpoint back to open pages.
+ */
+const VAPID_CACHE_KEY = "/__vapid-public-key";
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const buffer = new ArrayBuffer(raw.length);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return buffer;
 }
+
+async function storeVapidKey(key) {
+  const cache = await caches.open(PUSH_CACHE);
+  await cache.put(VAPID_CACHE_KEY, new Response(key));
+}
+
+async function readVapidKey() {
+  try {
+    const cache = await caches.open(PUSH_CACHE);
+    const res = await cache.match(VAPID_CACHE_KEY);
+    return res ? await res.text() : null;
+  } catch {
+    return null;
+  }
+}
+
+self.addEventListener("message", (event) => {
+  const data = event.data;
+  if (data && data.type === "shepherd:vapid" && typeof data.key === "string") {
+    event.waitUntil(storeVapidKey(data.key));
+  }
+});
+
+/* The browser replaced our subscription — re-subscribe and tell open pages. */
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const key = await readVapidKey();
+        if (!key) return;
+        const subscription = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(key),
+        });
+        const clients = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+        for (const client of clients) {
+          client.postMessage({
+            type: "shepherd:push-resubscribed",
+            subscription: subscription.toJSON(),
+          });
+        }
+        const old = event.oldSubscription;
+        if (old) {
+          try {
+            await old.unsubscribe();
+          } catch {
+            /* already gone */
+          }
+        }
+      } catch {
+        /* If this fails the app restores the subscription on next open. */
+      }
+    })(),
+  );
+});
 
 self.addEventListener("push", (event) => {
   const data = event.data?.json?.() ?? { title: "Shepherd", body: "", url: "/" };

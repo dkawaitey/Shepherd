@@ -749,7 +749,7 @@ function EmailRemindersSection() {
 
 function NotificationsTab() {
   const me = useQuery(api.users.currentUser);
-  const { subscribed, permission, loading, enable, disable } = usePushNotifications(!!me);
+  const { subscribed, deviceReady, permission, loading, enable, disable } = usePushNotifications(!!me);
   const [actionError, setActionError] = useState("");
   const [testing, setTesting] = useState(false);
   const sendTestNotif = useMutation(api.push.sendTestNotification);
@@ -794,7 +794,9 @@ function NotificationsTab() {
                 {!supported
                   ? "Not supported in this browser"
                   : subscribed
-                    ? "Enabled — you will receive device notifications"
+                    ? deviceReady
+                      ? "Enabled — you will receive device notifications"
+                      : "Enabled — restoring notifications on this device…"
                     : permission === "denied"
                       ? "Permission denied — enable in browser settings"
                       : "Receive follow-up reminders, announcements and alerts as device notifications"}
@@ -813,7 +815,11 @@ function NotificationsTab() {
               <div>
                 <div className="text-[13px] font-medium">Enable on this device</div>
                 <div className="text-[10px] text-muted-foreground">
-                  {subscribed ? "Notifications are active" : "Click to enable device notifications"}
+                  {subscribed
+                    ? deviceReady
+                      ? "Notifications are active"
+                      : "Reconnecting this device automatically…"
+                    : "Click to enable device notifications"}
                 </div>
               </div>
               <Switch

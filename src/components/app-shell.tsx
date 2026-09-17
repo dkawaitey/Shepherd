@@ -27,7 +27,7 @@ import {
   FlaskConical,
   ShieldAlert,
 } from "lucide-react";
-import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { releaseDevicePush, usePushNotifications } from "@/hooks/use-push-notifications";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -171,6 +171,7 @@ export function AppShell() {
   );
 
   const handleSignOut = async () => {
+    await releaseDevicePush();
     await signOut();
     navigate("/");
   };

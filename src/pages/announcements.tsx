@@ -16,12 +16,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   EmptyState,
   PageHeader,
   fmtDateTime,
   formatError,
 } from "@/components/shared";
+import {
+  REACTIONS,
+  REACTION_BY_KIND,
+  REACTION_FALLBACK,
+} from "@/convex/constants";
 
 import {
   FileIcon,
@@ -36,6 +47,11 @@ import {
   UserRound,
   Music,
   AlertCircle,
+  Eye,
+  Heart,
+  BarChart3,
+  Activity,
+  Users,
 } from "lucide-react";
 
 // ── Client-side media helpers ──────────────────────────────────────
@@ -172,90 +188,458 @@ export default function Announcements() {
         />
       ) : (
         <div className="space-y-4">
-          {posts.map((p) => {
-            const isOpen = expanded === p._id;
-            const canDelete = isAdmin || p.authorId === me?._id;
-            return (
-              <article key={p._id} id={`post-${p._id}`} className="scroll-mt-20 overflow-hidden rounded-lg border bg-card">
-                <div className="p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/30 bg-accent">
-                        <UserRound className="h-3.5 w-3.5 text-primary" />
-                      </span>
-                      <div>
-                        <div className="text-[13px] font-bold">{p.title}</div>
-                        <div className="text-[10px] text-muted-foreground">
-                          {p.author} · {fmtDateTime(new Date(p.createdAt).toISOString())}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {p.isPinned && (
-                        <span className="flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#fbbf24]">
-                          <Pin className="h-2.5 w-2.5" /> pinned
-                        </span>
-                      )}
-                      {canDelete && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          title="Remove post"
-                          onClick={async () => {
-                            await removePost({ id: p._id });
-                            toast.success("Post removed");
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6 text-foreground/90">
-                    {p.body}
-                  </p>
-
-                  {p.media && p.media.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {p.media.map((m, i) => (
-                        <PostMediaItem key={i} media={m} postId={p._id} />
-                      ))}
-                    </div>
-                  )}
-
-                  {p.tags && p.tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {p.tags.map((t) => (
-                        <span key={t} className="rounded border border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                          #{t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setExpanded(isOpen ? null : p._id)}
-                    className="mt-4 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    {p.commentCount} {p.commentCount === 1 ? "comment" : "comments"}
-                    <span className="text-muted-foreground/50">{isOpen ? "−" : "+"}</span>
-                  </button>
-                </div>
-
-                {isOpen && (
-                  <CommentThread postId={p._id} />
-                )}
-              </article>
-            );
-          })}
+          {posts.map((p) => (
+            <PostCard
+              key={p._id}
+              post={p}
+              meId={me?._id}
+              isAdmin={isAdmin}
+              isOpen={expanded === p._id}
+              onToggle={() => setExpanded(expanded === p._id ? null : p._id)}
+              onRemove={async () => {
+                await removePost({ id: p._id });
+                toast.success("Post removed");
+              }}
+            />
+          ))}
         </div>
       )}
 
       <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
+  );
+}
+
+// ── Engagement helpers ─────────────────────────────────────────────
+
+/** Short relative time, e.g. "4m", "3h", "2d". */
+function timeAgo(ts: number) {
+  const secs = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return fmtDateTime(new Date(ts).toISOString());
+}
+
+function reactionMeta(kind: string) {
+  return REACTION_BY_KIND[kind] ?? { ...REACTION_FALLBACK, kind };
+}
+
+/** Compact emoji + count chips for a reaction breakdown. */
+function ReactionSummary({ kinds }: { kinds: Record<string, number> }) {
+  const entries = Object.entries(kinds ?? {}).filter(([, n]) => n > 0);
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex items-center gap-1.5">
+      {entries.map(([kind, count]) => (
+        <span
+          key={kind}
+          title={`${count} ${reactionMeta(kind).label}`}
+          className="flex items-center gap-1 rounded-full border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+        >
+          <span>{reactionMeta(kind).emoji}</span>
+          {count}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Reaction control for a post or a comment/reply. Opens a small palette on
+ * tap (works on touch screens), and tapping the active reaction clears it.
+ */
+function ReactionPicker({
+  postId,
+  targetType,
+  targetId,
+  mine,
+  count,
+  compact = false,
+}: {
+  postId: string;
+  targetType: "post" | "comment";
+  targetId: string;
+  mine: string | null;
+  count: number;
+  compact?: boolean;
+}) {
+  const react = useMutation(api.posts.react);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const current = mine ? reactionMeta(mine) : null;
+
+  const choose = async (kind: string) => {
+    setBusy(true);
+    try {
+      await react({ postId: postId as any, targetType, targetId, kind });
+      setOpen(false);
+    } catch (err) {
+      toast.error(formatError(err, "Could not save your reaction"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={busy}
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+            current
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-border bg-muted/40 text-muted-foreground hover:text-primary",
+            busy && "opacity-60",
+          )}
+        >
+          {current ? (
+            <span className={compact ? "text-[11px]" : "text-xs"}>{current.emoji}</span>
+          ) : (
+            <Heart className="h-3 w-3" />
+          )}
+          {!compact && (current ? current.label : "React")}
+          {count > 0 && <span className="tabular-nums">{count}</span>}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="top" className="w-auto p-1.5">
+        <div className="flex items-center gap-0.5">
+          {REACTIONS.map((r) => (
+            <button
+              key={r.kind}
+              type="button"
+              title={mine === r.kind ? `${r.label} (tap to remove)` : r.label}
+              onClick={() => choose(r.kind)}
+              className={cn(
+                "rounded-md px-2 py-1 text-base leading-none transition-colors hover:bg-accent",
+                mine === r.kind && "bg-accent",
+              )}
+            >
+              {r.emoji}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Counts a view once the post has actually been on screen for a moment. */
+function useViewTracker(postId: string, enabled: boolean) {
+  const ref = useRef<HTMLElement | null>(null);
+  const recorded = useRef(false);
+  const recordView = useMutation(api.posts.recordView);
+
+  useEffect(() => {
+    if (!enabled || recorded.current) return;
+    const el = ref.current;
+    if (!el) return;
+
+    // No IntersectionObserver (very old browser): count it and move on.
+    if (typeof IntersectionObserver === "undefined") {
+      recorded.current = true;
+      void recordView({ postId: postId as any }).catch(() => undefined);
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.some((e) => e.isIntersecting && e.intersectionRatio >= 0.4);
+        if (!visible || recorded.current) return;
+        recorded.current = true;
+        observer.disconnect();
+        // Brief dwell so scrolling straight past doesn't count.
+        timer = setTimeout(() => {
+          void recordView({ postId: postId as any }).catch(() => undefined);
+        }, 1200);
+      },
+      { threshold: [0.4] },
+    );
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+      if (timer) clearTimeout(timer);
+    };
+  }, [enabled, postId, recordView]);
+
+  return ref;
+}
+
+type FeedPost = {
+  _id: string;
+  author?: string;
+  authorId?: string;
+  title: string;
+  body: string;
+  tags?: string[];
+  media?: MediaItem[];
+  isPinned?: boolean;
+  createdAt: number;
+  commentCount: number;
+  reactionCount: number;
+  reactionKinds: Record<string, number>;
+  myReaction: string | null;
+  viewCount: number;
+  viewerCount: number;
+};
+
+function PostCard({
+  post,
+  meId,
+  isAdmin,
+  isOpen,
+  onToggle,
+  onRemove,
+}: {
+  post: FeedPost;
+  meId?: string;
+  isAdmin: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  onRemove: () => Promise<void>;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const ref = useViewTracker(post._id, true);
+  const canDelete = isAdmin || post.authorId === meId;
+
+  return (
+    <article
+      ref={ref}
+      id={`post-${post._id}`}
+      className="scroll-mt-20 overflow-hidden rounded-lg border bg-card"
+    >
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/30 bg-accent">
+              <UserRound className="h-3.5 w-3.5 text-primary" />
+            </span>
+            <div>
+              <div className="text-[13px] font-bold">{post.title}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {post.author} · {fmtDateTime(new Date(post.createdAt).toISOString())}
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {post.isPinned && (
+              <span className="flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#fbbf24]">
+                <Pin className="h-2.5 w-2.5" /> pinned
+              </span>
+            )}
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                title="Remove post"
+                onClick={onRemove}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6 text-foreground/90">
+          {post.body}
+        </p>
+
+        {post.media && post.media.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {post.media.map((m, i) => (
+              <PostMediaItem key={i} media={m} postId={post._id} />
+            ))}
+          </div>
+        )}
+
+        {post.tags && post.tags.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {post.tags.map((t) => (
+              <span key={t} className="rounded border border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                #{t}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Engagement bar — reactions, comments and the live view counter. */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
+          <ReactionPicker
+            postId={post._id}
+            targetType="post"
+            targetId={post._id}
+            mine={post.myReaction}
+            count={post.reactionCount}
+          />
+          <ReactionSummary kinds={post.reactionKinds} />
+
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-primary"
+          >
+            <MessageSquare className="h-3 w-3" />
+            {post.commentCount} {post.commentCount === 1 ? "comment" : "comments"}
+            <span className="text-muted-foreground/50">{isOpen ? "−" : "+"}</span>
+          </button>
+
+          <span
+            className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground"
+            title={`${post.viewCount} views by ${post.viewerCount} ${post.viewerCount === 1 ? "person" : "people"} · updates live`}
+          >
+            <Eye className="h-3 w-3" />
+            <span className="tabular-nums">{post.viewCount}</span>
+            {post.viewerCount > 1 && (
+              <span className="text-muted-foreground/70">· {post.viewerCount} people</span>
+            )}
+          </span>
+
+          <button
+            onClick={() => setDetailsOpen(true)}
+            className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground transition-colors hover:text-primary"
+            title="See who engaged with this post"
+          >
+            <BarChart3 className="h-3 w-3" /> Details
+          </button>
+        </div>
+      </div>
+
+      {isOpen && <CommentThread postId={post._id} />}
+
+      <EngagementDetailsDialog
+        postId={post._id}
+        title={post.title}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+      />
+    </article>
+  );
+}
+
+/** Full engagement breakdown for one post: views, reactions and conversation. */
+function EngagementDetailsDialog({
+  postId,
+  title,
+  open,
+  onOpenChange,
+}: {
+  postId: string;
+  title: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const details = useQuery(
+    api.posts.engagementDetails,
+    open ? { postId: postId as any } : "skip",
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <Activity className="h-4 w-4 text-primary" /> Engagement
+          </DialogTitle>
+          <DialogDescription className="line-clamp-2 text-[11px]">{title}</DialogDescription>
+        </DialogHeader>
+
+        {!details ? (
+          <div className="h-40 animate-pulse rounded-md border bg-muted/40" />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                { label: "Views", value: details.viewCount },
+                { label: "People", value: details.viewerCount },
+                { label: "Reactions", value: details.reactionCount },
+                { label: "Comments", value: details.commentCount },
+              ].map((s) => (
+                <div key={s.label} className="rounded-md border bg-muted/40 px-2.5 py-2">
+                  <div className="text-[15px] font-bold tabular-nums">{s.value}</div>
+                  <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                    {s.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Heart className="h-3 w-3" /> Reactions
+              </div>
+              {details.reactionCount === 0 ? (
+                <p className="text-[11px] text-muted-foreground">No reactions yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  <ReactionSummary
+                    kinds={Object.fromEntries(details.reactionBreakdown.map((b) => [b.kind, b.count]))}
+                  />
+                  <div className="max-h-32 divide-y overflow-auto rounded-md border">
+                    {details.reactors.map((r, i) => (
+                      <div key={i} className="flex items-center justify-between px-2.5 py-1.5">
+                        <span className="truncate text-[11px]">{r.name}</span>
+                        <span className="flex shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
+                          {reactionMeta(r.kind).emoji} {reactionMeta(r.kind).label}
+                          <span className="text-muted-foreground/70">{timeAgo(r.at)}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Users className="h-3 w-3" /> Conversation
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {details.commentCount} comments · {details.replyCount} replies ·{" "}
+                {details.participantCount} {details.participantCount === 1 ? "participant" : "participants"}
+              </p>
+              {details.commenterNames.length > 0 && (
+                <p className="mt-1 text-[10px] text-muted-foreground/80">
+                  {[...new Set(details.commenterNames)].slice(0, 8).join(", ")}
+                  {new Set(details.commenterNames).size > 8 ? " and others" : ""}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Eye className="h-3 w-3" /> Who viewed it
+              </div>
+              {!details.canSeeViewers ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Only leaders and coordinators can see who viewed a post. {details.viewCount} views so far.
+                </p>
+              ) : details.viewers.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">No views recorded yet.</p>
+              ) : (
+                <div className="max-h-40 divide-y overflow-auto rounded-md border">
+                  {details.viewers.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between px-2.5 py-1.5">
+                      <span className="truncate text-[11px]">{v.name}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {v.views} {v.views === 1 ? "view" : "views"} · {timeAgo(v.lastViewedAt)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -324,6 +708,14 @@ type ThreadComment = {
   createdAt: number;
 };
 
+type CommentReactionTally = {
+  count: number;
+  byKind: Record<string, number>;
+  mine: string | null;
+};
+
+type CommentReactionMap = Record<string, CommentReactionTally>;
+
 /** One comment or reply, with its own reply input and nested replies below it. */
 function CommentNode({
   comment,
@@ -332,6 +724,7 @@ function CommentNode({
   postId,
   me,
   isAdmin,
+  reactions,
   addComment,
   removeComment,
 }: {
@@ -341,6 +734,7 @@ function CommentNode({
   postId: string;
   me: { _id?: string } | null | undefined;
   isAdmin: boolean;
+  reactions: CommentReactionMap;
   addComment: (args: { postId: any; parentId?: any; body: string }) => Promise<unknown>;
   removeComment: (args: { id: any }) => Promise<unknown>;
 }) {
@@ -349,6 +743,7 @@ function CommentNode({
   const [busy, setBusy] = useState(false);
   const canDelete = isAdmin || comment.authorId === me?._id;
   const replies = childrenOf.get(comment._id) ?? [];
+  const tally = reactions?.[comment._id];
 
   return (
     <div id={`comment-${comment._id}`} className="scroll-mt-24">
@@ -388,6 +783,18 @@ function CommentNode({
           <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-5 text-foreground/85">
             {comment.body}
           </p>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <ReactionPicker
+              postId={postId}
+              targetType="comment"
+              targetId={comment._id}
+              mine={tally?.mine ?? null}
+              count={tally?.count ?? 0}
+              compact
+            />
+            {tally && <ReactionSummary kinds={tally.byKind} />}
+          </div>
 
           {replying && (
             <form
@@ -441,6 +848,7 @@ function CommentNode({
               postId={postId}
               me={me}
               isAdmin={isAdmin}
+              reactions={reactions}
               addComment={addComment}
               removeComment={removeComment}
             />
@@ -461,6 +869,8 @@ function CommentThread({ postId }: { postId: string }) {
   const [busy, setBusy] = useState(false);
 
   const comments: ThreadComment[] = (post?.comments ?? []) as ThreadComment[];
+  const commentReactions: CommentReactionMap =
+    (post?.commentReactions as CommentReactionMap | undefined) ?? {};
   const childrenOf = new Map<string | undefined, ThreadComment[]>();
   for (const c of comments) {
     const key = c.parentId ?? undefined;
@@ -486,6 +896,7 @@ function CommentThread({ postId }: { postId: string }) {
               postId={postId}
               me={me}
               isAdmin={isAdmin}
+              reactions={commentReactions}
               addComment={addComment}
               removeComment={removeComment}
             />

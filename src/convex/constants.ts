@@ -1,5 +1,23 @@
 // Shared domain constants for Shepherd (safe to import from client and server).
 
+/** Reactions members can leave on an announcement, comment or reply. */
+export const REACTIONS = [
+  { kind: "like", label: "Like", emoji: "❤️" },
+  { kind: "amen", label: "Amen", emoji: "🙏" },
+  { kind: "pray", label: "Praying", emoji: "🕊️" },
+  { kind: "celebrate", label: "Celebrate", emoji: "🎉" },
+] as const;
+
+export type ReactionKind = (typeof REACTIONS)[number]["kind"];
+
+export const REACTION_KINDS: readonly string[] = REACTIONS.map((r) => r.kind);
+
+export const REACTION_BY_KIND: Record<string, { kind: string; label: string; emoji: string }> =
+  Object.fromEntries(REACTIONS.map((r) => [r.kind, { ...r }]));
+
+/** Label shown when a reaction kind is unknown (e.g. an older row). */
+export const REACTION_FALLBACK = { kind: "like", label: "Like", emoji: "❤️" };
+
 export const ROLES = {
   ADMIN: "admin",
   COORDINATOR: "coordinator",
