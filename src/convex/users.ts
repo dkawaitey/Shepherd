@@ -1,7 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, internalQuery, query, QueryCtx } from "./_generated/server";
-import { logAudit, requireAdmin, requireRole, hasRole, validClassScope } from "./helpers";
+import {
+  logAudit,
+  requireAdmin,
+  requireRole,
+  hasRole,
+  validClassScope,
+  canReadMinistry,
+} from "./helpers";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validatePhone } from "./validate";
 import {
@@ -180,7 +187,7 @@ export const classLeaders = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return [];
+    if (!canReadMinistry(user)) return [];
     const users = await ctx.db.query("users").collect();
     return users
       .filter(

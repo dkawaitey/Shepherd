@@ -9,7 +9,8 @@ export const get = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return null;
+    // Guests see no settings at all.
+    if (!user || user.isAnonymous) return null;
     const rows = await ctx.db.query("settings").collect();
     const out: Record<string, string> = {};
     for (const row of rows) out[row.key] = row.value;

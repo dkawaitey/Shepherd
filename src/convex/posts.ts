@@ -156,7 +156,8 @@ export const getMediaUrl = query({
   args: { storageId: v.string(), postId: v.id("posts") },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return null;
+    // Guests get no media URLs, even for posts they could guess the id of.
+    if (!user || user.isAnonymous) return null;
     const post = await ctx.db.get(args.postId);
     if (!post) return null;
     // Verify the storageId actually belongs to this post's media
@@ -183,7 +184,9 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return [];
+    // Announcements are for signed-in team members (including ordinary
+    // members), but never for anonymous guest accounts.
+    if (!user || user.isAnonymous) return [];
 
     const limit = Math.min(Math.max(Math.trunc(args.limit ?? 20), 1), 100);
 
@@ -256,7 +259,7 @@ export const authors = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return [];
+    if (!user || user.isAnonymous) return [];
     const posts = await ctx.db
       .query("posts")
       .withIndex("createdAt")
@@ -273,7 +276,7 @@ export const get = query({
   args: { id: v.id("posts") },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return null;
+    if (!user || user.isAnonymous) return null;
     const post = await ctx.db.get(args.id);
     if (!post) return null;
     const comments = await ctx.db

@@ -50,20 +50,22 @@ type NavItem = {
   icon: LucideIcon;
   code: string;
   adminOnly?: boolean;
+  /** Ministry records are limited to accounts that hold a ministry role. */
+  ministryOnly?: boolean;
 };
 
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, code: "D" },
-  { to: "/contacts", label: "Contacts", icon: ContactRound, code: "C" },
-  { to: "/followups", label: "Follow-ups", icon: ClipboardCheck, code: "F" },
-  { to: "/discipleship", label: "Discipleship", icon: Sparkle, code: "DS" },
-  { to: "/bible-studies", label: "Bible Studies", icon: BookMarked, code: "B" },
-  { to: "/members", label: "Members", icon: UserRound, code: "M" },
-  { to: "/attendance", label: "Attendance", icon: CalendarCheck, code: "A" },
-  { to: "/prayer-journal", label: "Prayer Journal", icon: Heart, code: "P" },
+  { to: "/contacts", label: "Contacts", icon: ContactRound, code: "C", ministryOnly: true },
+  { to: "/followups", label: "Follow-ups", icon: ClipboardCheck, code: "F", ministryOnly: true },
+  { to: "/discipleship", label: "Discipleship", icon: Sparkle, code: "DS", ministryOnly: true },
+  { to: "/bible-studies", label: "Bible Studies", icon: BookMarked, code: "B", ministryOnly: true },
+  { to: "/members", label: "Members", icon: UserRound, code: "M", ministryOnly: true },
+  { to: "/attendance", label: "Attendance", icon: CalendarCheck, code: "A", ministryOnly: true },
+  { to: "/prayer-journal", label: "Prayer Journal", icon: Heart, code: "P", ministryOnly: true },
   { to: "/announcements", label: "Announcements", icon: Megaphone, code: "AN" },
-  { to: "/reports", label: "Reports", icon: FileBarChart, code: "R" },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, code: "ANL" },
+  { to: "/reports", label: "Reports", icon: FileBarChart, code: "R", ministryOnly: true },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, code: "ANL", ministryOnly: true },
   { to: "/settings", label: "Settings", icon: Settings, code: "S" },
   {
     to: "/error-log",
@@ -71,8 +73,22 @@ const NAV: NavItem[] = [
     icon: ShieldAlert,
     code: "EL",
     adminOnly: true,
+    ministryOnly: true,
   },
 ];
+
+/**
+ * Accounts that may see ministry records: signed-in, not a guest, and holding
+ * at least one ministry role. A plain member account reads announcements only.
+ */
+function hasMinistryAccess(user: {
+  role?: string;
+  roles?: string[];
+  isAnonymous?: boolean;
+} | null | undefined) {
+  if (!user || user.isAnonymous) return false;
+  return user.roles?.length ? true : !!user.role;
+}
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
@@ -95,6 +111,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {NAV.map((item) => {
+          // Ministry records need a ministry role; guests and plain members
+          // only get announcements and their own settings.
+          if (item.ministryOnly && !hasMinistryAccess(user)) return null;
           // Analytics and the error log are administrator-only screens.
           if ((item.adminOnly || item.to === "/analytics") && user?.role !== ROLES.ADMIN)
             return null;

@@ -6,7 +6,7 @@ import {
   STAGE_ORDER,
   STAGE_LABELS,
 } from "./constants";
-import { getCurrentUser, classScoped } from "./helpers";
+import { getCurrentUser, classScoped, canReadMinistry } from "./helpers";
 
 const monthKey = (ts: number) => {
   const d = new Date(ts);
@@ -17,7 +17,7 @@ export const overview = query({
   args: { from: v.optional(v.string()), to: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return null;
+    if (!canReadMinistry(user)) return null;
     const scope = classScoped(user);
 
     const [allContacts, allFollowups, allBibleStudies, allAttendance, allPrayers] = await Promise.all([

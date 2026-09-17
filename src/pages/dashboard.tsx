@@ -211,7 +211,7 @@ export default function Dashboard() {
     ? rawName[0]!.toUpperCase() + rawName.slice(1)
     : "friend";
 
-  if (!stats) {
+  if (stats === undefined) {
     return (
       <div className="mx-auto max-w-6xl space-y-4">
         <div className="h-8 w-64 animate-pulse rounded bg-muted" />
@@ -219,6 +219,33 @@ export default function Dashboard() {
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="h-28 animate-pulse rounded-lg border bg-card" />
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Signed in, but without a ministry role (or signed in as a guest): ministry
+  // records are deliberately out of reach, so explain it instead of showing an
+  // empty dashboard.
+  if (stats === null) {
+    return (
+      <div className="mx-auto max-w-2xl py-10">
+        <div className="rounded-lg border bg-card p-6 text-center">
+          <TriangleAlert className="mx-auto h-6 w-6 text-primary" />
+          <h1 className="mt-3 text-lg font-bold tracking-tight">
+            No ministry access yet
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your account isn't linked to a ministry role, so contacts, member
+            records, prayer requests and reports stay private.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Ask an administrator to set your ministry position in Settings, or to
+            link your account to your member record.
+          </p>
+          <Button className="mt-4" onClick={() => navigate("/announcements")}>
+            Go to announcements
+          </Button>
         </div>
       </div>
     );

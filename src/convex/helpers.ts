@@ -12,6 +12,7 @@ export type CurrentUser = {
   classScope?: string;
   testAs?: string;
   testClassScope?: string;
+  isAnonymous?: boolean;
   [key: string]: unknown;
 };
 
@@ -58,6 +59,58 @@ export const classScoped = (user: CurrentUser | null | undefined): string | unde
       ? (user.testClassScope as string | undefined)
       : user.classScope
     : undefined;
+};
+
+/**
+ * May this account read ministry records at all?
+ *
+ * Ministry data is pastoral PII (contact details, prayer requests, notes), so
+ * it is limited to signed-in accounts that actually hold a ministry role:
+ *   - guest (anonymous) accounts get nothing — anyone can create one, so they
+ *     must never be able to read the contact database
+ *   - a plain member holds no role and gets nothing either
+ * Administrators, coordinators, workers, read-only leaders and class leaders
+ * all pass (class leaders are additionally limited to their own class).
+ */
+export const canReadMinistry = (
+  user: CurrentUser | null | undefined,
+): user is CurrentUser =>
+  !!user && !user.isAnonymous && effectiveRoles(user).length > 0;
+
+/**
+ * Private / confidential notes are for the administrator and the person who
+ * wrote them. Everyone else sees the note not at all.
+ */
+export const canSeePrivateNote = (
+  user: CurrentUser | null | undefined,
+  note: { isPrivate?: boolean; authorId?: string },
+) => {
+  if (!note.isPrivate) return true;
+  if (!user) return false;
+  return hasRole(user, ROLES.ADMIN) || (!!note.authorId && note.authorId === user._id);
+};
+
+/**
+ * Confidential prayer requests stay with the administrator and the evangelism
+ * coordinator (pastoral oversight); nobody else sees them in a feed.
+ */
+export const canSeeConfidentialPrayer = (
+  user: CurrentUser | null | undefined,
+  prayer: { confidential?: boolean },
+) => {
+  if (!prayer.confidential) return true;
+  if (!user) return false;
+  return hasRole(user, ROLES.ADMIN) || hasRole(user, ROLES.COORDINATOR);
+};
+
+/** Non-throwing class-scope test, for reads that should simply return nothing
+ *  instead of erroring when a record is outside the viewer's class. */
+export const withinClassScope = (
+  user: CurrentUser | null | undefined,
+  klass: string | undefined | null,
+): boolean => {
+  const scope = classScoped(user);
+  return !scope || klass === scope;
 };
 
 /** Throws if the user is a class leader and the record's class is outside their scope. */

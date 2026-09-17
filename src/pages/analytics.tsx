@@ -29,7 +29,14 @@ export default function Analytics() {
     return (
       <div className="mx-auto max-w-6xl">
         <PageHeader title="Analytics" code="anl" />
-        <div className="h-64 animate-pulse rounded-lg border bg-card" />
+        {report === null ? (
+          <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+            You don't have access to ministry records yet. Ask an administrator to
+            set your ministry position or link your account to your member record.
+          </div>
+        ) : (
+          <div className="h-64 animate-pulse rounded-lg border bg-card" />
+        )}
       </div>
     );
   }

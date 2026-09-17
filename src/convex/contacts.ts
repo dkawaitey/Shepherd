@@ -2,7 +2,19 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { STAGE_ORDER, STAGES, STAGE_LABELS, ROLES } from "./constants";
-import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, classScoped, assertClassScope } from "./helpers";
+import {
+  getCurrentUser,
+  logAudit,
+  nowIso,
+  requireRole,
+  hasRole,
+  classScoped,
+  assertClassScope,
+  canReadMinistry,
+  canSeePrivateNote,
+  canSeeConfidentialPrayer,
+  withinClassScope,
+} from "./helpers";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone, validateOptionalText } from "./validate";
 
@@ -106,9 +118,15 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
+    // Guests and plain members hold no ministry role, so they read nothing.
+    if (!canReadMinistry(user)) return [];
 
     let contacts = await ctx.db.query("contacts").collect();
     contacts = contacts.filter((c) => !c.isDeleted);
+
+    // A class leader only ever sees their own class.
+    const scope = classScoped(user);
+    if (scope) contacts = contacts.filter((c) => c.klass === scope);
 
     const q = (args.search || "").toLowerCase().trim();
     if (q) {
@@ -153,8 +171,11 @@ export const get = query({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return null;
+    if (!canReadMinistry(user)) return null;
     const contact = await ctx.db.get(args.id);
     if (!contact || contact.isDeleted) return null;
+    // Outside a class leader's class there is nothing to show.
+    if (!withinClassScope(user, contact.klass)) return null;
 
     const [journeyEvents, followUps, bibleStudies, attendance, prayers, notes] =
       await Promise.all([
@@ -174,8 +195,13 @@ export const get = query({
         .sort((a, b) => b.date.localeCompare(a.date)),
       bibleStudies: bibleStudies.sort((a, b) => a.lesson - b.lesson),
       attendance: attendance.sort((a, b) => b.date.localeCompare(a.date)),
-      prayers: prayers.sort((a, b) => b.createdAt - a.createdAt),
-      notes: notes.sort((a, b) => b.createdAt - a.createdAt),
+      // Confidential prayers and private notes are filtered per viewer.
+      prayers: prayers
+        .filter((p) => canSeeConfidentialPrayer(user, p))
+        .sort((a, b) => b.createdAt - a.createdAt),
+      notes: notes
+        .filter((n) => canSeePrivateNote(user, n))
+        .sort((a, b) => b.createdAt - a.createdAt),
     };
   },
 });

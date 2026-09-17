@@ -122,8 +122,13 @@ export default function Reports() {
         </span>
       </div>
 
-      {!report ? (
+      {report === undefined ? (
         <div className="h-64 animate-pulse rounded-lg border bg-card" />
+      ) : report === null ? (
+        <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+          You don't have access to ministry records yet. Ask an administrator to
+          set your ministry position or link your account to your member record.
+        </div>
       ) : (
         <>
           {/* Counts */}

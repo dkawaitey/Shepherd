@@ -8,7 +8,16 @@ import {
   STAGE_LABELS,
   ROLES,
 } from "./constants";
-import { getCurrentUser, logAudit, nowIso, requireRole, hasRole, assertClassScope } from "./helpers";
+import {
+  getCurrentUser,
+  logAudit,
+  nowIso,
+  requireRole,
+  hasRole,
+  assertClassScope,
+  classScoped,
+  canReadMinistry,
+} from "./helpers";
 import { checkRateLimit } from "./rateLimit";
 
 /** List follow-ups (optionally joined with contact name). Workers see their assigned contacts' follow-ups. */
@@ -23,7 +32,7 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return [];
+    if (!canReadMinistry(user)) return [];
 
     let all = await ctx.db.query("followUps").collect();
     // Hard deletes: no isDeleted filter needed
@@ -49,9 +58,18 @@ export const list = query({
       all = all.filter((f) => ids.has(f.contactId));
     }
 
+    // A class leader only sees follow-ups for their own class.
+    const contacts = await ctx.db.query("contacts").collect();
+    const scope = classScoped(user);
+    if (scope) {
+      const inScope = new Set(
+        contacts.filter((c) => c.klass === scope).map((c) => c._id),
+      );
+      all = all.filter((f) => inScope.has(f.contactId));
+    }
+
     all.sort((a, b) => a.date.localeCompare(b.date));
 
-    const contacts = await ctx.db.query("contacts").collect();
     const contactMap = new Map(contacts.map((c) => [c._id, c]));
     return all.map((f) => ({
       ...f,

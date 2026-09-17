@@ -5,14 +5,14 @@ import {
   STAGE_ORDER,
   STAGE_LABELS,
 } from "./constants";
-import { getCurrentUser, classScoped } from "./helpers";
+import { getCurrentUser, classScoped, canReadMinistry } from "./helpers";
 
 /** All journey timeline events (for milestone checkmarks on contact cards). */
 export const journeyEventsAll = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return [];
+    if (!canReadMinistry(user)) return [];
     const scope = classScoped(user);
     let events = await ctx.db.query("journeyEvents").collect();
     // Only surface timeline events whose contact still exists and hasn't been
@@ -40,7 +40,8 @@ export const stats = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return null;
+    // Guests and plain members hold no ministry role — no statistics for them.
+    if (!canReadMinistry(user)) return null;
     const scope = classScoped(user);
 
     const [allContacts, allFollowups, allPrayers, allMembers, allAttendance] = await Promise.all([

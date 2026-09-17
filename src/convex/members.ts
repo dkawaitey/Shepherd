@@ -12,7 +12,18 @@ import {
   effectivePosition,
 } from "./constants";
 import { nextMembershipId } from "./contacts";
-import { getCurrentUser, hasRole, logAudit, nowIso, requireRole, classScoped } from "./helpers";
+import {
+  getCurrentUser,
+  hasRole,
+  logAudit,
+  nowIso,
+  requireRole,
+  classScoped,
+  canReadMinistry,
+  canSeePrivateNote,
+  canSeeConfidentialPrayer,
+  withinClassScope,
+} from "./helpers";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone } from "./validate";
 
@@ -63,8 +74,13 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    // Guests and plain members hold no ministry role, so they read nothing.
+    if (!canReadMinistry(user)) return [];
     let members = await ctx.db.query("members").collect();
     members = members.filter((m) => !m.isDeleted);
+    // A class leader only ever sees their own class.
+    const scope = classScoped(user);
+    if (scope) members = members.filter((m) => m.klass === scope);
     if (args.klass && args.klass !== "all") members = members.filter((m) => m.klass === args.klass);
     if (args.status && args.status !== "all") members = members.filter((m) => m.status === args.status);
     if (args.search) {
@@ -91,8 +107,10 @@ export const get = query({
   args: { id: v.id("members") },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    if (!canReadMinistry(user)) return null;
     const member = await ctx.db.get(args.id);
     if (!member || member.isDeleted) return null;
+    if (!withinClassScope(user, member.klass)) return null;
     const [attendance, prayers, notes] = await Promise.all([
       ctx.db.query("attendance").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("prayerRequests").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
@@ -101,8 +119,13 @@ export const get = query({
     return {
       member,
       attendance: attendance.sort((a, b) => b.date.localeCompare(a.date)),
-      prayers: prayers.sort((a, b) => b.createdAt - a.createdAt),
-      notes: notes.sort((a, b) => b.createdAt - a.createdAt),
+      // Confidential prayers and private notes are filtered per viewer.
+      prayers: prayers
+        .filter((p) => canSeeConfidentialPrayer(user, p))
+        .sort((a, b) => b.createdAt - a.createdAt),
+      notes: notes
+        .filter((n) => canSeePrivateNote(user, n))
+        .sort((a, b) => b.createdAt - a.createdAt),
     };
   },
 });
@@ -339,8 +362,10 @@ export const classLeaders = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return [];
-    const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
+    if (!canReadMinistry(user)) return [];
+    let members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
+    const scope = classScoped(user);
+    if (scope) members = members.filter((m) => m.klass === scope);
     const users = await ctx.db.query("users").collect();
     const userByMember = new Map(
       users.filter((u) => u.memberId).map((u) => [u.memberId, u]),
@@ -373,6 +398,7 @@ export const classStats = query({
   args: { klass: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    if (!canReadMinistry(user)) return [];
     const scope = classScoped(user);
     const klassNames = scope ? [scope] : CLASS_OPTIONS;
     const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
@@ -424,7 +450,7 @@ export const lowAttendance = query({
   args: {},
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return [];
+    if (!canReadMinistry(user)) return [];
     const scope = classScoped(user);
     const members = (await ctx.db.query("members").collect()).filter(
       (m) => !m.isDeleted && (!scope || m.klass === scope),
