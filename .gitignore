@@ -1,4 +1,11 @@
 .env.local
 node_modules
 dist
-src/convex/_generated
+
+# Convex's generated client and types are committed on purpose.
+# `@/convex/_generated/*` is imported by the frontend bundle and by every
+# convex/*.ts file, and the build script is `tsc -b && vite build`. In a clean
+# deploy checkout those files would not exist, so the build failed with
+# "Cannot find module '@/convex/_generated/api'". Regenerate with
+# `bun convex dev --once` whenever the schema or functions change, and commit
+# the result along with the change that caused it.
