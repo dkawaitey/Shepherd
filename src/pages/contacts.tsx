@@ -35,7 +35,7 @@ import {
   MINISTRIES,
   STAGE_LABELS,
 } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, telLink, waLink, StagePill, downloadCsv, downloadPdf, canAddRecords } from "@/components/shared";
+import { EmptyState, PageHeader, StatusPill, telLink, waLink, StagePill, downloadCsv, downloadPdf, canAddRecords, formatError } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import {
@@ -226,7 +226,7 @@ export function QuickAddContact({
         );
         onOpenChange(false);
       } else {
-        setError(err?.message ?? "Failed to add contact");
+        setError(formatError(err, "Failed to add contact"));
       }
     } finally {
       setBusy(false);
@@ -293,7 +293,11 @@ export function QuickAddContact({
               </Select>
             </div>
           </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && (
+            <p className="whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+              {error}
+            </p>
+          )}
           <DialogFooter className="pt-1">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={busy}>
@@ -419,7 +423,7 @@ export function ContactFormDialog({
         );
         onOpenChange(false);
       } else {
-        setError(err?.message ?? "Failed to save contact");
+        setError(formatError(err, "Failed to save contact"));
       }
     } finally {
       setBusy(false);
@@ -659,7 +663,11 @@ export function ContactFormDialog({
             </div>
           )}
 
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && (
+            <p className="whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+              {error}
+            </p>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>

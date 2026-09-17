@@ -9,6 +9,7 @@
  * Usage inside a mutation handler:
  *   await checkRateLimit(ctx, "post.create", { maxRequests: 5, windowMs: 60_000 });
  */
+import { ConvexError } from "convex/values";
 import { MutationCtx } from "./_generated/server";
 import { getCurrentUser } from "./helpers";
 
@@ -80,7 +81,7 @@ export async function checkRateLimit(
   override?: Partial<RateLimitConfig>,
 ): Promise<void> {
   const user = await getCurrentUser(ctx);
-  if (!user) throw new Error("Not authenticated");
+  if (!user) throw new ConvexError("Not authenticated");
 
   // Admins get a 2x multiplier on all limits
   const isAdmin =
@@ -113,8 +114,8 @@ export async function checkRateLimit(
     const retryAfter = Math.ceil(
       (entry.windowStart + config.windowMs - now) / 1000,
     );
-    throw new Error(
-      `Rate limit exceeded for ${action}. Please wait ${retryAfter}s and try again.`,
+    throw new ConvexError(
+      `Too many requests right now. Please wait ${retryAfter}s and try again.`,
     );
   }
 

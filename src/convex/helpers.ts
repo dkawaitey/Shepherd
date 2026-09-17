@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { ConvexError } from "convex/values";
 import { QueryCtx, MutationCtx } from "./_generated/server";
 import { ROLES, Role, CLASS_OPTIONS } from "./constants";
 
@@ -66,7 +67,7 @@ export const assertClassScope = (
 ) => {
   const scope = classScoped(user);
   if (scope && klass !== scope) {
-    throw new Error(`You can only work with ${scope} Class records`);
+    throw new ConvexError(`You can only work with ${scope} Class records`);
   }
 };
 
@@ -76,10 +77,10 @@ export const requireRole = async (
   roles: Role[],
 ) => {
   const user = await getCurrentUser(ctx);
-  if (!user) throw new Error("Not authenticated");
+  if (!user) throw new ConvexError("Not authenticated");
   if (hasRole(user, ROLES.ADMIN)) return user;
   if (roles.some((r) => hasRole(user, r))) return user;
-  throw new Error("You do not have permission to perform this action");
+  throw new ConvexError("You do not have permission to perform this action");
 };
 
 /** Only admins pass. */

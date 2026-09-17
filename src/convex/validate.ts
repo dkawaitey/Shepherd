@@ -3,14 +3,20 @@
  *
  * All validation runs inside Convex mutations — the frontend is never
  * trusted as the sole validation layer.
+ *
+ * Failures are thrown as `ConvexError` so the exact reason reaches the client
+ * (uncaught `Error` messages are redacted on production deployments and show up
+ * as a bare "Server Error").
  */
+
+import { ConvexError } from "convex/values";
 
 /** Trim and validate a name field. Names must be 1–200 chars after trimming. */
 export function validateName(value: string, fieldName = "Name"): string {
   const trimmed = value.trim();
-  if (trimmed.length === 0) throw new Error(`${fieldName} is required`);
+  if (trimmed.length === 0) throw new ConvexError(`${fieldName} is required`);
   if (trimmed.length > 200)
-    throw new Error(`${fieldName} must be 200 characters or fewer`);
+    throw new ConvexError(`${fieldName} must be 200 characters or fewer`);
   return trimmed;
 }
 
@@ -21,9 +27,9 @@ export function validateText(
   maxLen = 5000,
 ): string {
   const trimmed = value.trim();
-  if (trimmed.length === 0) throw new Error(`${fieldName} is required`);
+  if (trimmed.length === 0) throw new ConvexError(`${fieldName} is required`);
   if (trimmed.length > maxLen)
-    throw new Error(`${fieldName} must be ${maxLen} characters or fewer`);
+    throw new ConvexError(`${fieldName} must be ${maxLen} characters or fewer`);
   return trimmed;
 }
 
@@ -36,7 +42,7 @@ export function validateOptionalText(
   if (!value || value.trim().length === 0) return undefined;
   const trimmed = value.trim();
   if (trimmed.length > maxLen)
-    throw new Error(`${fieldName} must be ${maxLen} characters or fewer`);
+    throw new ConvexError(`${fieldName} must be ${maxLen} characters or fewer`);
   return trimmed;
 }
 
@@ -46,19 +52,30 @@ export function validateEmail(email: string): string {
   if (trimmed.length === 0) return "";
   // RFC 5322 simplified — covers 99.9% of real email addresses
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!re.test(trimmed)) throw new Error("Invalid email address format");
-  if (trimmed.length > 254) throw new Error("Email address is too long");
+  if (!re.test(trimmed)) {
+    throw new ConvexError(`"${email.trim()}" is not a valid email address`);
+  }
+  if (trimmed.length > 254) {
+    throw new ConvexError("Email address is too long");
+  }
   return trimmed;
 }
 
-/** Validate a phone number — allows digits, spaces, dashes, parens, plus. */
+/**
+ * Validate a phone number.
+ *
+ * Volunteers type numbers in every shape — "+233 24 000 0000", "024-000-0000",
+ * "(024) 000 0000", even two numbers in one box. Only reject values that cannot
+ * hold a phone number at all (too few / too many digits).
+ */
 export function validatePhone(phone: string): string {
   const trimmed = phone.trim();
   if (trimmed.length === 0) return "";
-  // Allow international format: +233 24 000 0000, 0240000000, (024) 000-0000
-  const stripped = trimmed.replace(/[\s\-().]/g, "");
-  if (!/^\+?\d{7,15}$/.test(stripped)) {
-    throw new Error("Invalid phone number format");
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length < 6 || digits.length > 20) {
+    throw new ConvexError(
+      `"${trimmed}" is not a valid phone number (use e.g. 024 000 0000)`,
+    );
   }
   return trimmed;
 }
@@ -70,7 +87,7 @@ export function validateEnum<T extends string>(
   fieldName: string,
 ): T {
   if (!allowed.includes(value)) {
-    throw new Error(`Invalid ${fieldName}: ${value}`);
+    throw new ConvexError(`Invalid ${fieldName}: ${value}`);
   }
   return value;
 }
@@ -78,12 +95,12 @@ export function validateEnum<T extends string>(
 /** Validate a date string (ISO format YYYY-MM-DD). */
 export function validateDate(dateStr: string, fieldName = "Date"): string {
   const trimmed = dateStr.trim();
-  if (trimmed.length === 0) throw new Error(`${fieldName} is required`);
+  if (trimmed.length === 0) throw new ConvexError(`${fieldName} is required`);
   if (!/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-    throw new Error(`${fieldName} must be a valid date`);
+    throw new ConvexError(`${fieldName} must be a valid date`);
   }
   const d = new Date(trimmed);
-  if (isNaN(d.getTime())) throw new Error(`${fieldName} is not a valid date`);
+  if (isNaN(d.getTime())) throw new ConvexError(`${fieldName} is not a valid date`);
   return trimmed;
 }
 
