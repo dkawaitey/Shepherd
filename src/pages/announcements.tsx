@@ -103,7 +103,16 @@ async function generateThumbnail(file: File): Promise<Blob> {
   });
 }
 
+/** Shape we send when uploading: every metadata field is set here. */
 type MediaItem = { storageId: string; type: string; name: string; mimeType: string; size: number; width?: number; height?: number; thumbnailStorageId?: string; status: string; uploadedAt: number; };
+
+/**
+ * Shape we read back. Files uploaded before the media metadata existed only
+ * have `storageId`, `type` and `name`, so the rest is optional here — the
+ * renderer only needs those three.
+ */
+type StoredMediaItem = Pick<MediaItem, "storageId" | "type" | "name"> &
+  Partial<Omit<MediaItem, "storageId" | "type" | "name">>;
 
 
 export default function Announcements() {
@@ -407,7 +416,7 @@ type FeedPost = {
   title: string;
   body: string;
   tags?: string[];
-  media?: MediaItem[];
+  media?: StoredMediaItem[];
   isPinned?: boolean;
   createdAt: number;
   commentCount: number;

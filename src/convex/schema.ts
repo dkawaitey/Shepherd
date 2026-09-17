@@ -291,6 +291,13 @@ const schema = defineSchema(
       ), // last low-attendance follow-up (recorded from the Attendance page)
       isDeleted: v.optional(v.boolean()),
 
+      // Legacy fields from the removed Steward member sync. Nothing writes
+      // these any more, but documents created before it was removed still
+      // carry them, and schema validation covers every existing document —
+      // including on a fresh deployment — so they stay declared here rather
+      // than making a deploy fail or forcing a data migration.
+      stewardId: v.optional(v.string()),
+      syncedAt: v.optional(v.number()),
 
       createdAt: v.number(),
       updatedAt: v.number(),
@@ -321,14 +328,20 @@ const schema = defineSchema(
         storageId: v.string(),
         type: v.string(), // "image" | "video" | "audio" | "file"
         name: v.string(),
-        mimeType: v.string(),
-        size: v.number(), // bytes
+        // The metadata below is required for every *new* upload (see the
+        // argument validators and validateMediaItem in posts.ts), but it is
+        // optional here so files uploaded under the earlier minimal media
+        // shape — `{ storageId, type, name }` — still validate. Schema
+        // validation covers existing documents, so declaring these as
+        // required would reject older rows on any deployment that has them.
+        mimeType: v.optional(v.string()),
+        size: v.optional(v.number()), // bytes
         width: v.optional(v.number()),
         height: v.optional(v.number()),
         duration: v.optional(v.number()), // seconds (audio/video)
         thumbnailStorageId: v.optional(v.string()),
-        status: v.string(), // "pending" | "uploading" | "processing" | "ready" | "failed"
-        uploadedAt: v.number(),
+        status: v.optional(v.string()), // "pending" | "uploading" | "processing" | "ready" | "failed"
+        uploadedAt: v.optional(v.number()),
       }))),
       isPinned: v.optional(v.boolean()),
       isDeleted: v.optional(v.boolean()),

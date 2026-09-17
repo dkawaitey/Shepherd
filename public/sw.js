@@ -8,7 +8,7 @@
  *  - Notification clicks: focus or open the app to the notification URL.
  */
 
-const CACHE = "shepherd-shell-v4";
+const CACHE = "shepherd-shell-v5";
 const PUSH_CACHE = "shepherd-push-v1";
 const SHELL = [
   "/",
@@ -21,10 +21,21 @@ const SHELL = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(SHELL))
-      .then(() => self.skipWaiting()),
+    caches.open(CACHE).then(async (cache) => {
+      // Cache each shell entry on its own. `cache.addAll` is atomic: one
+      // missing or non-200 URL would abort the whole install, leaving the
+      // *previous* worker in control of the browser — which after a deploy
+      // looks like the new build never arrived. A partial shell still gives
+      // a working offline fallback, so failures here are tolerated.
+      await Promise.all(
+        SHELL.map((url) =>
+          cache.add(url).catch(() => {
+            /* optional shell entry — ignore */
+          }),
+        ),
+      );
+      await self.skipWaiting();
+    }),
   );
 });
 
