@@ -514,9 +514,24 @@ const schema = defineSchema(
       name: v.string(),
       value: v.number(),
     }).index("name", ["name"]),
+
+    // ===== Rate limits (durable, per account + action) =====
+    // Kept in the database rather than in memory so limits survive redeploys
+    // and apply across every Convex instance. Expired rows are swept daily by
+    // the cron (see crons.ts) and lazily when a window restarts.
+    rateLimits: defineTable({
+      key: v.string(), // `${userId}:${action}`
+      count: v.number(),
+      windowStart: v.number(),
+      expiresAt: v.number(),
+    })
+      .index("by_key", ["key"])
+      .index("by_expires", ["expiresAt"]),
   },
   {
-    schemaValidation: false,
+    // Validation is on: every write is checked against the table above, so bad
+    // or drifting documents are rejected instead of silently accumulating.
+    schemaValidation: true,
   },
 );
 

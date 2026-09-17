@@ -27,5 +27,13 @@ crons.daily(
   internal.errorLogs.prune,
 );
 
+// Daily rate-limit housekeeping at 03:30 UTC: drop windows that expired more
+// than two days ago so the limiter table stays tiny.
+crons.daily(
+  "prune-rate-limits",
+  { hourUTC: 3, minuteUTC: 30 },
+  internal.rateLimit.prune,
+);
+
 
 export default crons;

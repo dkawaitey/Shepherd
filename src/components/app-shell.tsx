@@ -28,6 +28,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { releaseDevicePush, usePushNotifications } from "@/hooks/use-push-notifications";
+import { clearOfflineQueue, useOfflineSync } from "@/lib/offline-sync";
+import { CloudOff, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -154,6 +156,8 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const bootstrapAdmin = useMutation(api.users.bootstrapAdmin);
   const autoLink = useMutation(api.users.autoLinkAccount);
+  // Queued offline records belonging to this account (see lib/offline-sync).
+  const offline = useOfflineSync(user?._id);
 
 
   useEffect(() => {
@@ -190,6 +194,8 @@ export function AppShell() {
   );
 
   const handleSignOut = async () => {
+    // Never leave another volunteer's contact details in this device's storage.
+    clearOfflineQueue();
     await releaseDevicePush();
     await signOut();
     navigate("/");
@@ -288,6 +294,42 @@ export function AppShell() {
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
+
+        {offline.pending.length > 0 && (
+          <div className="flex items-center justify-between gap-3 border-b border-[#f59e0b]/40 bg-[#2e2408] px-4 py-2 text-[11px] text-[#fbbf24] md:px-6">
+            <span className="flex min-w-0 items-center gap-2">
+              <CloudOff className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">
+                {offline.pending.length === 1
+                  ? "1 record saved offline on this device"
+                  : `${offline.pending.length} records saved offline on this device`}
+                {offline.lastError ? ` — ${offline.lastError}` : ""}
+              </span>
+            </span>
+            <div className="flex shrink-0 gap-1">
+              <Button
+                size="sm"
+                className="h-6 px-2 text-[10px]"
+                disabled={offline.syncing}
+                onClick={() => void offline.syncNow()}
+              >
+                <RefreshCw className={cn("mr-1 h-3 w-3", offline.syncing && "animate-spin")} />
+                {offline.syncing ? "Syncing…" : "Sync now"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-[10px]"
+                onClick={() => {
+                  offline.discard();
+                  toast.success("Offline records discarded");
+                }}
+              >
+                Discard
+              </Button>
+            </div>
+          </div>
+        )}
 
         {user?.testAs && (
           <div className="flex items-center justify-between gap-3 border-b border-[#f59e0b]/40 bg-[#2e2408] px-4 py-2 text-[11px] text-[#fbbf24] md:px-6">

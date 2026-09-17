@@ -33,15 +33,20 @@ export const currentUser = query({
     // While an admin is testing as another role, surface the *effective* role
     // everywhere (UI gating included), plus the real role + test flag so the
     // app shell can show the banner and the "Test as" menu entry.
-    const roles = user.testAs
-      ? [user.testAs]
-      : user.roles?.length
-        ? user.roles
-        : user.role
-          ? [user.role]
-          : [];
-    const classScope =
-      user.testAs === ROLES.CLASS_LEADER
+    // Guest accounts never hold a role (mirrors helpers.effectiveRoles), so the
+    // UI gates exactly what the server enforces.
+    const roles = user.isAnonymous
+      ? []
+      : user.testAs
+        ? [user.testAs]
+        : user.roles?.length
+          ? user.roles
+          : user.role
+            ? [user.role]
+            : [];
+    const classScope = user.isAnonymous
+      ? undefined
+      : user.testAs === ROLES.CLASS_LEADER
         ? user.testClassScope
         : user.testAs
           ? undefined
@@ -70,7 +75,7 @@ export const setTestAs = mutation({
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new ConvexError("Not authenticated");
     const user = await ctx.db.get(userId);
-    if (!user || user.role !== ROLES.ADMIN) {
+    if (!user || user.isAnonymous || user.role !== ROLES.ADMIN) {
       throw new ConvexError("Only administrators can test the app as other roles");
     }
     const role = args.role?.trim() || undefined;
@@ -457,28 +462,42 @@ export const updateProfile = mutation({
 });
 
 /**
- * Bootstrap: the very first signed-in user becomes the Administrator so the
- * ministry can manage roles immediately. No-op once an admin exists.
+ * Bootstrap: so the ministry can manage roles on a fresh deployment, the first
+ * real (non-guest) account becomes the Administrator.
+ *
+ * Deliberately narrow — an empty or missing admin must never hand the ministry
+ * to whoever signs in next:
+ *   - only a verified, non-anonymous account with an email can qualify
+ *   - only while the deployment has no administrator at all (guests excluded,
+ *     since a guest account can never hold a role)
+ *   - only while it is the *only* real account: once anyone else has signed in,
+ *     promotion stops and an administrator has to grant access
+ *   - and if BOOTSTRAP_ADMIN_EMAIL is configured, only that address qualifies
  */
 export const bootstrapAdmin = mutation({
   args: {},
   handler: async (ctx) => {
     await checkRateLimit(ctx, "users.bootstrapAdmin");
     const user = await getCurrentUser(ctx);
-    // Prevent anonymous / unverified users from becoming admin
     if (!user || user.isAnonymous || !user.email) return;
     if (user.role) return;
-    const admins = await ctx.db.query("users").collect();
-    const hasAdmin = admins.some((u) => u.role === ROLES.ADMIN || hasRole(u, ROLES.ADMIN));
-    if (!hasAdmin) {
-      await ctx.db.patch(user._id, { role: ROLES.ADMIN, roles: [ROLES.ADMIN] });
-      await logAudit(ctx, {
-        action: "user.bootstrap",
-        entityType: "users",
-        entityId: user._id,
-        details: `${user.email} became the first Administrator`,
-      });
-    }
+
+    const everyone = await ctx.db.query("users").collect();
+    // Guests are not real accounts and never count as administrators.
+    const real = everyone.filter((u) => !u.isAnonymous);
+    if (real.some((u) => hasRole(u, ROLES.ADMIN) || u.role === ROLES.ADMIN)) return;
+    if (real.some((u) => u._id !== user._id)) return;
+
+    const allowedEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+    if (allowedEmail && user.email.trim().toLowerCase() !== allowedEmail) return;
+
+    await ctx.db.patch(user._id, { role: ROLES.ADMIN, roles: [ROLES.ADMIN] });
+    await logAudit(ctx, {
+      action: "user.bootstrap",
+      entityType: "users",
+      entityId: user._id,
+      details: `${user.email} became the first Administrator`,
+    });
   },
 });
 

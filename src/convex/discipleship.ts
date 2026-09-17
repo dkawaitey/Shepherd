@@ -107,10 +107,12 @@ export const updateBibleStudy = mutation({
       createdAt: existing?.createdAt ?? Date.now(),
     };
 
+    // Typed (no cast): the writes must satisfy the schema now that schema
+    // validation is on, so let the compiler check them.
     if (existing) {
-      await ctx.db.replace(existing._id, data as any);
+      await ctx.db.replace(existing._id, data);
     } else {
-      await ctx.db.insert("bibleStudies", data as any);
+      await ctx.db.insert("bibleStudies", data);
     }
 
     // Timeline automation: when a lesson is completed and the contact has not

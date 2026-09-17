@@ -5,8 +5,8 @@ const http = httpRouter();
 
 auth.addHttpRoutes(http);
 
-// Note: the Steward sync is one-way (Shepherd → Steward), so Shepherd does not
-// expose an inbound /api/sync/members endpoint. Pushes go out from the hourly
-// cron / Settings → Sync now to {STEWARD_API_URL}/api/sync/members.
+// Shepherd exposes no inbound data endpoints: everything the app reads and
+// writes goes through authenticated Convex functions, and outbound work (email
+// digests, device notifications) runs in scheduled functions.
 
 export default http;

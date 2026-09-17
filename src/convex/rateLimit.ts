@@ -1,22 +1,18 @@
 /**
  * Server-side rate limiter for Convex mutations.
  *
- * Uses an in-memory Map keyed by `userId:action` with a sliding window.
- * Convex mutations run in a single process, so in-memory state persists
- * across calls within the same process lifetime. The map is bounded to
- * prevent unbounded growth.
+ * Counters live in the `rateLimits` table, keyed by `userId:action`. Convex
+ * mutations are transactional, so the read-then-write below is consistent even
+ * when the same account fires requests in parallel — and because it is stored
+ * in the database (not process memory) the limits hold across redeploys and are
+ * shared by every function instance.
  *
  * Usage inside a mutation handler:
  *   await checkRateLimit(ctx, "post.create", { maxRequests: 5, windowMs: 60_000 });
  */
 import { ConvexError } from "convex/values";
-import { MutationCtx } from "./_generated/server";
+import { MutationCtx, internalMutation } from "./_generated/server";
 import { getCurrentUser } from "./helpers";
-
-type RateLimitEntry = {
-  count: number;
-  windowStart: number;
-};
 
 type RateLimitConfig = {
   /** Maximum requests allowed within the window. */
@@ -25,10 +21,10 @@ type RateLimitConfig = {
   windowMs: number;
 };
 
-// In-memory store — persists across calls within one Convex process.
-// Bounded to prevent memory leaks.
-const store = new Map<string, RateLimitEntry>();
-const MAX_STORE_SIZE = 5000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** How long an expired row may linger before the daily sweep removes it. */
+const RETENTION_MS = 2 * DAY_MS;
 
 // Default limits by category
 const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
@@ -59,7 +55,7 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   "users.removeUser": { maxRequests: 10, windowMs: 300_000 },
   "users.setRoles": { maxRequests: 10, windowMs: 60_000 },
   "users.setRole": { maxRequests: 10, windowMs: 60_000 },
-  "users.bootstrapAdmin": { maxRequests: 1, windowMs: 600_000 },
+  "users.bootstrapAdmin": { maxRequests: 3, windowMs: 600_000 },
 
   // Settings — strict
   "settings.set": { maxRequests: 20, windowMs: 60_000 },
@@ -88,41 +84,75 @@ export async function checkRateLimit(
   const user = await getCurrentUser(ctx);
   if (!user) throw new ConvexError("Not authenticated");
 
-  // Admins get a 2x multiplier on all limits
-  const isAdmin =
-    user.role === "admin" ||
-    (user.roles ?? []).includes("admin");
-
   const config = { ...DEFAULT_LIMITS[action], ...override };
   if (!config.maxRequests || !config.windowMs) return; // No limit configured
 
+  // Administrators get a 2x multiplier on every limit.
+  const isAdmin =
+    user.role === "admin" || (user.roles ?? []).includes("admin");
   const effectiveMax = isAdmin ? config.maxRequests * 2 : config.maxRequests;
+
   const key = `${user._id}:${action}`;
   const now = Date.now();
+  const existing = await ctx.db
+    .query("rateLimits")
+    .withIndex("by_key", (q) => q.eq("key", key))
+    .first();
 
-  // Clean up expired entries and enforce max size
-  if (store.size > MAX_STORE_SIZE) {
-    for (const [k, v] of store) {
-      if (now - v.windowStart > config.windowMs) store.delete(k);
+  // No row, or the previous window has elapsed: start a fresh window.
+  if (!existing || now - existing.windowStart >= config.windowMs) {
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        count: 1,
+        windowStart: now,
+        expiresAt: now + config.windowMs,
+      });
+    } else {
+      await ctx.db.insert("rateLimits", {
+        key,
+        count: 1,
+        windowStart: now,
+        expiresAt: now + config.windowMs,
+      });
     }
-  }
-
-  const entry = store.get(key);
-  if (!entry || now - entry.windowStart > config.windowMs) {
-    // New window
-    store.set(key, { count: 1, windowStart: now });
     return;
   }
 
-  // Within window
-  if (entry.count >= effectiveMax) {
+  if (existing.count >= effectiveMax) {
     const retryAfter = Math.ceil(
-      (entry.windowStart + config.windowMs - now) / 1000,
+      (existing.windowStart + config.windowMs - now) / 1000,
     );
     throw new ConvexError(
       `Too many requests right now. Please wait ${retryAfter}s and try again.`,
     );
   }
 
-  entry.count++;
+  await ctx.db.patch(existing._id, { count: existing.count + 1 });
 }
+
+/**
+ * Daily housekeeping: drop windows that expired well before now, plus any
+ * stray rows for accounts that no longer exist. Called from the cron.
+ */
+export const prune = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - RETENTION_MS;
+    let deleted = 0;
+
+    // Oldest first, so a single bounded pass clears the backlog over time.
+    const expired = await ctx.db
+      .query("rateLimits")
+      .withIndex("by_expires")
+      .take(500);
+    for (const row of expired) {
+      if (row.expiresAt < cutoff) {
+        await ctx.db.delete(row._id);
+        deleted++;
+      }
+    }
+    // Anything else with an expiry in the past is still usable as a fresh
+    // window, so it is kept until it ages out of the search window above.
+    return { deleted, scanned: expired.length };
+  },
+});

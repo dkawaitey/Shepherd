@@ -11,6 +11,12 @@ import { formatError } from "@/components/shared";
  * queued in localStorage instead of failing. The queue replays automatically
  * when the connection returns (window "online" event, a scheduled retry after
  * each enqueue, or a manual "Sync now" from the banner).
+ *
+ * The queue holds personal data (names, phone numbers, addresses), so:
+ *  - every entry is stamped with the account that created it, and a signed-in
+ *    user can only ever see or replay their own entries (shared ministry
+ *    tablets are common)
+ *  - signing out clears the queue, so nothing is left behind on the device
  */
 
 export type OfflineKind = "quickAddContact" | "createContact" | "createFollowup";
@@ -20,6 +26,9 @@ export interface OfflineEntry {
   kind: OfflineKind;
   payload: Record<string, unknown>;
   queuedAt: number;
+  /** Account that queued this entry. Absent only for entries created before
+   *  owner stamping existed — those are treated as foreign and discarded. */
+  ownerId?: string;
 }
 
 const QUEUE_KEY = "shepherd.offline.queue.v1";
@@ -46,6 +55,32 @@ function saveQueue(queue: OfflineEntry[]) {
   }
 }
 
+/** Entries belonging to one account. */
+export function loadOwnQueue(ownerId: string | undefined): OfflineEntry[] {
+  if (!ownerId) return [];
+  return loadQueue().filter((e) => e.ownerId === ownerId);
+}
+
+/**
+ * The signed-in account that owns newly queued entries. The app shell keeps
+ * this in step with the session, so every record is stamped with the account
+ * that created it and can never be replayed by a different one.
+ */
+let queueOwner: string | undefined;
+
+export function setQueueOwner(ownerId?: string) {
+  queueOwner = ownerId;
+}
+
+/** Drop entries that aren't owned by this account (shared device), including
+ *  any left over from before entries were owner-stamped. */
+export function discardEntriesNotOwnedBy(ownerId: string) {
+  const queue = loadQueue();
+  const kept = queue.filter((e) => e.ownerId === ownerId);
+  if (kept.length !== queue.length) saveQueue(kept);
+  return queue.length - kept.length;
+}
+
 export function removeOffline(id: string) {
   saveQueue(loadQueue().filter((e) => e.id !== id));
 }
@@ -55,7 +90,11 @@ export function clearOfflineQueue() {
 }
 
 /** Queue an action and tell the sync hook to retry shortly. */
-export function queueEntry(kind: OfflineKind, payload: Record<string, unknown>) {
+export function queueEntry(
+  kind: OfflineKind,
+  payload: Record<string, unknown>,
+  ownerId: string | undefined = queueOwner,
+) {
   const entry: OfflineEntry = {
     id:
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -64,6 +103,7 @@ export function queueEntry(kind: OfflineKind, payload: Record<string, unknown>) 
     kind,
     payload,
     queuedAt: Date.now(),
+    ownerId,
   };
   saveQueue([...loadQueue(), entry]);
   if (typeof window !== "undefined") {
@@ -83,12 +123,13 @@ export function isOfflineError(err: unknown): boolean {
 
 // ---------- React hook ----------
 
-export function useOfflineSync() {
+/** Replays the signed-in user's queued entries and reports what's pending. */
+export function useOfflineSync(ownerId?: string) {
   const quickAdd = useMutation(api.contacts.quickAdd);
   const createContact = useMutation(api.contacts.create);
   const createFollowup = useMutation(api.followups.create);
 
-  const [pending, setPending] = useState<OfflineEntry[]>(() => loadQueue());
+  const [pending, setPending] = useState<OfflineEntry[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
@@ -96,10 +137,23 @@ export function useOfflineSync() {
   const [lastError, setLastError] = useState<string | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncingRef = useRef(false);
+  const ownerRef = useRef(ownerId);
+  ownerRef.current = ownerId;
 
   const refresh = useCallback(() => {
-    setPending(loadQueue());
+    const owner = ownerRef.current;
+    // A different account's leftovers (or pre-stamping entries of unknown
+    // provenance) are dropped rather than replayed under this identity.
+    if (owner) discardEntriesNotOwnedBy(owner);
+    setPending(loadOwnQueue(owner));
   }, []);
+
+  // Keep the enqueue-time owner in step with the session, then show what's
+  // pending for this account.
+  useEffect(() => {
+    setQueueOwner(ownerId);
+    refresh();
+  }, [ownerId, refresh]);
 
   const run = useCallback(
     async (entry: OfflineEntry) => {
@@ -120,12 +174,14 @@ export function useOfflineSync() {
 
   const flush = useCallback(async () => {
     if (syncingRef.current) return;
+    const owner = ownerRef.current;
+    if (!owner) return;
     syncingRef.current = true;
     setSyncing(true);
     setLastError(null);
     let synced = 0;
     try {
-      for (const entry of loadQueue()) {
+      for (const entry of loadOwnQueue(owner)) {
         if (typeof navigator !== "undefined" && navigator.onLine === false) break;
         try {
           await run(entry);
@@ -141,6 +197,7 @@ export function useOfflineSync() {
         }
       }
       if (synced > 0) {
+        refresh();
         toast.success(
           synced === 1
             ? "1 offline record synced"
@@ -153,13 +210,20 @@ export function useOfflineSync() {
     }
   }, [run, refresh]);
 
+  const discard = useCallback(() => {
+    if (!ownerRef.current) return;
+    for (const entry of loadOwnQueue(ownerRef.current)) removeOffline(entry.id);
+    setLastError(null);
+    refresh();
+  }, [refresh]);
+
   // Replay on reconnect and recover any leftovers on mount.
   useEffect(() => {
-    if (online && loadQueue().length > 0 && !syncingRef.current) {
+    if (online && pending.length > 0 && !syncingRef.current && ownerId) {
       const t = setTimeout(() => flush(), 600);
       return () => clearTimeout(t);
     }
-  }, [online, flush]);
+  }, [online, pending.length, flush, ownerId]);
 
   useEffect(() => {
     const onOnline = () => {
@@ -185,5 +249,5 @@ export function useOfflineSync() {
     };
   }, [flush, refresh]);
 
-  return { pending, syncing, online, syncNow: flush, lastError };
+  return { pending, syncing, online, syncNow: flush, discard, lastError };
 }

@@ -26,14 +26,19 @@ export const getCurrentUser = async (ctx: QueryCtx | MutationCtx) => {
 
 /** Roles that take effect for permission checks. While an admin is "testing as"
  *  another role (testAs set), only the test role applies — so the admin sees
- *  exactly what that role can and cannot do, server-side included. */
+ *  exactly what that role can and cannot do, server-side included.
+ *
+ *  Guest (anonymous) accounts never hold a role: anyone can create one, so a
+ *  lingering role on such a document (from an older bootstrap) must not confer
+ *  any permission. */
 export const effectiveRoles = (user: CurrentUser | null | undefined): string[] => {
-  if (!user) return [];
+  if (!user || user.isAnonymous) return [];
   if (user.testAs) return [user.testAs];
   return user.roles?.length ? user.roles : user.role ? [user.role] : [];
 };
 
-/** True if the user holds the given role (admins implicitly hold every role). */
+/** True if the user holds the given role (admins implicitly hold every role).
+ *  Anonymous guests hold no roles at all. */
 export const hasRole = (user: CurrentUser | null | undefined, role: string) => {
   if (!user) return false;
   return effectiveRoles(user).includes(role);
