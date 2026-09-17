@@ -413,6 +413,41 @@ const schema = defineSchema(
     }).index("by_job", ["jobId"])
       .index("by_created", ["createdAt"]),
 
+    // ===== Application error log (failed requests, shown to admins) =====
+    errorLogs: defineTable({
+      /** Human-readable reason, e.g. "Invalid phone number format". */
+      message: v.string(),
+      /** Stable key (source + function + message) used to group repeats. */
+      fingerprint: v.string(),
+      /** "mutation" | "action" | "query" | "render" | "uncaught" | "rejection" | "offline". */
+      source: v.string(),
+      /** Convex function that failed, e.g. "contacts:create". */
+      functionName: v.optional(v.string()),
+      functionType: v.optional(v.string()),
+      /** Convex request id — the key for finding the server-side stack in the dashboard. */
+      requestId: v.optional(v.string()),
+      /** Where in the app it happened, e.g. "Add contact dialog". */
+      context: v.optional(v.string()),
+      /** Route the user was on. */
+      path: v.optional(v.string()),
+      /** Raw error text / stack, truncated. */
+      raw: v.optional(v.string()),
+      userAgent: v.optional(v.string()),
+      userId: v.optional(v.id("users")),
+      userName: v.optional(v.string()),
+      userEmail: v.optional(v.string()),
+      /** How many times this exact failure has happened. */
+      occurrences: v.number(),
+      firstSeenAt: v.number(),
+      lastSeenAt: v.number(),
+      resolved: v.optional(v.boolean()),
+      createdAt: v.number(),
+    })
+      .index("by_fingerprint", ["fingerprint"])
+      .index("by_lastSeenAt", ["lastSeenAt"])
+      .index("by_createdAt", ["createdAt"])
+      .index("by_functionName", ["functionName"]),
+
     // ===== Sequence counters (membership IDs, per area+date) =====
     counters: defineTable({
       name: v.string(),

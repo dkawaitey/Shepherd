@@ -63,6 +63,10 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   // Settings — strict
   "settings.set": { maxRequests: 20, windowMs: 60_000 },
 
+  // Client-side error reporting — dedupe does most of the throttling
+  "errorLogs.record": { maxRequests: 60, windowMs: 60_000 },
+  "errorLogs.clear": { maxRequests: 5, windowMs: 300_000 },
+
   // Profile updates — moderate
   "users.updateProfile": { maxRequests: 10, windowMs: 60_000 },
 

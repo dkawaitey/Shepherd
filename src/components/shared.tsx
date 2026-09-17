@@ -200,25 +200,7 @@ export function fmtDateTime(iso?: string) {
   });
 }
 
-/**
- * Human-readable text for a thrown Convex error.
- *
- * A `ConvexError` carries a clean payload in `data` that always reaches the
- * client, while `message` is padded with the request header and can be redacted
- * on production deployments — so prefer `data` when it holds a string.
- */
-export function formatError(err: unknown, fallback = "Something went wrong"): string {
-  const data = (err as { data?: unknown } | null)?.data;
-  if (typeof data === "string" && data.trim()) return data;
-  // Some libraries (Convex Auth) throw ConvexError with a `{ message }` payload.
-  if (data && typeof data === "object") {
-    const inner = (data as { message?: unknown }).message;
-    if (typeof inner === "string" && inner.trim()) return inner;
-  }
-  const message = err instanceof Error ? err.message : undefined;
-  if (message && message.trim()) return message;
-  return fallback;
-}
+export { formatError } from "@/lib/errors";
 
 export type PhoneNumber = { label: string; digits: string };
 

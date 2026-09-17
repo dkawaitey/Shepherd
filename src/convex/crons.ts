@@ -19,5 +19,13 @@ crons.daily(
   internal.pushScheduler.dailyPushNotifications,
 );
 
+// Daily error-log housekeeping at 03:15 UTC: drop entries older than 30 days and
+// keep the newest 1000 so the admin error log stays readable.
+crons.daily(
+  "prune-error-log",
+  { hourUTC: 3, minuteUTC: 15 },
+  internal.errorLogs.prune,
+);
+
 
 export default crons;

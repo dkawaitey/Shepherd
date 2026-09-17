@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/hooks/use-auth";
 import { InstallPrompt } from "@/components/install-prompt";
 import { ThemeProvider } from "@/components/theme-provider";
+import { installErrorLogging, reportAppError } from "@/lib/error-log";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
@@ -32,6 +33,7 @@ const Announcements = lazy(() => import("./pages/announcements.tsx"));
 const Reports = lazy(() => import("./pages/reports.tsx"));
 const Analytics = lazy(() => import("./pages/analytics.tsx"));
 const Settings = lazy(() => import("./pages/settings.tsx"));
+const ErrorLog = lazy(() => import("./pages/error-log.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -89,6 +91,7 @@ class RootErrorBoundary extends React.Component<
   }
   componentDidCatch(err: Error) {
     console.error("[WebContainer preview] Root crash:", err);
+    reportAppError(err, { source: "render", context: "App crash" });
   }
   render() {
     if (this.state.hasError) {
@@ -113,6 +116,10 @@ class RootErrorBoundary extends React.Component<
 }
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+
+// Report every failed mutation/action (plus uncaught errors) to the admin
+// error log — see src/lib/error-log.ts.
+installErrorLogging(convex);
 
 function RouteSyncer() {
   const location = useLocation();
@@ -185,6 +192,7 @@ createRoot(document.getElementById("root")!).render(
                     <Route path="/reports" element={<Reports />} />
                     <Route path="/analytics" element={<Analytics />} />
                     <Route path="/settings" element={<Settings />} />
+                    <Route path="/error-log" element={<ErrorLog />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
                 </Routes>

@@ -6,6 +6,7 @@ import { ROLES, ROLE_LABELS, Role } from "@/convex/constants";
 import { TestAsDialog } from "@/components/test-as-dialog";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
+import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   BellRing,
@@ -24,6 +25,7 @@ import {
   UserRound,
   ContactRound,
   FlaskConical,
+  ShieldAlert,
 } from "lucide-react";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useEffect, useState } from "react";
@@ -42,7 +44,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const NAV = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  code: string;
+  adminOnly?: boolean;
+};
+
+const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, code: "D" },
   { to: "/contacts", label: "Contacts", icon: ContactRound, code: "C" },
   { to: "/followups", label: "Follow-ups", icon: ClipboardCheck, code: "F" },
@@ -55,6 +65,13 @@ const NAV = [
   { to: "/reports", label: "Reports", icon: FileBarChart, code: "R" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, code: "ANL" },
   { to: "/settings", label: "Settings", icon: Settings, code: "S" },
+  {
+    to: "/error-log",
+    label: "Error Log",
+    icon: ShieldAlert,
+    code: "EL",
+    adminOnly: true,
+  },
 ];
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -78,8 +95,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {NAV.map((item) => {
-          // Hide analytics for non-admins
-          if (item.to === "/analytics" && user?.role !== ROLES.ADMIN) return null;
+          // Analytics and the error log are administrator-only screens.
+          if ((item.adminOnly || item.to === "/analytics") && user?.role !== ROLES.ADMIN)
+            return null;
           const Icon = item.icon;
           const active =
             location.pathname === item.to ||
