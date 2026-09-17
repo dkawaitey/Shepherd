@@ -136,9 +136,16 @@ export const removeSubscription = mutation({
       await ctx.db.delete(row._id);
     }
 
-    // Turning notifications off on this device is an explicit opt-out, so the
-    // intent is cleared too (otherwise the auto-heal would switch it back on).
-    await setPreferenceHandler(ctx, userId, false, undefined, undefined);
+    // Only clear the saved intent once the user has no devices left. Turning
+    // notifications off on one device must not switch them off (or, via the
+    // client auto-heal, switch them back on) for the user's other devices.
+    const remaining = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    if (remaining.length === 0) {
+      await setPreferenceHandler(ctx, userId, false, undefined, undefined);
+    }
   },
 });
 

@@ -31,6 +31,33 @@ function currentPermission(): NotificationPermission {
 }
 
 /**
+ * Per-browser record of an explicit "turn notifications off" tap.
+ *
+ * The saved intent is per *account*, so without this a user who disables
+ * notifications on one device would have the auto-heal switch them back on
+ * whenever another device in the same account still had a live subscription.
+ * The flag is cleared the moment the user enables notifications again.
+ */
+const OPT_OUT_KEY = "shepherd:push:opt-out";
+
+function readOptOut(): boolean {
+  try {
+    return localStorage.getItem(OPT_OUT_KEY) === "1";
+  } catch {
+    return false; // private mode / storage blocked
+  }
+}
+
+function writeOptOut(value: boolean) {
+  try {
+    if (value) localStorage.setItem(OPT_OUT_KEY, "1");
+    else localStorage.removeItem(OPT_OUT_KEY);
+  } catch {
+    /* best effort */
+  }
+}
+
+/**
  * Manages device push notifications for the current user.
  *
  * The *intent* is stored on the server (`push.setPreference`), and the browser
@@ -48,6 +75,8 @@ export function usePushNotifications(enabled: boolean) {
   });
   const [loading, setLoading] = useState(false);
   const [healFailed, setHealFailed] = useState(false);
+  // This browser was explicitly switched off by the user (see OPT_OUT_KEY).
+  const [optOut, setOptOut] = useState(readOptOut);
 
   const getPublicKey = useQuery(api.push.getPublicKey);
   const pref = useQuery(api.push.myPreference);
@@ -151,6 +180,8 @@ export function usePushNotifications(enabled: boolean) {
    */
   const reconcile = useCallback(async (intentOn: boolean): Promise<EnableResult> => {
     if (!pushSupported()) return { ok: false, reason: "Push notifications are not supported in this browser" };
+    // The user switched notifications off on this browser — leave it alone.
+    if (readOptOut()) return { ok: true };
     const key = publicKeyRef.current;
     if (!key) return { ok: false, reason: "VAPID public key not available on the server" };
 
@@ -222,7 +253,7 @@ export function usePushNotifications(enabled: boolean) {
   // If the intent is on but this device has no subscription yet (permission
   // granted), keep retrying with backoff instead of leaving it silently off.
   useEffect(() => {
-    if (!enabled || !pref?.enabled) return;
+    if (!enabled || !pref?.enabled || optOut) return;
     if (!pushSupported() || currentPermission() !== "granted") return;
     if (state.deviceSubscribed || !healFailed) return;
     if (!publicKeyRef.current) return;
@@ -245,12 +276,12 @@ export function usePushNotifications(enabled: boolean) {
     }, delay);
 
     return () => clearTimeout(t);
-  }, [enabled, pref?.enabled, state.deviceSubscribed, healFailed, subscribeNow]);
+  }, [enabled, pref?.enabled, optOut, state.deviceSubscribed, healFailed, subscribeNow]);
 
   // Browsers can drop the subscription while the app is open (OS updates,
   // storage pressure, PWA updates). Re-check on focus and periodically.
   useEffect(() => {
-    if (!enabled || !pref?.enabled) return;
+    if (!enabled || !pref?.enabled || optOut) return;
     if (!pushSupported()) return;
 
     const check = async () => {
@@ -272,7 +303,7 @@ export function usePushNotifications(enabled: boolean) {
       window.removeEventListener("focus", onVisible);
       clearInterval(interval);
     };
-  }, [enabled, pref?.enabled, reconcile]);
+  }, [enabled, pref?.enabled, optOut, reconcile]);
 
   /** Explicit user opt-in from the settings toggle. */
   const enable = useCallback(async (): Promise<EnableResult> => {
@@ -293,6 +324,11 @@ export function usePushNotifications(enabled: boolean) {
       if (!key) {
         return { ok: false, reason: "VAPID public key not configured — ask an administrator" };
       }
+
+      // Enabling is an explicit opt-in for this browser — clear any previous
+      // opt-out so the auto-heal is allowed to restore this device again.
+      writeOptOut(false);
+      setOptOut(false);
 
       // Record the intent first so a failure to subscribe still counts as the
       // user wanting notifications, and the background heal can finish the job.
@@ -340,6 +376,11 @@ export function usePushNotifications(enabled: boolean) {
         await setPrefRef.current({ enabled: false });
       }
 
+      // Remember the opt-out on this browser so neither the auto-heal nor a
+      // later app open silently turns notifications back on for it.
+      writeOptOut(true);
+      setOptOut(true);
+
       healAttempts.current = 0;
       setHealFailed(false);
       setState((s) => ({ ...s, deviceSubscribed: false, subscription: null, permission: currentPermission() }));
@@ -357,8 +398,8 @@ export function usePushNotifications(enabled: boolean) {
   // The toggle reflects the saved intent, not the transient browser state, so it
   // never appears to switch itself off while a subscription is being restored.
   const subscribed = pref === undefined
-    ? state.deviceSubscribed && permission === "granted"
-    : !!pref.enabled && permission === "granted";
+    ? state.deviceSubscribed && permission === "granted" && !optOut
+    : !!pref.enabled && permission === "granted" && !optOut;
 
   return {
     subscribed,
