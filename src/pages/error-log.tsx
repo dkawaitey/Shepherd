@@ -39,6 +39,7 @@ import {
   fmtDate,
   fmtDateTime,
   formatError,
+  userIsAdmin,
 } from "@/components/shared";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +72,7 @@ type ErrorEntry = {
  */
 export default function ErrorLogPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = userIsAdmin(user);
 
   const [search, setSearch] = useState("");
   const [fnFilter, setFnFilter] = useState("all");

@@ -6,6 +6,7 @@ import {
   requireAdmin,
   requireRole,
   hasRole,
+  userRoles,
   validClassScope,
   canReadMinistry,
 } from "./helpers";
@@ -75,7 +76,11 @@ export const setTestAs = mutation({
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new ConvexError("Not authenticated");
     const user = await ctx.db.get(userId);
-    if (!user || user.isAnonymous || user.role !== ROLES.ADMIN) {
+    // `userRoles` reads the account's *real* roles (ignoring any active test),
+    // so an administrator who holds admin alongside other roles still passes,
+    // and "test as" cannot be exited by someone who was granted it. The
+    // legacy single `user.role` field alone would miss a dual-role admin.
+    if (!user || user.isAnonymous || !userRoles(user).includes(ROLES.ADMIN)) {
       throw new ConvexError("Only administrators can test the app as other roles");
     }
     const role = args.role?.trim() || undefined;
@@ -614,12 +619,15 @@ export const bootstrapAdmin = mutation({
     await checkRateLimit(ctx, "users.bootstrapAdmin");
     const user = await getCurrentUser(ctx);
     if (!user || user.isAnonymous || !user.email) return;
-    if (user.role) return;
+    // Anyone who already holds a role — in either field — is never re-bootstrapped.
+    if (userRoles(user).length > 0) return;
 
     const everyone = await ctx.db.query("users").collect();
     // Guests are not real accounts and never count as administrators.
     const real = everyone.filter((u) => !u.isAnonymous);
-    if (real.some((u) => hasRole(u, ROLES.ADMIN) || u.role === ROLES.ADMIN)) return;
+    // Real roles only: an administrator who is currently "testing as" a worker
+    // still counts as the deployment's administrator.
+    if (real.some((u) => userRoles(u).includes(ROLES.ADMIN))) return;
     if (real.some((u) => u._id !== user._id)) return;
 
     const allowedEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();

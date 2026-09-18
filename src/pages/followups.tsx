@@ -35,6 +35,7 @@ import {
   StatusPill,
   fmtDate,
   formatError,
+  userIsAdmin,
 } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
@@ -365,7 +366,7 @@ export default function Followups() {
     search: search || undefined,
   });
   const me = useQuery(api.users.currentUser);
-  const isAdmin = me?.role === "admin";
+  const isAdmin = userIsAdmin(me);
   const remove = useMutation(api.followups.remove);
 
   const setParam = (key: string, value: string) => {

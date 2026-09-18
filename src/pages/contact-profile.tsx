@@ -49,6 +49,8 @@ import {
   mapsLink,
   progressColor,
   formatError,
+  userCanWrite,
+  userIsAdmin,
   ContactChannelActions,
 } from "@/components/shared";
 import { StatusChangeDialog, ScheduleDialog } from "./followups";
@@ -95,8 +97,10 @@ export default function ContactProfile() {
   const navigate = useNavigate();
   const data = useQuery(api.contacts.get, { id: id as any });
   const me = useQuery(api.users.currentUser);
-  const isAdmin = me?.role === "admin";
-  const canEdit = me && me.role !== "leader";
+  const isAdmin = userIsAdmin(me);
+  // Everyone but the read-only Leader role may edit records (mirrors the
+  // server's requireRole calls).
+  const canEdit = userCanWrite(me);
   const canAdd = canAddRecords(me);
   const promote = useMutation(api.contacts.promoteToMember);
   const [promoting, setPromoting] = useState(false);

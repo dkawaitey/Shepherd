@@ -33,7 +33,9 @@ import {
   REACTIONS,
   REACTION_BY_KIND,
   REACTION_FALLBACK,
+  ROLES,
 } from "@/convex/constants";
+import { userHasRole, userIsAdmin } from "@/components/shared";
 
 import {
   Check,
@@ -50,6 +52,7 @@ import {
   Music,
   AlertCircle,
   Eye,
+  Megaphone,
   Heart,
   BarChart3,
   Activity,
@@ -149,9 +152,10 @@ export default function Announcements() {
     limit,
   });
   const me = useQuery(api.users.currentUser);
-  // Administrators may hold several roles, so check the whole set.
-  const isAdmin =
-    !!me && (me.roles?.length ? me.roles.includes("admin") : me.role === "admin");
+  // Administrators may hold several roles, so check the whole set (and honour
+  // "test as", exactly like the server's hasRole).
+  const isAdmin = userIsAdmin(me);
+  const isCoordinator = userHasRole(me, ROLES.COORDINATOR);
   const removePost = useMutation(api.posts.remove);
 
   // A new search or author filter starts from the first page again.
@@ -221,6 +225,7 @@ export default function Announcements() {
               post={p}
               meId={me?._id}
               isAdmin={isAdmin}
+              isCoordinator={isCoordinator}
               isOpen={expanded === p._id}
               onToggle={() => setExpanded(expanded === p._id ? null : p._id)}
               onRemove={async () => {
@@ -269,20 +274,28 @@ function reactionMeta(kind: string) {
   return REACTION_BY_KIND[kind] ?? { ...REACTION_FALLBACK, kind };
 }
 
-/** Compact emoji + count chips for a reaction breakdown. */
+/**
+ * Every emoji that has been chosen, with its live count — the pill beside the
+ * react button. The reader's own reaction is included here, so the button
+ * itself only has to show which emoji they picked.
+ */
 function ReactionSummary({ kinds }: { kinds: Record<string, number> }) {
-  const entries = Object.entries(kinds ?? {}).filter(([, n]) => n > 0);
+  const entries = Object.entries(kinds ?? {})
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
   if (entries.length === 0) return null;
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1">
       {entries.map(([kind, count]) => (
         <span
           key={kind}
           title={`${count} ${reactionMeta(kind).label}`}
-          className="flex items-center gap-1 rounded-full border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+          className="flex items-center gap-1 rounded-full border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] leading-none"
         >
-          <span>{reactionMeta(kind).emoji}</span>
-          {count}
+          <span className="text-[11px]">{reactionMeta(kind).emoji}</span>
+          <span className="font-semibold tabular-nums text-foreground/80">
+            {count}
+          </span>
         </span>
       ))}
     </div>
@@ -298,13 +311,13 @@ function ReactionPicker({
   targetType,
   targetId,
   mine,
-  count,
   compact = false,
 }: {
   postId: string;
   targetType: "post" | "comment";
   targetId: string;
   mine: string | null;
+  /** Total reactions — shown beside the button by ReactionSummary, not here. */
   count: number;
   compact?: boolean;
 }) {
@@ -339,13 +352,16 @@ function ReactionPicker({
             busy && "opacity-60",
           )}
         >
+          {/* This reader's own emoji only — no description, no count. The
+              live breakdown beside the pill shows every emoji and its count. */}
           {current ? (
-            <span className={compact ? "text-[11px]" : "text-xs"}>{current.emoji}</span>
+            <span className={compact ? "text-[12px]" : "text-sm"}>{current.emoji}</span>
           ) : (
-            <Heart className="h-3 w-3" />
+            <>
+              <Heart className="h-3 w-3" />
+              {!compact && <span>React</span>}
+            </>
           )}
-          {!compact && (current ? current.label : "React")}
-          {count > 0 && <span className="tabular-nums">{count}</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-auto p-1.5">
@@ -454,17 +470,23 @@ type FeedPost = {
 function PollCard({
   postId,
   poll,
-  canClose = false,
+  canManage = false,
 }: {
   postId: string;
   poll: FeedPoll;
-  /** The post's author or an administrator may close/reopen the poll. */
-  canClose?: boolean;
+  /**
+   * The post's author, an evangelism coordinator or an administrator may
+   * close/reopen the poll and announce its result — the same people who may
+   * see who voted for what.
+   */
+  canManage?: boolean;
 }) {
   const vote = useMutation(api.posts.vote);
   const setClosed = useMutation(api.posts.setPollClosed);
+  const announce = useMutation(api.posts.announcePollResult);
   const [busy, setBusy] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [announcing, setAnnouncing] = useState(false);
   // Local selection for multiple-answer polls. Deliberately not synced from the
   // query result on every render: the feed re-runs whenever anyone votes, which
   // would wipe a selection the reader is still making.
@@ -505,6 +527,26 @@ function PollCard({
       setClosing(false);
     }
   };
+
+  // Announce the outcome: a results comment on the post, plus a device push
+  // to every member (see posts.announcePollResult).
+  const announceResult = async () => {
+    setAnnouncing(true);
+    try {
+      const result = await announce({ postId: postId as any });
+      toast.success(`Result announced — ${(result as any).headline}`);
+    } catch (err) {
+      toast.error(formatError(err, "Could not announce the result"));
+    } finally {
+      setAnnouncing(false);
+    }
+  };
+
+  // Biggest option first, for the result line under a closed poll.
+  const ranked = [...poll.options]
+    .map((o) => ({ ...o, count: poll.counts[o.id] ?? 0 }))
+    .sort((a, b) => b.count - a.count);
+  const winner = ranked[0];
 
   return (
     <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
@@ -578,11 +620,29 @@ function PollCard({
             Tap your answer again to clear it
           </span>
         )}
+        {poll.closed && poll.totalVotes > 0 && (
+          <span className="text-primary">
+            Result: {winner.text} — {winner.count} of {poll.totalVotes}
+          </span>
+        )}
       </div>
 
-      {((!poll.closed && poll.allowMultiple) || canClose) && (
+      {((!poll.closed && poll.allowMultiple) || canManage) && (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-          {canClose && (
+          {canManage && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px]"
+              disabled={announcing || poll.totalVotes === 0}
+              title="Post the result as a comment and send a device notification to everyone"
+              onClick={announceResult}
+            >
+              <Megaphone className="mr-1 h-3 w-3" />
+              {announcing ? "Announcing..." : "Announce result"}
+            </Button>
+          )}
+          {canManage && (
             <Button
               size="sm"
               variant="ghost"
@@ -629,6 +689,7 @@ function PostCard({
   post,
   meId,
   isAdmin,
+  isCoordinator,
   isOpen,
   onToggle,
   onRemove,
@@ -636,13 +697,21 @@ function PostCard({
   post: FeedPost;
   meId?: string;
   isAdmin: boolean;
+  isCoordinator: boolean;
   isOpen: boolean;
   onToggle: () => void;
   onRemove: () => Promise<void>;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const ref = useViewTracker(post._id, true);
-  const canDelete = isAdmin || post.authorId === meId;
+  const isAuthor = !!meId && post.authorId === meId;
+  const canDelete = isAdmin || isAuthor;
+  // Engagement details (who viewed, reacted or voted) are open to
+  // administrators, coordinators and the author of this post/poll — and the
+  // server enforces the same rule (posts.engagementDetails).
+  const canSeeDetails = isAdmin || isCoordinator || isAuthor;
+  // Closing the poll and announcing its result follow the same permission.
+  const canManagePoll = canSeeDetails;
 
   return (
     <article
@@ -706,7 +775,7 @@ function PostCard({
         )}
 
         {post.poll && (
-          <PollCard postId={post._id} poll={post.poll} canClose={canDelete} />
+          <PollCard postId={post._id} poll={post.poll} canManage={canManagePoll} />
         )}
 
         {/* Engagement bar — reactions, comments and the live view counter. */}
@@ -730,8 +799,9 @@ function PostCard({
           </button>
 
           {/* View count. Tapping the eye opens the engagement details, which
-              only an administrator may see — everyone else gets the number. */}
-          {isAdmin ? (
+              administrators, coordinators and the author may see — everyone
+              else just gets the number. */}
+          {canSeeDetails ? (
             <button
               onClick={() => setDetailsOpen(true)}
               className="ml-auto flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-primary"
@@ -765,8 +835,9 @@ function PostCard({
 }
 
 /**
- * Engagement details for one post — administrators only (see
- * posts.engagementDetails). Tiles act as tabs: opening one reveals the names
+ * Engagement details for one post — administrators, evangelism coordinators,
+ * and the author of this post/poll (see posts.engagementDetails, which returns
+ * nothing to anyone else). Tiles act as tabs: opening one reveals the names
  * behind it.
  */
 function EngagementDetailsDialog({
@@ -1167,8 +1238,7 @@ function CommentThread({ postId }: { postId: string }) {
   const removeComment = useMutation(api.posts.removeComment);
   const me = useQuery(api.users.currentUser);
   // Administrators may hold several roles, so check the whole set.
-  const isAdmin =
-    !!me && (me.roles?.length ? me.roles.includes("admin") : me.role === "admin");
+  const isAdmin = userIsAdmin(me);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 

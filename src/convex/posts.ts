@@ -8,7 +8,13 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { getCurrentUser, hasRole, logAudit, requireRole } from "./helpers";
+import {
+  CurrentUser,
+  getCurrentUser,
+  hasRole,
+  logAudit,
+  requireRole,
+} from "./helpers";
 import { REACTION_KINDS, ROLES } from "./constants";
 import { checkRateLimit } from "./rateLimit";
 import { validatePostTitle, validatePostBody, validateCommentBody } from "./validate";
@@ -115,6 +121,27 @@ async function engagementFor(ctx: Ctx, post: Doc<"posts">): Promise<Engagement> 
     };
   }
   return await computeEngagement(ctx, post._id);
+}
+
+/**
+ * Who may see and manage one post's engagement details and its poll:
+ * administrators, evangelism coordinators, and the person who wrote it.
+ *
+ * Every role check here goes through `hasRole`, which honours the whole role
+ * set an account holds (and "test as" impersonation) — never the single
+ * legacy `user.role` field, which misses a dual-role account such as
+ * Administrator + Class Leader.
+ */
+function canManagePost(
+  user: CurrentUser | null | undefined,
+  post: Doc<"posts">,
+) {
+  if (!user) return false;
+  return (
+    hasRole(user, ROLES.ADMIN) ||
+    hasRole(user, ROLES.COORDINATOR) ||
+    (!!post.authorId && post.authorId === user._id)
+  );
 }
 
 function classifyMime(mime: string): "image" | "video" | "audio" | "file" {
@@ -539,16 +566,18 @@ export const recordView = mutation({
  * comment/reply activity, and — when the post carries one — which people chose
  * which poll option.
  *
- * Identities are administrator-only. Everyone else gets the counts they
+ * Identities are revealed to administrators, evangelism coordinators, and the
+ * author of that specific post/poll. Everyone else gets the counts they
  * already see in the feed; nothing here is returned to them at all.
  */
 export const engagementDetails = query({
   args: { postId: v.id("posts") },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user || user.isAnonymous || !hasRole(user, ROLES.ADMIN)) return null;
+    if (!user || user.isAnonymous) return null;
     const post = await ctx.db.get(args.postId);
     if (!post) return null;
+    if (!canManagePost(user, post)) return null;
 
     const reactions = await ctx.db
       .query("postReactions")
@@ -886,7 +915,7 @@ export const setPollClosed = mutation({
     ]);
     const post = await ctx.db.get(args.postId);
     if (!post) throw new ConvexError("Post not found");
-    if (!hasRole(user, ROLES.ADMIN) && post.authorId !== user._id) {
+    if (!canManagePost(user, post)) {
       throw new ConvexError("You can only close your own poll");
     }
 
@@ -907,6 +936,128 @@ export const setPollClosed = mutation({
       entityId: poll._id,
       details: poll.question,
     });
+  },
+});
+
+/** Headline for a poll's outcome, e.g. "Saturday outreach won with 5 of 9 votes (56%)". */
+function pollOutcome(poll: Doc<"polls">) {
+  const ranked = poll.options
+    .map((o) => ({ text: o.text, count: poll.counts[o.id] ?? 0 }))
+    .sort((a, b) => b.count - a.count);
+  const top = ranked[0];
+  const pct = poll.totalVotes > 0 ? Math.round((top.count / poll.totalVotes) * 100) : 0;
+  return {
+    ranked,
+    headline: `${top.text} ${poll.allowMultiple ? "led" : "won"} with ${top.count} of ${poll.totalVotes} votes (${pct}%)`,
+  };
+}
+
+/**
+ * Announce a poll's result to the whole ministry: a results comment on the
+ * announcement (so the outcome sits in the thread right under the poll) plus a
+ * device push notification for every signed-in member.
+ *
+ * Allowed for the post's author, a coordinator, or an administrator — the same
+ * people who may see who voted and close the poll.
+ */
+export const announcePollResult = mutation({
+  args: { postId: v.id("posts") },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) {
+      throw new ConvexError("Sign in to announce results");
+    }
+    const post = await ctx.db.get(args.postId);
+    if (!post) throw new ConvexError("Post not found");
+    if (!canManagePost(user, post)) {
+      throw new ConvexError("You can only announce results for your own poll");
+    }
+    await checkRateLimit(ctx, "poll.announce");
+
+    const poll = await ctx.db
+      .query("polls")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .first();
+    if (!poll) throw new ConvexError("This announcement has no poll");
+    if (poll.totalVotes === 0) {
+      throw new ConvexError("Nobody has voted yet — there is no result to announce");
+    }
+
+    const { ranked, headline } = pollOutcome(poll);
+    const body = [
+      `Poll result — ${poll.question}`,
+      "",
+      headline,
+      ...ranked.map((r) => `${r.text} — ${r.count} ${r.count === 1 ? "vote" : "votes"}`),
+      "",
+      `${poll.totalVotes} ${poll.totalVotes === 1 ? "vote" : "votes"} from ${poll.voterCount} ${poll.voterCount === 1 ? "person" : "people"}`,
+      `Announced by ${user.name ?? user.email ?? "a leader"}`,
+    ].join("\n");
+
+    // In-app: a comment on the announcement, so the result is visible to
+    // everyone who opens the feed — not only to those who can see details.
+    const eng = await engagementFor(ctx, post);
+    const commentId = await ctx.db.insert("comments", {
+      postId: args.postId,
+      author: user.name ?? user.email ?? "Member",
+      authorId: user._id,
+      body,
+      createdAt: Date.now(),
+    });
+    await ctx.db.patch(args.postId, {
+      ...eng,
+      commentCount: eng.commentCount + 1,
+    });
+
+    // Device push to every signed-in member (mirrors the post/comment flow).
+    try {
+      const allUsers = await ctx.db.query("users").collect();
+      const recipientIds = allUsers
+        .filter((u) => !u.isAnonymous)
+        .map((u) => u._id);
+      if (recipientIds.length > 0) {
+        const ts = Date.now();
+        const jobId = await ctx.db.insert("notificationJobs", {
+          kind: "poll_result",
+          dedupeKey: `poll-result:${poll._id}:${poll.totalVotes}`,
+          deliverAt: ts,
+          status: "scheduled",
+          payload: {
+            title: "Poll result",
+            body: `${poll.question.slice(0, 70)} — ${headline}`,
+            url: `/announcements?post=${args.postId}`,
+          },
+          recipientUserIds: recipientIds as any,
+          createdAt: ts,
+        });
+        const sfId = await ctx.scheduler.runAfter(
+          0,
+          internal.pushNode.deliverJob,
+          { jobId },
+        );
+        await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
+      }
+    } catch (err) {
+      console.error("[posts] Poll result push scheduling failed:", err);
+      try {
+        await ctx.db.insert("pushDeliveryLogs", {
+          jobId: undefined,
+          endpoint: `poll:${poll._id}`,
+          success: false,
+          error: `Poll result notification scheduling failed: ${String(err)}`,
+          createdAt: Date.now(),
+        });
+      } catch { /* best effort */ }
+    }
+
+    await logAudit(ctx, {
+      action: "poll.announce",
+      entityType: "polls",
+      entityId: poll._id,
+      details: `${poll.question} — ${headline}`,
+    });
+
+    return { commentId, headline };
   },
 });
 
@@ -1028,7 +1179,9 @@ export const remove = mutation({
     ]);
     const post = await ctx.db.get(args.id);
     if (!post) throw new ConvexError("Post not found");
-    if (user.role !== ROLES.ADMIN && post.authorId !== user._id) {
+    // `hasRole` (not the legacy single `user.role`) so a dual-role administrator
+    // is recognised, and an admin "testing as" another role is not.
+    if (!hasRole(user, ROLES.ADMIN) && post.authorId !== user._id) {
       throw new ConvexError("You can only remove your own posts");
     }
 
@@ -1101,7 +1254,7 @@ export const removeComment = mutation({
     ]);
     const comment = await ctx.db.get(args.id);
     if (!comment) throw new ConvexError("Comment not found");
-    if (user.role !== ROLES.ADMIN && comment.authorId !== user._id) {
+    if (!hasRole(user, ROLES.ADMIN) && comment.authorId !== user._id) {
       throw new ConvexError("You can only remove your own comments");
     }
     // Read the post counters before deleting anything so the decrement is

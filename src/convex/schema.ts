@@ -500,6 +500,7 @@ const schema = defineSchema(
         v.literal("post"),
         v.literal("comment"),
         v.literal("reply"),
+        v.literal("poll_result"),
       ),
       dedupeKey: v.string(),
       deliverAt: v.number(),

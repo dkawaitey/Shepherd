@@ -33,6 +33,7 @@ import {
   downloadCsv,
   downloadPdf,
   formatError,
+  userCanWrite,
 } from "@/components/shared";
 import {
   TriangleAlert,
@@ -54,7 +55,7 @@ export default function Attendance() {
   const me = useQuery(api.users.currentUser);
   const markFollowup = useMutation(api.members.markAttendanceFollowup);
 
-  const canFollowUp = !!me && me.role !== "leader";
+  const canFollowUp = userCanWrite(me);
   const [followupFor, setFollowupFor] = useState<any | null>(null);
   const [outcome, setOutcome] = useState("");
   const [followupBy, setFollowupBy] = useState(me?.name || me?.email || "");

@@ -1,7 +1,13 @@
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { canAddRecords, formatRoles, formatError } from "@/components/shared";
+import {
+  canAddRecords,
+  effectiveUserRoles,
+  formatRoles,
+  formatError,
+  userIsAdmin,
+} from "@/components/shared";
 import { ROLES, ROLE_LABELS, Role } from "@/convex/constants";
 import { TestAsDialog } from "@/components/test-as-dialog";
 import { useMutation, useQuery } from "convex/react";
@@ -98,23 +104,12 @@ const NAV: NavItem[] = [
 function hasMinistryAccess(user: {
   role?: string;
   roles?: string[];
+  testAs?: string;
   email?: string;
   isAnonymous?: boolean;
 } | null | undefined) {
   if (!user || user.isAnonymous) return false;
-  return user.roles?.length ? true : !!user.role || !!user.email;
-}
-
-/** Administrator check that honours every role an account holds. */
-function isAdminUser(user: {
-  role?: string;
-  roles?: string[];
-  isAnonymous?: boolean;
-} | null | undefined) {
-  if (!user || user.isAnonymous) return false;
-  return user.roles?.length
-    ? user.roles.includes(ROLES.ADMIN)
-    : user.role === ROLES.ADMIN;
+  return effectiveUserRoles(user).length > 0 || !!user.email;
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -142,7 +137,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           // announcements and their own settings.
           if (item.ministryOnly && !hasMinistryAccess(user)) return null;
           // Analytics, access review and the error log are administrator-only.
-          if ((item.adminOnly || item.to === "/analytics") && !isAdminUser(user))
+          if ((item.adminOnly || item.to === "/analytics") && !userIsAdmin(user))
             return null;
           const Icon = item.icon;
           const active =
@@ -208,7 +203,9 @@ export function AppShell() {
   const setTestAs = useMutation(api.users.setTestAs);
 
   useEffect(() => {
-    if (user && !user.role) {
+    // Mirrors the server guard: only an account holding no role at all is a
+    // bootstrap candidate (users.bootstrapAdmin decides for real).
+    if (user && effectiveUserRoles(user).length === 0) {
       bootstrapAdmin().catch(() => undefined);
     }
   }, [user, bootstrapAdmin]);

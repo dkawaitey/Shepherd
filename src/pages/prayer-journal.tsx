@@ -23,7 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PRAYER_STATUS } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, fmtDateTime } from "@/components/shared";
+import {
+  EmptyState,
+  PageHeader,
+  StatusPill,
+  fmtDateTime,
+  userCanWrite,
+} from "@/components/shared";
 import { cn } from "@/lib/utils";
 import { Heart, Search } from "lucide-react";
 
@@ -39,7 +45,7 @@ export default function PrayerJournal() {
   });
   const updateStatus = useMutation(api.discipleship.updatePrayerStatus);
   const me = useQuery(api.users.currentUser);
-  const canEdit = me && me.role !== "leader";
+  const canEdit = userCanWrite(me);
 
   const counts = {
     active: (prayers ?? []).filter((p) => p.status === PRAYER_STATUS.ACTIVE).length,

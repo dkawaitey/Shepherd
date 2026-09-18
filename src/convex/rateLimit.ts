@@ -12,7 +12,8 @@
  */
 import { ConvexError } from "convex/values";
 import { MutationCtx, internalMutation } from "./_generated/server";
-import { getCurrentUser } from "./helpers";
+import { getCurrentUser, hasRole } from "./helpers";
+import { ROLES } from "./constants";
 
 type RateLimitConfig = {
   /** Maximum requests allowed within the window. */
@@ -46,6 +47,8 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
 
   // Notification/broadcast — very strict
   "push.sendTestNotification": { maxRequests: 3, windowMs: 60_000 },
+  // A poll result announces to every device at once, so keep it rare.
+  "poll.announce": { maxRequests: 3, windowMs: 300_000 },
   "emails.sendNow": { maxRequests: 2, windowMs: 300_000 },
 
   // Destructive operations — controlled
@@ -88,8 +91,9 @@ export async function checkRateLimit(
   if (!config.maxRequests || !config.windowMs) return; // No limit configured
 
   // Administrators get a 2x multiplier on every limit.
-  const isAdmin =
-    user.role === "admin" || (user.roles ?? []).includes("admin");
+  // `hasRole` covers the whole role set and "test as" impersonation, so an
+  // admin testing as a worker is limited exactly like a worker.
+  const isAdmin = hasRole(user, ROLES.ADMIN);
   const effectiveMax = isAdmin ? config.maxRequests * 2 : config.maxRequests;
 
   const key = `${user._id}:${action}`;

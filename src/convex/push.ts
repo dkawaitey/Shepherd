@@ -311,13 +311,14 @@ export const deliveryDiagnostics = query({
       .order("desc")
       .take(5);
 
-    // Check for recent post/comment notification jobs.
+    // Check for recent post/comment/poll-result notification jobs.
     const postJobs = await ctx.db
       .query("notificationJobs")
       .filter((q) => q.or(
         q.eq(q.field("kind"), "post"),
         q.eq(q.field("kind"), "comment"),
         q.eq(q.field("kind"), "reply"),
+        q.eq(q.field("kind"), "poll_result"),
       ))
       .order("desc")
       .take(5);

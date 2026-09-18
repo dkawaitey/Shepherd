@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import {
   FOLLOWUP_STATUS_COLORS,
   ROLE_LABELS,
+  ROLES,
   STAGE_LABELS,
   FollowupStatus,
   Role,
@@ -18,6 +19,55 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+/**
+ * The account fields every client-side role check needs. Accounts may hold
+ * several roles at once, an administrator may be "testing as" a role, and a
+ * guest (anonymous) account never holds any role at all.
+ */
+export type RoleBearingUser =
+  | {
+      role?: string;
+      roles?: string[];
+      testAs?: string;
+      isAnonymous?: boolean;
+    }
+  | null
+  | undefined;
+
+/**
+ * Roles in effect for the signed-in account — the client mirror of
+ * `effectiveRoles()` in convex/helpers.ts. Server and client must agree, or the
+ * UI offers actions the backend will refuse (or hides ones it would allow):
+ *   - guest (anonymous) accounts hold no role, whatever the document says
+ *   - while "testing as" a role, only that role applies
+ *   - otherwise every assigned role counts
+ */
+export function effectiveUserRoles(user: RoleBearingUser): string[] {
+  if (!user || user.isAnonymous) return [];
+  if (user.testAs) return [user.testAs];
+  return user.roles?.length ? user.roles : user.role ? [user.role] : [];
+}
+
+/** True when any of the account's roles matches. */
+export function userHasRole(user: RoleBearingUser, role: string): boolean {
+  return effectiveUserRoles(user).includes(role);
+}
+
+/** True for administrators (any role set that includes admin). */
+export function userIsAdmin(user: RoleBearingUser): boolean {
+  return userHasRole(user, ROLES.ADMIN);
+}
+
+/**
+ * True when the account may change ministry records: it holds at least one role
+ * and is not purely a Read-only Leader. Mirrors the server, where the
+ * read-only role can read but every write goes through `requireRole`.
+ */
+export function userCanWrite(user: RoleBearingUser): boolean {
+  const roles = effectiveUserRoles(user);
+  return roles.length > 0 && roles.some((r) => r !== ROLES.LEADER);
+}
 
 /** Human-readable labels for every role a user holds (e.g. "Administrator + Class Leader"). */
 export function formatRoles(user?: {
@@ -38,11 +88,10 @@ export function formatRoles(user?: {
 export function canAddRecords(user?: {
   role?: string;
   roles?: string[];
+  testAs?: string;
+  isAnonymous?: boolean;
 } | null) {
-  if (!user) return false;
-  if (user.role === "admin") return true;
-  const roles = user.roles?.length ? user.roles : user.role ? [user.role] : [];
-  return roles.includes("classLeader");
+  return userIsAdmin(user) || userHasRole(user, ROLES.CLASS_LEADER);
 }
 
 export function StatusPill({

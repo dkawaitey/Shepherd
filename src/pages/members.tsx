@@ -52,6 +52,9 @@ import {
   progressColor,
   canAddRecords,
   formatError,
+  userCanWrite,
+  userHasRole,
+  userIsAdmin,
   ContactChannelActions,
 } from "@/components/shared";
 
@@ -98,7 +101,7 @@ export default function Members() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const me = useQuery(api.users.currentUser);
-  const isAdmin = me?.role === "admin";
+  const isAdmin = userIsAdmin(me);
   const canAdd = canAddRecords(me);
 
   const members = useQuery(api.members.list, {
@@ -328,7 +331,7 @@ function AddMemberDialog({
   const create = useMutation(api.members.create);
   const me = useQuery(api.users.currentUser);
   const leaders = useQuery(api.members.classLeaders);
-  const isAdmin = me?.role === ROLES.ADMIN;
+  const isAdmin = userIsAdmin(me);
   const [form, setForm] = useState<Record<string, string>>({});
   const [isClassLeader, setIsClassLeader] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -544,15 +547,19 @@ export function MemberProfile() {
   const me = useQuery(api.users.currentUser);
   const accounts = useQuery(api.users.list);
   const linkMember = useMutation(api.users.linkMember);
-  const isAdmin = me?.role === ROLES.ADMIN;
-  const canSeeConfidential = !!me?.role && me.role !== ROLES.LEADER;
+  const isAdmin = userIsAdmin(me);
+  // Confidential notes and record edits are for everyone except a pure
+  // read-only Leader — checked over every role the account holds.
+  const canSeeConfidential = userCanWrite(me);
   const canRecord =
-    isAdmin || me?.role === ROLES.COORDINATOR || me?.role === ROLES.WORKER;
+    isAdmin ||
+    userHasRole(me, ROLES.COORDINATOR) ||
+    userHasRole(me, ROLES.WORKER);
   const canEditNotes =
     isAdmin ||
-    me?.role === ROLES.COORDINATOR ||
-    me?.role === ROLES.WORKER ||
-    me?.role === ROLES.CLASS_LEADER;
+    userHasRole(me, ROLES.COORDINATOR) ||
+    userHasRole(me, ROLES.WORKER) ||
+    userHasRole(me, ROLES.CLASS_LEADER);
   const [tab, setTab] = useState("profile");
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1267,7 +1274,7 @@ function EditMemberDialog({
   const addNote = useMutation(api.discipleship.addNote);
   const me = useQuery(api.users.currentUser);
   const leaders = useQuery(api.members.classLeaders);
-  const isAdmin = me?.role === ROLES.ADMIN;
+  const isAdmin = userIsAdmin(me);
   const [form, setForm] = useState<Record<string, string>>({
     fullName: member.fullName ?? "",
     gender: member.gender ?? "",
