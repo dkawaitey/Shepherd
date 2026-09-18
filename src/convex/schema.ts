@@ -358,6 +358,8 @@ const schema = defineSchema(
       reactionKinds: v.optional(v.record(v.string(), v.number())),
       viewCount: v.optional(v.number()),
       viewerCount: v.optional(v.number()),
+      /** Set when this announcement carries a poll (see the polls table). */
+      pollId: v.optional(v.id("polls")),
     })
       .index("createdAt", ["createdAt"])
       .index("by_pinned", ["isPinned", "createdAt"]),
@@ -406,6 +408,40 @@ const schema = defineSchema(
       .index("by_post_user", ["postId", "userId"])
       .index("by_user", ["userId"])
       .index("by_last_viewed", ["lastViewedAt"]),
+
+    // ===== Polls on announcements =====
+    // One poll per announcement. Vote totals are denormalized onto the poll so
+    // showing a result never scans the votes table: the feed reads the poll
+    // document plus the viewer's own rows, nothing more.
+    polls: defineTable({
+      postId: v.id("posts"),
+      question: v.string(),
+      /** true = choose one or more answers, false = choose exactly one. */
+      allowMultiple: v.boolean(),
+      options: v.array(v.object({ id: v.string(), text: v.string() })),
+      /** optionId -> vote count. */
+      counts: v.record(v.string(), v.number()),
+      totalVotes: v.number(),
+      voterCount: v.number(),
+      closedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_post", ["postId"]),
+
+    // One row per (poll, option, voter): a single-answer vote is one row, a
+    // multiple-answer vote is one row per chosen option. Voting again replaces
+    // the voter's previous rows (see posts.vote).
+    pollVotes: defineTable({
+      pollId: v.id("polls"),
+      postId: v.id("posts"),
+      optionId: v.string(),
+      userId: v.id("users"),
+      userName: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_poll", ["pollId"])
+      .index("by_poll_user", ["pollId", "userId"])
+      .index("by_user", ["userId"]),
 
     // ===== Ministry settings (key/value) =====
     settings: defineTable({

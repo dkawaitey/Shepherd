@@ -4,7 +4,7 @@
 export const REACTIONS = [
   { kind: "like", label: "Like", emoji: "❤️" },
   { kind: "amen", label: "Amen", emoji: "🙏" },
-  { kind: "pray", label: "Praying", emoji: "🕊️" },
+  { kind: "pray", label: "Praying", emoji: "👏" },
   { kind: "celebrate", label: "Celebrate", emoji: "🎉" },
 ] as const;
 

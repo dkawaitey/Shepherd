@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   Popover,
@@ -35,6 +36,7 @@ import {
 } from "@/convex/constants";
 
 import {
+  Check,
   FileIcon,
   MessageSquare,
   Paperclip,
@@ -409,6 +411,19 @@ function useViewTracker(postId: string, enabled: boolean) {
   return ref;
 }
 
+/** A poll as the feed receives it, including the viewer's own answer. */
+type FeedPoll = {
+  _id: string;
+  question: string;
+  allowMultiple: boolean;
+  options: { id: string; text: string }[];
+  counts: Record<string, number>;
+  totalVotes: number;
+  voterCount: number;
+  closed: boolean;
+  myOptionIds: string[];
+};
+
 type FeedPost = {
   _id: string;
   author?: string;
@@ -425,7 +440,149 @@ type FeedPost = {
   myReaction: string | null;
   viewCount: number;
   viewerCount: number;
+  poll: FeedPoll | null;
 };
+
+/**
+ * A poll under an announcement. Results are always visible, and the viewer's
+ * own answer is highlighted: single-answer polls vote on tap (tapping your own
+ * answer clears it, like a reaction), multiple-answer polls collect a selection
+ * and submit it together.
+ */
+function PollCard({ postId, poll }: { postId: string; poll: FeedPoll }) {
+  const vote = useMutation(api.posts.vote);
+  const [busy, setBusy] = useState(false);
+  // Local selection for multiple-answer polls. Deliberately not synced from the
+  // query result on every render: the feed re-runs whenever anyone votes, which
+  // would wipe a selection the reader is still making.
+  const [picked, setPicked] = useState<string[]>(poll.myOptionIds);
+  const voted = poll.myOptionIds.length > 0;
+
+  const submit = async (optionIds: string[]) => {
+    setBusy(true);
+    try {
+      await vote({ postId: postId as any, optionIds });
+    } catch (err) {
+      toast.error(formatError(err, "Could not record your vote"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onOptionClick = (id: string) => {
+    if (busy || poll.closed) return;
+    if (!poll.allowMultiple) {
+      // Same answer twice clears the vote, the way reactions behave.
+      submit(poll.myOptionIds.includes(id) ? [] : [id]);
+      return;
+    }
+    setPicked((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
+      <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <BarChart3 className="h-3 w-3" />
+        Poll
+        <span className="font-normal normal-case tracking-normal">
+          · {poll.allowMultiple ? "choose one or more" : "choose one"}
+          {poll.closed && " · closed"}
+        </span>
+      </div>
+      <div className="mt-1.5 text-[13px] font-semibold">{poll.question}</div>
+
+      <div className="mt-2 space-y-1.5">
+        {poll.options.map((o) => {
+          const count = poll.counts[o.id] ?? 0;
+          const pct =
+            poll.totalVotes > 0 ? Math.round((count / poll.totalVotes) * 100) : 0;
+          const mine = poll.allowMultiple
+            ? picked.includes(o.id)
+            : poll.myOptionIds.includes(o.id);
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onOptionClick(o.id)}
+              disabled={busy || poll.closed}
+              aria-pressed={mine}
+              className={cn(
+                "relative flex w-full items-center gap-2 overflow-hidden rounded-lg border px-2.5 py-2 text-left transition-colors",
+                mine
+                  ? "border-primary/60 bg-primary/10"
+                  : "border-border bg-card hover:border-primary/40",
+                (busy || poll.closed) && "cursor-default opacity-90",
+              )}
+            >
+              <span
+                className="absolute inset-y-0 left-0 bg-primary/10"
+                style={{ width: `${pct}%` }}
+                aria-hidden
+              />
+              <span
+                className={cn(
+                  "relative flex h-4 w-4 shrink-0 items-center justify-center border",
+                  poll.allowMultiple ? "rounded-[4px]" : "rounded-full",
+                  mine
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-muted-foreground/40",
+                )}
+              >
+                {mine && <Check className="h-2.5 w-2.5" />}
+              </span>
+              <span className="relative flex-1 text-[12px] font-medium">
+                {o.text}
+              </span>
+              <span className="relative shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                {count} · {pct}%
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+        <span>
+          {poll.totalVotes} {poll.totalVotes === 1 ? "vote" : "votes"} ·{" "}
+          {poll.voterCount} {poll.voterCount === 1 ? "person" : "people"}
+        </span>
+        {!poll.closed && !poll.allowMultiple && voted && (
+          <span className="text-muted-foreground/70">
+            Tap your answer again to clear it
+          </span>
+        )}
+        {!poll.closed && poll.allowMultiple && (
+          <span className="ml-auto flex items-center gap-2">
+            <Button
+              size="sm"
+              className="h-7 text-[11px]"
+              disabled={busy || picked.length === 0}
+              onClick={() => submit(picked)}
+            >
+              {voted ? "Update my answers" : "Submit vote"}
+            </Button>
+            {voted && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-[11px]"
+                disabled={busy}
+                onClick={() => {
+                  setPicked([]);
+                  submit([]);
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function PostCard({
   post,
@@ -506,6 +663,8 @@ function PostCard({
             ))}
           </div>
         )}
+
+        {post.poll && <PollCard postId={post._id} poll={post.poll} />}
 
         {/* Engagement bar — reactions, comments and the live view counter. */}
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
@@ -989,12 +1148,21 @@ function CreatePostDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Poll attached to the post being written (optional).
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [pollMultiple, setPollMultiple] = useState(false);
 
   const reset = () => {
     setTitle("");
     setBody("");
     setTags("");
     setPendingFiles([]);
+    setPollOpen(false);
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+    setPollMultiple(false);
     setError(null);
   };
 
@@ -1039,6 +1207,18 @@ function CreatePostDialog({
             if (!title.trim() || !body.trim()) {
               setError("Title and content are required");
               return;
+            }
+            // Mirrors the server's poll rules so the composer fails early.
+            const pollChoices = pollOptions.map((o) => o.trim()).filter(Boolean);
+            if (pollOpen) {
+              if (!pollQuestion.trim()) {
+                setError("Give the poll a question, or turn the poll off");
+                return;
+              }
+              if (pollChoices.length < 2) {
+                setError("A poll needs at least two options");
+                return;
+              }
             }
             setBusy(true);
             setError(null);
@@ -1098,6 +1278,13 @@ function CreatePostDialog({
                   .filter(Boolean)
                   .slice(0, 5) || undefined,
                 media: uploadedMedia.length > 0 ? uploadedMedia : undefined,
+                poll: pollOpen
+                  ? {
+                      question: pollQuestion.trim(),
+                      allowMultiple: pollMultiple,
+                      options: pollChoices,
+                    }
+                  : undefined,
               });
               toast.success("Post published");
               reset();
@@ -1182,6 +1369,87 @@ function CreatePostDialog({
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+          <div className="rounded-lg border border-dashed p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                <Label htmlFor="ap-poll" className="text-[12px]">
+                  Add a poll
+                </Label>
+              </div>
+              <Switch
+                id="ap-poll"
+                checked={pollOpen}
+                onCheckedChange={(v: boolean) => setPollOpen(v)}
+              />
+            </div>
+
+            {pollOpen && (
+              <div className="mt-3 space-y-2">
+                <Input
+                  className="h-8 text-[12px]"
+                  value={pollQuestion}
+                  onChange={(e) => setPollQuestion(e.target.value)}
+                  placeholder="Which day suits you for the outreach?"
+                />
+                <div className="space-y-1.5">
+                  {pollOptions.map((option, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        className="h-8 text-[12px]"
+                        value={option}
+                        onChange={(e) =>
+                          setPollOptions((prev) =>
+                            prev.map((o, j) => (j === i ? e.target.value : o)),
+                          )
+                        }
+                        placeholder={`Option ${i + 1}`}
+                      />
+                      {pollOptions.length > 2 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() =>
+                            setPollOptions((prev) =>
+                              prev.filter((_, j) => j !== i),
+                            )
+                          }
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {pollOptions.length < 8 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={() => setPollOptions((prev) => [...prev, ""])}
+                  >
+                    <Plus className="mr-1 h-3 w-3" /> Add option
+                  </Button>
+                )}
+                <div className="flex items-center gap-2 pt-1">
+                  <Switch
+                    id="ap-poll-multi"
+                    checked={pollMultiple}
+                    onCheckedChange={(v: boolean) => setPollMultiple(v)}
+                  />
+                  <Label
+                    htmlFor="ap-poll-multi"
+                    className="text-[11px] font-normal text-muted-foreground"
+                  >
+                    Let people choose more than one answer
+                  </Label>
+                </div>
               </div>
             )}
           </div>

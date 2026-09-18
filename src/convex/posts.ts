@@ -139,6 +139,43 @@ function validateMediaItem(m: { storageId: string; type: string; name: string; m
   }
 }
 
+// ── Poll limits (validated server-side, mirrored by the composer) ────
+const MIN_POLL_OPTIONS = 2;
+const MAX_POLL_OPTIONS = 8;
+const MAX_POLL_QUESTION = 200;
+const MAX_POLL_OPTION = 120;
+
+/** One poll option as id + label, both generated from the submitted texts. */
+type PollOptions = { id: string; text: string }[];
+
+/**
+ * A poll plus the viewer's own answer, shaped for the announcement feed.
+ * Costs one document read and one bounded index lookup, and only for the
+ * handful of posts that actually carry a poll.
+ */
+async function pollFor(ctx: Ctx, post: Doc<"posts">, userId: Id<"users">) {
+  if (!post.pollId) return null;
+  const poll = await ctx.db.get(post.pollId);
+  if (!poll) return null;
+  const mine = await ctx.db
+    .query("pollVotes")
+    .withIndex("by_poll_user", (q) =>
+      q.eq("pollId", poll._id).eq("userId", userId),
+    )
+    .collect();
+  return {
+    _id: poll._id,
+    question: poll.question,
+    allowMultiple: poll.allowMultiple,
+    options: poll.options,
+    counts: poll.counts,
+    totalVotes: poll.totalVotes,
+    voterCount: poll.voterCount,
+    closed: poll.closedAt !== undefined,
+    myOptionIds: mine.map((v) => v.optionId),
+  };
+}
+
 /** Generate a storage upload URL for post media (images, videos, files). */
 export const generateUploadUrl = mutation({
   args: {},
@@ -245,6 +282,7 @@ export const list = query({
         ...p,
         ...(await engagementFor(ctx, p)),
         myReaction: mine.get(p._id) ?? null,
+        poll: await pollFor(ctx, p, user._id),
       })),
     );
   },
@@ -307,6 +345,7 @@ export const get = query({
       ...post,
       comments: comments.sort((a, b) => a.createdAt - b.createdAt),
       commentReactions,
+      poll: await pollFor(ctx, post, user._id),
     };
   },
 });
@@ -562,6 +601,14 @@ export const create = mutation({
       status: v.string(),
       uploadedAt: v.number(),
     }))),
+    /** Optional poll attached to this announcement. */
+    poll: v.optional(
+      v.object({
+        question: v.string(),
+        allowMultiple: v.boolean(),
+        options: v.array(v.string()),
+      }),
+    ),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [
@@ -584,6 +631,45 @@ export const create = mutation({
     }
 
     const now = Date.now();
+
+    // Validate the poll up front, so a bad option list fails before any writes.
+    let pollInput:
+      | { question: string; allowMultiple: boolean; options: PollOptions }
+      | undefined;
+    if (args.poll) {
+      const question = args.poll.question.trim();
+      if (!question) throw new ConvexError("Poll question is required");
+      if (question.length > MAX_POLL_QUESTION) {
+        throw new ConvexError(
+          `Poll question must be ${MAX_POLL_QUESTION} characters or fewer`,
+        );
+      }
+      const texts = args.poll.options.map((o) => o.trim()).filter(Boolean);
+      if (texts.length < MIN_POLL_OPTIONS) {
+        throw new ConvexError(
+          `A poll needs at least ${MIN_POLL_OPTIONS} options`,
+        );
+      }
+      if (texts.length > MAX_POLL_OPTIONS) {
+        throw new ConvexError(
+          `A poll can have at most ${MAX_POLL_OPTIONS} options`,
+        );
+      }
+      if (texts.some((t) => t.length > MAX_POLL_OPTION)) {
+        throw new ConvexError(
+          `Each option must be ${MAX_POLL_OPTION} characters or fewer`,
+        );
+      }
+      if (new Set(texts.map((t) => t.toLowerCase())).size !== texts.length) {
+        throw new ConvexError("Poll options must all be different");
+      }
+      pollInput = {
+        question,
+        allowMultiple: args.poll.allowMultiple,
+        options: texts.map((text, i) => ({ id: `opt${i + 1}`, text })),
+      };
+    }
+
     const id = await ctx.db.insert("posts", {
       author: user.name ?? user.email,
       authorId: user._id,
@@ -601,6 +687,22 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    // Attach the poll (one per announcement) and point the post at it.
+    if (pollInput) {
+      const pollId = await ctx.db.insert("polls", {
+        postId: id,
+        question: pollInput.question,
+        allowMultiple: pollInput.allowMultiple,
+        options: pollInput.options,
+        counts: {},
+        totalVotes: 0,
+        voterCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.patch(id, { pollId });
+    }
+
     await logAudit(ctx, {
       action: "post.create",
       entityType: "posts",
@@ -624,7 +726,7 @@ export const create = mutation({
           deliverAt: ts,
           status: "scheduled",
           payload: {
-            title: "New announcement",
+            title: pollInput ? "New poll" : "New announcement",
             body: `${user.name ?? user.email ?? "Someone"}: ${title}`,
             url: "/announcements",
           },
@@ -653,6 +755,88 @@ export const create = mutation({
     }
 
     return id;
+  },
+});
+
+/**
+ * Answer a poll, change an answer, or clear it.
+ *
+ * A single-answer poll takes exactly one option; a multiple-answer poll takes
+ * any non-empty subset. Voting replaces the caller's previous rows, and the
+ * denormalized totals on the poll are recomputed from the rows being removed
+ * and added, so they can never drift.
+ */
+export const vote = mutation({
+  args: {
+    postId: v.id("posts"),
+    /** Empty clears the caller's vote (single-answer polls use this to unset). */
+    optionIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) {
+      throw new ConvexError("Sign in to answer this poll");
+    }
+    await checkRateLimit(ctx, "poll.vote");
+
+    const poll = await ctx.db
+      .query("polls")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .first();
+    if (!poll) throw new ConvexError("This announcement has no poll");
+    if (poll.closedAt !== undefined) throw new ConvexError("This poll is closed");
+
+    const chosen = [...new Set(args.optionIds)];
+    const known = new Set(poll.options.map((o) => o.id));
+    if (chosen.some((id) => !known.has(id))) {
+      throw new ConvexError("That option is not part of this poll");
+    }
+    if (!poll.allowMultiple && chosen.length > 1) {
+      throw new ConvexError("This poll accepts one answer only");
+    }
+
+    const existing = await ctx.db
+      .query("pollVotes")
+      .withIndex("by_poll_user", (q) =>
+        q.eq("pollId", poll._id).eq("userId", user._id),
+      )
+      .collect();
+
+    const counts: Record<string, number> = { ...poll.counts };
+    for (const row of existing) {
+      await ctx.db.delete(row._id);
+      counts[row.optionId] = Math.max((counts[row.optionId] ?? 1) - 1, 0);
+    }
+
+    const now = Date.now();
+    for (const optionId of chosen) {
+      await ctx.db.insert("pollVotes", {
+        pollId: poll._id,
+        postId: args.postId,
+        optionId,
+        userId: user._id,
+        userName: user.name ?? user.email,
+        createdAt: now,
+      });
+      counts[optionId] = (counts[optionId] ?? 0) + 1;
+    }
+
+    const wasVoter = existing.length > 0;
+    const isVoter = chosen.length > 0;
+    const voterCount = Math.max(
+      poll.voterCount + (isVoter && !wasVoter ? 1 : !isVoter && wasVoter ? -1 : 0),
+      0,
+    );
+    const totalVotes = Object.values(counts).reduce((sum, n) => sum + n, 0);
+
+    await ctx.db.patch(poll._id, {
+      counts,
+      totalVotes,
+      voterCount,
+      updatedAt: now,
+    });
+
+    return { counts, totalVotes, voterCount, myOptionIds: chosen };
   },
 });
 
@@ -810,6 +994,19 @@ export const remove = mutation({
       .collect();
     for (const v of views) {
       await ctx.db.delete(v._id);
+    }
+
+    // Hard-delete the poll and every vote cast on it
+    const pollId = post.pollId;
+    if (pollId) {
+      const pollVotes = await ctx.db
+        .query("pollVotes")
+        .withIndex("by_poll", (q) => q.eq("pollId", pollId))
+        .collect();
+      for (const vote of pollVotes) {
+        await ctx.db.delete(vote._id);
+      }
+      await ctx.db.delete(pollId);
     }
 
     // Hard-delete the post itself
