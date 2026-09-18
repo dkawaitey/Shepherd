@@ -49,8 +49,11 @@ const MAX_FILE_SIZES: Record<string, number> = {
 
 const MAX_MEDIA_PER_POST = 5;
 
-/** How long a repeat visit stops counting as a new view. */
-const VIEW_WINDOW_MS = 30 * 60 * 1000;
+/**
+ * How often a reader's "last viewed" time may be refreshed once their view has
+ * already been counted (one write per reader per half hour at most).
+ */
+const VIEW_REFRESH_MS = 30 * 60 * 1000;
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -97,7 +100,10 @@ async function computeEngagement(ctx: Ctx, postId: Id<"posts">): Promise<Engagem
     commentCount: comments.length,
     reactionCount,
     reactionKinds,
-    viewCount: views.reduce((sum, row) => sum + row.views, 0),
+    // One row per account that opened the post, so the number of rows *is* the
+    // number of views — summing per-row counters would let a single reader
+    // count more than once (the old rule the rows were written under).
+    viewCount: views.length,
     viewerCount: views.length,
   };
 }
@@ -116,7 +122,11 @@ async function engagementFor(ctx: Ctx, post: Doc<"posts">): Promise<Engagement> 
       commentCount: post.commentCount,
       reactionCount: post.reactionCount,
       reactionKinds: post.reactionKinds,
-      viewCount: post.viewCount,
+      // Views are one per account, so the two counters must agree. A stored
+      // viewCount above viewerCount means the post was counted under the old
+      // multi-view rule; reporting the distinct viewers is the truthful number,
+      // and whichever mutation reads this next persists the correction.
+      viewCount: Math.min(post.viewCount, post.viewerCount),
       viewerCount: post.viewerCount,
     };
   }
@@ -507,9 +517,13 @@ export const react = mutation({
 });
 
 /**
- * Count a view of a post. Repeat visits inside the same 30-minute window
- * don't inflate the counter, so the number stays honest while still ticking
- * up live as new people open the post.
+ * Count a view of a post — at most once per account, ever.
+ *
+ * A view belongs to the account that opened the post: one person scrolls back
+ * to the same announcement as often as they like and still counts once, while
+ * each new person adds one. Re-opening a post you have already viewed only
+ * refreshes the "last viewed" time (at most once per VIEW_REFRESH_MS) so the
+ * engagement list stays ordered by recency.
  */
 export const recordView = mutation({
   args: { postId: v.id("posts") },
@@ -529,19 +543,12 @@ export const recordView = mutation({
 
     const userName = user.name ?? user.email ?? "Member";
 
-    // Read the counters before the view row changes so the deltas below are
-    // exact even for posts that predate the denormalized fields.
-    const eng = await engagementFor(ctx, post);
-
+    // Already counted for this account — never count them again.
     if (existing) {
-      if (now - existing.lastViewedAt < VIEW_WINDOW_MS) return { recorded: false };
-      await ctx.db.patch(existing._id, {
-        views: existing.views + 1,
-        lastViewedAt: now,
-        userName,
-      });
-      await ctx.db.patch(args.postId, { ...eng, viewCount: eng.viewCount + 1 });
-      return { recorded: true };
+      if (now - existing.lastViewedAt >= VIEW_REFRESH_MS) {
+        await ctx.db.patch(existing._id, { lastViewedAt: now, userName });
+      }
+      return { recorded: false };
     }
 
     await ctx.db.insert("postViews", {
@@ -552,6 +559,9 @@ export const recordView = mutation({
       firstViewedAt: now,
       lastViewedAt: now,
     });
+    // Read the counters before the row was added, so the increment is exact even
+    // for posts that predate the denormalized fields.
+    const eng = await engagementFor(ctx, post);
     await ctx.db.patch(args.postId, {
       ...eng,
       viewCount: eng.viewCount + 1,
@@ -613,14 +623,15 @@ export const engagementDetails = query({
       postId: args.postId,
       title: post.title,
       createdAt: post.createdAt,
-      // views
-      viewCount: views.reduce((sum, v) => sum + v.views, 0),
+      // views — one per account, so the row count is the view count
+      viewCount: views.length,
       viewerCount: views.length,
       viewers: views
         .sort((a, b) => b.lastViewedAt - a.lastViewedAt)
         .map((v) => ({
+          // Views are one per account now, so all a viewer entry carries is who
+          // they are and when they last opened the post.
           name: v.userName ?? "Member",
-          views: v.views,
           lastViewedAt: v.lastViewedAt,
         })),
       // reactions
@@ -1293,6 +1304,57 @@ export const removeComment = mutation({
         await ctx.db.delete(r._id);
       }
     }
+  },
+});
+
+/**
+ * One-off repair for posts counted under the old multi-view rule: every post's
+ * view counter is set to its number of distinct viewer rows, and any legacy row
+ * that counted a reader more than once is clamped to a single view.
+ *
+ * Safe to re-run (it only writes what is already wrong) and batched so a large
+ * feed cannot time out. New posts never need it: views.recordView counts one per
+ * account from the start.
+ */
+export const repairViewCounts = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const posts = await ctx.db.query("posts").collect();
+    const rows = await ctx.db.query("postViews").collect();
+
+    const rowsByPost = new Map<string, Doc<"postViews">[]>();
+    for (const row of rows) {
+      const list = rowsByPost.get(row.postId) ?? [];
+      list.push(row);
+      rowsByPost.set(row.postId, list);
+    }
+
+    let repairedPosts = 0;
+    let repairedRows = 0;
+    const limit = args.limit ?? 50;
+    for (const post of posts) {
+      if (repairedPosts >= limit) break;
+      const postRows = rowsByPost.get(post._id) ?? [];
+      const distinctViewers = new Set(postRows.map((r) => r.userId)).size;
+      const stale =
+        post.viewCount !== distinctViewers ||
+        post.viewerCount !== distinctViewers ||
+        postRows.some((r) => r.views !== 1);
+      if (!stale) continue;
+      for (const row of postRows) {
+        if (row.views !== 1) {
+          await ctx.db.patch(row._id, { views: 1 });
+          repairedRows += 1;
+        }
+      }
+      await ctx.db.patch(post._id, {
+        viewCount: distinctViewers,
+        viewerCount: distinctViewers,
+      });
+      repairedPosts += 1;
+    }
+
+    return { repairedPosts, repairedRows };
   },
 });
 

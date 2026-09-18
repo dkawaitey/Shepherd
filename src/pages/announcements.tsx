@@ -1119,15 +1119,23 @@ function EngagementDetailsDialog({
               {details.viewers.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">No views recorded yet.</p>
               ) : (
-                <div className="max-h-40 divide-y overflow-auto rounded-md border">
-                  {details.viewers.map((v, i) => (
-                    <div key={i} className="flex items-center justify-between px-2.5 py-1.5">
-                      <span className="truncate text-[11px]">{v.name}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {v.views} {v.views === 1 ? "view" : "views"} · {timeAgo(v.lastViewedAt)}
-                      </span>
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  {/* One view per account, so the number of names IS the view
+                      count — there are no per-person tallies to show. */}
+                  <p className="text-[10px] text-muted-foreground">
+                    One view per account · {details.viewers.length}{" "}
+                    {details.viewers.length === 1 ? "person" : "people"}
+                  </p>
+                  <div className="max-h-40 divide-y overflow-auto rounded-md border">
+                    {details.viewers.map((v, i) => (
+                      <div key={i} className="flex items-center justify-between px-2.5 py-1.5">
+                        <span className="truncate text-[11px]">{v.name}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          viewed {timeAgo(v.lastViewedAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

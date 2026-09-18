@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, QueryCtx } from "./_generated/server";
 import {
   CLASS_OPTIONS,
   POSITION_OPTIONS,
@@ -24,6 +24,7 @@ import {
   canSeeConfidentialPrayer,
   withinClassScope,
 } from "./helpers";
+import { Doc } from "./_generated/dataModel";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone } from "./validate";
 
@@ -65,6 +66,94 @@ const normalizePosition = (
 const deriveShortcut = (area?: string) =>
   (area || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
 
+/** How recently a member's account used the app (see `memberActivity`). */
+type Activity = {
+  /** True once the member has a log-in (linked account) at all. */
+  hasAccount: boolean;
+  /** Epoch ms of the last sign-in or app open; null when there is no account. */
+  lastSeenAt: number | null;
+  /** Whole days since `lastSeenAt`; null when there is no account. */
+  daysSinceSeen: number | null;
+};
+
+const NO_ACTIVITY: Activity = { hasAccount: false, lastSeenAt: null, daysSinceSeen: null };
+
+/**
+ * When each member's account last signed in or opened the app.
+ *
+ * A member counts as having a log-in when an account is linked to them either
+ * explicitly (`users.memberId`, set by linkMember / autoLinkAccount) or by
+ * sharing the member's email address — the app links accounts by email when they
+ * open it, so the email match covers a profile whose log-in details were just
+ * added. A member with no linked account gets NO_ACTIVITY: with no way to sign
+ * in, silence about them would be noise, not a signal. As soon as an account is
+ * linked, the indicator starts applying to them.
+ *
+ * Recency is the latest of three things, because no single one is accurate:
+ *   - `users.lastActiveAt` — the app-open heartbeat (client-side)
+ *   - the newest auth session, which Convex Auth only creates at sign-in
+ *   - the account's own creation time, which is when it first signed in
+ * A session is refreshed silently while the app stays open, so sessions alone
+ * would report an active member as absent.
+ */
+async function memberActivity(
+  ctx: QueryCtx,
+  members: Doc<"members">[],
+): Promise<Map<string, Activity>> {
+  const [accounts, sessions] = await Promise.all([
+    ctx.db.query("users").collect(),
+    ctx.db.query("authSessions").take(2000),
+  ]);
+
+  const lastSignInByUser = new Map<string, number>();
+  for (const session of sessions) {
+    const prev = lastSignInByUser.get(session.userId) ?? 0;
+    if (session._creationTime > prev) {
+      lastSignInByUser.set(session.userId, session._creationTime);
+    }
+  }
+
+  // Explicit links win; the email match is the fallback for a profile whose
+  // log-in details are newer than the last auto-link pass.
+  const byMemberId = new Map<string, Doc<"users">>();
+  const byEmail = new Map<string, Doc<"users">>();
+  for (const account of accounts) {
+    if (account.memberId) byMemberId.set(account.memberId, account);
+    const email = account.email?.trim().toLowerCase();
+    // Guests (anonymous) have no email and are never a member's log-in.
+    if (email && !account.isAnonymous && !byEmail.has(email)) {
+      byEmail.set(email, account);
+    }
+  }
+
+  const now = Date.now();
+  const result = new Map<string, Activity>();
+  for (const member of members) {
+    const email = member.email?.trim().toLowerCase();
+    const account =
+      byMemberId.get(member._id) ?? (email ? byEmail.get(email) : undefined);
+    if (!account) {
+      result.set(member._id, NO_ACTIVITY);
+      continue;
+    }
+    const lastSeenAt =
+      Math.max(
+        account.lastActiveAt ?? 0,
+        lastSignInByUser.get(account._id) ?? 0,
+        account._creationTime,
+      ) || null;
+    result.set(member._id, {
+      hasAccount: true,
+      lastSeenAt,
+      daysSinceSeen:
+        lastSeenAt === null
+          ? null
+          : Math.floor((now - lastSeenAt) / 86400000),
+    });
+  }
+  return result;
+}
+
 /** Members list, filterable by class / status / search. View-only for non-admins. */
 export const list = query({
   args: {
@@ -93,49 +182,18 @@ export const list = query({
     }
     members.sort((a, b) => a.fullName.localeCompare(b.fullName));
 
-    // Attendance summary per member, plus how recently their linked account used
-    // the app (the member card flags long absences).
-    const [attendance, accounts, sessions] = await Promise.all([
+    // Attendance summary per member, plus how recently their account used the
+    // app (the member card flags long absences with a small dot).
+    const [attendance, activity] = await Promise.all([
       ctx.db.query("attendance").collect(),
-      ctx.db.query("users").collect(),
-      ctx.db.query("authSessions").take(2000),
+      memberActivity(ctx, members),
     ]);
 
-    // Newest session per account — a session row is created at sign-in.
-    const lastSignInByUser = new Map<string, number>();
-    for (const s of sessions) {
-      const prev = lastSignInByUser.get(s.userId) ?? 0;
-      if (s._creationTime > prev) lastSignInByUser.set(s.userId, s._creationTime);
-    }
-    const accountByMember = new Map<string, (typeof accounts)[number]>();
-    for (const account of accounts) {
-      if (account.memberId) accountByMember.set(account.memberId, account);
-    }
-
-    const now = Date.now();
-    return members.map((m) => {
-      const rows = attendance.filter((a) => a.memberId === m._id);
-      const account = accountByMember.get(m._id);
-      // "On the app" recency = the later of the last sign-in and the last
-      // recorded app open (users.lastActiveAt). Null when the member has no
-      // linked account at all, so the UI can stay quiet for them.
-      const lastSeenAt = account
-        ? Math.max(
-            account.lastActiveAt ?? 0,
-            lastSignInByUser.get(account._id) ?? 0,
-          ) || null
-        : null;
-      return {
-        ...m,
-        attendanceCount: rows.length,
-        hasAccount: !!account,
-        lastSeenAt,
-        daysSinceSeen:
-          lastSeenAt === null
-            ? null
-            : Math.floor((now - lastSeenAt) / 86400000),
-      };
-    });
+    return members.map((m) => ({
+      ...m,
+      ...(activity.get(m._id) ?? NO_ACTIVITY),
+      attendanceCount: attendance.filter((a) => a.memberId === m._id).length,
+    }));
   },
 });
 
@@ -148,13 +206,15 @@ export const get = query({
     const member = await ctx.db.get(args.id);
     if (!member || member.isDeleted) return null;
     if (!withinClassScope(user, member.klass)) return null;
-    const [attendance, prayers, notes] = await Promise.all([
+    const [attendance, prayers, notes, activity] = await Promise.all([
       ctx.db.query("attendance").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("prayerRequests").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("notes").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
+      memberActivity(ctx, [member]),
     ]);
     return {
-      member,
+      // The profile header carries the same last-seen dot as the member card.
+      member: { ...member, ...(activity.get(member._id) ?? NO_ACTIVITY) },
       attendance: attendance.sort((a, b) => b.date.localeCompare(a.date)),
       // Confidential prayers and private notes are filtered per viewer.
       prayers: prayers

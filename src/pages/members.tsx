@@ -79,8 +79,34 @@ import {
   Search,
   Trash2,
   UserRoundPlus,
-  WifiOff,
 } from "lucide-react";
+
+/** True when a member's account has been away long enough to flag. */
+const isLongAbsent = (days: number | null | undefined): days is number =>
+  typeof days === "number" && days >= MEMBER_INACTIVITY_DAYS;
+
+/**
+ * A single small dot: this member's account has not signed in or opened the app
+ * in MEMBER_INACTIVITY_DAYS days. Amber at ten days and red once the absence
+ * reaches a month, so the eye can rank it without reading anything. Members with
+ * no log-in at all have no dot — and they get one automatically as soon as an
+ * account is linked to their profile (see memberActivity in convex/members.ts).
+ */
+function LastSeenDot({ days }: { days: number }) {
+  const month = days >= MEMBER_INACTIVITY_DAYS * 3;
+  const label = `Not signed in or opened the app for ${days} days`;
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn(
+        "inline-block h-1.5 w-1.5 shrink-0 rounded-full",
+        month ? "bg-status-red" : "bg-status-amber",
+      )}
+    />
+  );
+}
 
 /** Dark terminal chips for each ministry position. */
 const POSITION_CHIP: Record<string, string> = {
@@ -226,7 +252,14 @@ export default function Members() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-bold group-hover:text-primary">{m.fullName}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-sm font-bold group-hover:text-primary">
+                      {m.fullName}
+                    </span>
+                    {isLongAbsent(m.daysSinceSeen) && (
+                      <LastSeenDot days={m.daysSinceSeen} />
+                    )}
+                  </div>
                   <div className="text-[10px] text-muted-foreground">
                     <span className="text-primary">{m.membershipId}</span>
                   </div>
@@ -253,18 +286,7 @@ export default function Members() {
                     Promoted from contacts
                   </span>
                 )}
-                {/* Absence flag: the linked account has not signed in or opened
-                    the app for a long time (see users.touchActivity). */}
-                {typeof m.daysSinceSeen === "number" &&
-                  m.daysSinceSeen >= MEMBER_INACTIVITY_DAYS && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#fbbf24]"
-                      title={`Last signed in or opened the app ${m.daysSinceSeen} days ago`}
-                    >
-                      <WifiOff className="h-2.5 w-2.5" />
-                      Not on app · {m.daysSinceSeen}d
-                    </span>
-                  )}
+
 
                 <span>{m.klass} Class</span>
                 {m.area && <span>Area: {m.area}</span>}
@@ -641,7 +663,12 @@ export function MemberProfile() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-bold">{member.fullName}</h1>
+                <h1 className="flex items-center gap-1.5 text-xl font-bold">
+                  {member.fullName}
+                  {isLongAbsent(member.daysSinceSeen) && (
+                    <LastSeenDot days={member.daysSinceSeen} />
+                  )}
+                </h1>
                 {chip && (
                   <span
                     className={cn(
