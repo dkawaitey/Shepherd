@@ -542,9 +542,20 @@ const schema = defineSchema(
       .index("by_expires", ["expiresAt"]),
   },
   {
-    // Validation is on: every write is checked against the table above, so bad
-    // or drifting documents are rejected instead of silently accumulating.
-    schemaValidation: true,
+    // VALIDATION IS OFF — deliberately, see below.
+    //
+    // Schema validation is checked against EVERY existing document whenever
+    // the schema is pushed, including on a deployment that already holds real
+    // data. It was enabled once after auditing the local development
+    // deployment, but that deployment turned out to hold only test records
+    // (1 contact, 2 members, no real accounts) — so the audit proved nothing
+    // about the deployment that holds the ministry's actual data, and a push
+    // against it can be rejected for records this schema does not describe.
+    //
+    // To turn it back on safely: point the CLI at the deployment that has the
+    // real data, re-run a table-by-table audit there, widen any field union or
+    // optionality that the older rows need, and only then flip this to `true`.
+    schemaValidation: false,
   },
 );
 
