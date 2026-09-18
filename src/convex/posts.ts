@@ -176,6 +176,39 @@ async function pollFor(ctx: Ctx, post: Doc<"posts">, userId: Id<"users">) {
   };
 }
 
+/**
+ * A poll with the names behind every option, for the administrator's
+ * engagement view. One bounded index lookup, never touched by the feed.
+ */
+async function pollDetail(ctx: Ctx, poll: Doc<"polls">) {
+  const votes = await ctx.db
+    .query("pollVotes")
+    .withIndex("by_poll", (q) => q.eq("pollId", poll._id))
+    .collect();
+
+  const byOption = new Map<string, { name: string; at: number }[]>();
+  for (const v of votes) {
+    const list = byOption.get(v.optionId) ?? [];
+    list.push({ name: v.userName ?? "Member", at: v.createdAt });
+    byOption.set(v.optionId, list);
+  }
+
+  return {
+    _id: poll._id,
+    question: poll.question,
+    allowMultiple: poll.allowMultiple,
+    closed: poll.closedAt !== undefined,
+    totalVotes: poll.totalVotes,
+    voterCount: poll.voterCount,
+    options: poll.options.map((o) => ({
+      id: o.id,
+      text: o.text,
+      count: poll.counts[o.id] ?? 0,
+      voters: (byOption.get(o.id) ?? []).sort((a, b) => b.at - a.at),
+    })),
+  };
+}
+
 /** Generate a storage upload URL for post media (images, videos, files). */
 export const generateUploadUrl = mutation({
   args: {},
@@ -502,15 +535,18 @@ export const recordView = mutation({
 });
 
 /**
- * Full engagement detail for one post: who reacted, how it breaks down, who
- * viewed it and the comment/reply activity. Viewer identities are only
- * returned to leaders and above.
+ * Full engagement detail for one post: who reacted, who viewed it, the
+ * comment/reply activity, and — when the post carries one — which people chose
+ * which poll option.
+ *
+ * Identities are administrator-only. Everyone else gets the counts they
+ * already see in the feed; nothing here is returned to them at all.
  */
 export const engagementDetails = query({
   args: { postId: v.id("posts") },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user) return null;
+    if (!user || user.isAnonymous || !hasRole(user, ROLES.ADMIN)) return null;
     const post = await ctx.db.get(args.postId);
     if (!post) return null;
 
@@ -527,10 +563,6 @@ export const engagementDetails = query({
       .withIndex("postId", (q) => q.eq("postId", args.postId))
       .collect();
 
-    const canSeeViewers = [ROLES.COORDINATOR, ROLES.WORKER, ROLES.LEADER].some((r) =>
-      hasRole(user, r),
-    );
-
     const breakdown: Record<string, number> = {};
     const reactors: { name: string; kind: string; at: number }[] = [];
     for (const r of reactions) {
@@ -541,6 +573,7 @@ export const engagementDetails = query({
     }
     reactors.sort((a, b) => b.at - a.at);
 
+    const poll = post.pollId ? await ctx.db.get(post.pollId) : null;
     const roots = comments.filter((c) => !c.parentId);
     const commenters = new Set<string>();
     for (const c of comments) {
@@ -554,22 +587,21 @@ export const engagementDetails = query({
       // views
       viewCount: views.reduce((sum, v) => sum + v.views, 0),
       viewerCount: views.length,
-      canSeeViewers,
-      viewers: canSeeViewers
-        ? views
-            .sort((a, b) => b.lastViewedAt - a.lastViewedAt)
-            .map((v) => ({
-              name: v.userName ?? "Member",
-              views: v.views,
-              lastViewedAt: v.lastViewedAt,
-            }))
-        : [],
+      viewers: views
+        .sort((a, b) => b.lastViewedAt - a.lastViewedAt)
+        .map((v) => ({
+          name: v.userName ?? "Member",
+          views: v.views,
+          lastViewedAt: v.lastViewedAt,
+        })),
       // reactions
       reactionCount: reactions.length,
       reactionBreakdown: (Object.entries(breakdown) as [string, number][])
         .map(([kind, count]) => ({ kind, count }))
         .sort((a, b) => b.count - a.count),
       reactors,
+      // poll — which people answered which option, by name
+      poll: poll ? await pollDetail(ctx, poll) : null,
       // conversation
       commentCount: comments.length,
       replyCount: comments.length - roots.length,
@@ -837,6 +869,44 @@ export const vote = mutation({
     });
 
     return { counts, totalVotes, voterCount, myOptionIds: chosen };
+  },
+});
+
+/**
+ * Close a poll so no further answers are accepted, or reopen it. The author or
+ * an administrator can do this; closing is reversible, so no result is lost.
+ */
+export const setPollClosed = mutation({
+  args: { postId: v.id("posts"), closed: v.boolean() },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.LEADER,
+    ]);
+    const post = await ctx.db.get(args.postId);
+    if (!post) throw new ConvexError("Post not found");
+    if (!hasRole(user, ROLES.ADMIN) && post.authorId !== user._id) {
+      throw new ConvexError("You can only close your own poll");
+    }
+
+    const poll = await ctx.db
+      .query("polls")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .first();
+    if (!poll) throw new ConvexError("This announcement has no poll");
+
+    const now = Date.now();
+    await ctx.db.patch(poll._id, {
+      closedAt: args.closed ? now : undefined,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: args.closed ? "poll.close" : "poll.reopen",
+      entityType: "polls",
+      entityId: poll._id,
+      details: poll.question,
+    });
   },
 });
 

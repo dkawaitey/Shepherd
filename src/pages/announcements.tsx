@@ -149,7 +149,9 @@ export default function Announcements() {
     limit,
   });
   const me = useQuery(api.users.currentUser);
-  const isAdmin = me?.role === "admin";
+  // Administrators may hold several roles, so check the whole set.
+  const isAdmin =
+    !!me && (me.roles?.length ? me.roles.includes("admin") : me.role === "admin");
   const removePost = useMutation(api.posts.remove);
 
   // A new search or author filter starts from the first page again.
@@ -449,9 +451,20 @@ type FeedPost = {
  * answer clears it, like a reaction), multiple-answer polls collect a selection
  * and submit it together.
  */
-function PollCard({ postId, poll }: { postId: string; poll: FeedPoll }) {
+function PollCard({
+  postId,
+  poll,
+  canClose = false,
+}: {
+  postId: string;
+  poll: FeedPoll;
+  /** The post's author or an administrator may close/reopen the poll. */
+  canClose?: boolean;
+}) {
   const vote = useMutation(api.posts.vote);
+  const setClosed = useMutation(api.posts.setPollClosed);
   const [busy, setBusy] = useState(false);
+  const [closing, setClosing] = useState(false);
   // Local selection for multiple-answer polls. Deliberately not synced from the
   // query result on every render: the feed re-runs whenever anyone votes, which
   // would wipe a selection the reader is still making.
@@ -479,6 +492,18 @@ function PollCard({ postId, poll }: { postId: string; poll: FeedPoll }) {
     setPicked((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+  };
+
+  const toggleClosed = async () => {
+    setClosing(true);
+    try {
+      await setClosed({ postId: postId as any, closed: !poll.closed });
+      toast.success(poll.closed ? "Poll reopened" : "Poll closed");
+    } catch (err) {
+      toast.error(formatError(err, "Could not update the poll"));
+    } finally {
+      setClosing(false);
+    }
   };
 
   return (
@@ -553,33 +578,49 @@ function PollCard({ postId, poll }: { postId: string; poll: FeedPoll }) {
             Tap your answer again to clear it
           </span>
         )}
-        {!poll.closed && poll.allowMultiple && (
-          <span className="ml-auto flex items-center gap-2">
+      </div>
+
+      {((!poll.closed && poll.allowMultiple) || canClose) && (
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+          {canClose && (
             <Button
               size="sm"
-              className="h-7 text-[11px]"
-              disabled={busy || picked.length === 0}
-              onClick={() => submit(picked)}
+              variant="ghost"
+              className="h-7 text-[10px] text-muted-foreground"
+              disabled={closing}
+              onClick={toggleClosed}
             >
-              {voted ? "Update my answers" : "Submit vote"}
+              {poll.closed ? "Reopen poll" : "Close poll"}
             </Button>
-            {voted && (
+          )}
+          {!poll.closed && poll.allowMultiple && (
+            <>
               <Button
                 size="sm"
-                variant="ghost"
                 className="h-7 text-[11px]"
-                disabled={busy}
-                onClick={() => {
-                  setPicked([]);
-                  submit([]);
-                }}
+                disabled={busy || picked.length === 0}
+                onClick={() => submit(picked)}
               >
-                Clear
+                {voted ? "Update my answers" : "Submit vote"}
               </Button>
-            )}
-          </span>
-        )}
-      </div>
+              {voted && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  disabled={busy}
+                  onClick={() => {
+                    setPicked([]);
+                    submit([]);
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -664,7 +705,9 @@ function PostCard({
           </div>
         )}
 
-        {post.poll && <PollCard postId={post._id} poll={post.poll} />}
+        {post.poll && (
+          <PollCard postId={post._id} poll={post.poll} canClose={canDelete} />
+        )}
 
         {/* Engagement bar — reactions, comments and the live view counter. */}
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
@@ -686,24 +729,26 @@ function PostCard({
             <span className="text-muted-foreground/50">{isOpen ? "−" : "+"}</span>
           </button>
 
-          <span
-            className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground"
-            title={`${post.viewCount} views by ${post.viewerCount} ${post.viewerCount === 1 ? "person" : "people"} · updates live`}
-          >
-            <Eye className="h-3 w-3" />
-            <span className="tabular-nums">{post.viewCount}</span>
-            {post.viewerCount > 1 && (
-              <span className="text-muted-foreground/70">· {post.viewerCount} people</span>
-            )}
-          </span>
-
-          <button
-            onClick={() => setDetailsOpen(true)}
-            className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground transition-colors hover:text-primary"
-            title="See who engaged with this post"
-          >
-            <BarChart3 className="h-3 w-3" /> Details
-          </button>
+          {/* View count. Tapping the eye opens the engagement details, which
+              only an administrator may see — everyone else gets the number. */}
+          {isAdmin ? (
+            <button
+              onClick={() => setDetailsOpen(true)}
+              className="ml-auto flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-primary"
+              title="Views and engagement — who viewed, reacted and answered"
+            >
+              <Eye className="h-3 w-3" />
+              <span className="tabular-nums">{post.viewCount}</span>
+            </button>
+          ) : (
+            <span
+              className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground"
+              title={`${post.viewCount} ${post.viewCount === 1 ? "view" : "views"}`}
+            >
+              <Eye className="h-3 w-3" />
+              <span className="tabular-nums">{post.viewCount}</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -719,7 +764,11 @@ function PostCard({
   );
 }
 
-/** Full engagement breakdown for one post: views, reactions and conversation. */
+/**
+ * Engagement details for one post — administrators only (see
+ * posts.engagementDetails). Tiles act as tabs: opening one reveals the names
+ * behind it.
+ */
 function EngagementDetailsDialog({
   postId,
   title,
@@ -734,6 +783,9 @@ function EngagementDetailsDialog({
   const details = useQuery(
     api.posts.engagementDetails,
     open ? { postId: postId as any } : "skip",
+  );
+  const [tab, setTab] = useState<"views" | "reactions" | "comments" | "poll">(
+    "views",
   );
 
   return (
@@ -752,23 +804,35 @@ function EngagementDetailsDialog({
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {[
-                { label: "Views", value: details.viewCount },
-                { label: "People", value: details.viewerCount },
-                { label: "Reactions", value: details.reactionCount },
-                { label: "Comments", value: details.commentCount },
+                { key: "views" as const, label: "Views", value: details.viewCount },
+                { key: "reactions" as const, label: "Reactions", value: details.reactionCount },
+                { key: "comments" as const, label: "Comments", value: details.commentCount },
+                ...(details.poll
+                  ? [{ key: "poll" as const, label: "Poll", value: details.poll.totalVotes }]
+                  : []),
               ].map((s) => (
-                <div key={s.label} className="rounded-md border bg-muted/40 px-2.5 py-2">
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setTab(s.key)}
+                  className={cn(
+                    "rounded-md border px-2.5 py-2 text-left transition-colors",
+                    tab === s.key
+                      ? "border-primary/60 bg-primary/10"
+                      : "border-border bg-muted/40 hover:border-primary/40",
+                  )}
+                >
                   <div className="text-[15px] font-bold tabular-nums">{s.value}</div>
                   <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
                     {s.label}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
 
-            <div>
+            <div className={cn(tab !== "reactions" && "hidden")}>
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <Heart className="h-3 w-3" /> Reactions
+                <Heart className="h-3 w-3" /> Reactions — who reacted
               </div>
               {details.reactionCount === 0 ? (
                 <p className="text-[11px] text-muted-foreground">No reactions yet.</p>
@@ -792,9 +856,9 @@ function EngagementDetailsDialog({
               )}
             </div>
 
-            <div>
+            <div className={cn(tab !== "comments" && "hidden")}>
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <Users className="h-3 w-3" /> Conversation
+                <Users className="h-3 w-3" /> Conversation — who took part
               </div>
               <p className="text-[11px] text-muted-foreground">
                 {details.commentCount} comments · {details.replyCount} replies ·{" "}
@@ -808,15 +872,11 @@ function EngagementDetailsDialog({
               )}
             </div>
 
-            <div>
+            <div className={cn(tab !== "views" && "hidden")}>
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <Eye className="h-3 w-3" /> Who viewed it
+                <Eye className="h-3 w-3" /> Views — who viewed it
               </div>
-              {!details.canSeeViewers ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Only leaders and coordinators can see who viewed a post. {details.viewCount} views so far.
-                </p>
-              ) : details.viewers.length === 0 ? (
+              {details.viewers.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">No views recorded yet.</p>
               ) : (
                 <div className="max-h-40 divide-y overflow-auto rounded-md border">
@@ -831,6 +891,53 @@ function EngagementDetailsDialog({
                 </div>
               )}
             </div>
+
+            {details.poll && (
+              <div className={cn(tab !== "poll" && "hidden")}>
+                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <BarChart3 className="h-3 w-3" /> Poll — who chose what
+                </div>
+                <p className="mb-2 text-[11px] font-medium">{details.poll.question}</p>
+                <div className="space-y-2">
+                  {details.poll.options.map((o) => (
+                    <div key={o.id} className="overflow-hidden rounded-md border">
+                      <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-2.5 py-1.5">
+                        <span className="truncate text-[11px] font-medium">{o.text}</span>
+                        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                          {o.count} {o.count === 1 ? "vote" : "votes"}
+                        </span>
+                      </div>
+                      {o.voters.length === 0 ? (
+                        <p className="px-2.5 py-1.5 text-[10px] text-muted-foreground">
+                          Nobody chose this one.
+                        </p>
+                      ) : (
+                        <div className="divide-y">
+                          {o.voters.map((v, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center justify-between px-2.5 py-1.5"
+                            >
+                              <span className="truncate text-[11px]">{v.name}</span>
+                              <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                                {timeAgo(v.at)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  {details.poll.totalVotes}{" "}
+                  {details.poll.totalVotes === 1 ? "vote" : "votes"} from{" "}
+                  {details.poll.voterCount}{" "}
+                  {details.poll.voterCount === 1 ? "person" : "people"}
+                  {details.poll.closed && " · closed"}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </DialogContent>
@@ -1059,7 +1166,9 @@ function CommentThread({ postId }: { postId: string }) {
   const addComment = useMutation(api.posts.addComment);
   const removeComment = useMutation(api.posts.removeComment);
   const me = useQuery(api.users.currentUser);
-  const isAdmin = me?.role === "admin";
+  // Administrators may hold several roles, so check the whole set.
+  const isAdmin =
+    !!me && (me.roles?.length ? me.roles.includes("admin") : me.role === "admin");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
