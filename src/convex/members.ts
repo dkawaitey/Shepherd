@@ -93,11 +93,48 @@ export const list = query({
     }
     members.sort((a, b) => a.fullName.localeCompare(b.fullName));
 
-    // Attendance summary per member
-    const attendance = await ctx.db.query("attendance").collect();
+    // Attendance summary per member, plus how recently their linked account used
+    // the app (the member card flags long absences).
+    const [attendance, accounts, sessions] = await Promise.all([
+      ctx.db.query("attendance").collect(),
+      ctx.db.query("users").collect(),
+      ctx.db.query("authSessions").take(2000),
+    ]);
+
+    // Newest session per account — a session row is created at sign-in.
+    const lastSignInByUser = new Map<string, number>();
+    for (const s of sessions) {
+      const prev = lastSignInByUser.get(s.userId) ?? 0;
+      if (s._creationTime > prev) lastSignInByUser.set(s.userId, s._creationTime);
+    }
+    const accountByMember = new Map<string, (typeof accounts)[number]>();
+    for (const account of accounts) {
+      if (account.memberId) accountByMember.set(account.memberId, account);
+    }
+
+    const now = Date.now();
     return members.map((m) => {
       const rows = attendance.filter((a) => a.memberId === m._id);
-      return { ...m, attendanceCount: rows.length };
+      const account = accountByMember.get(m._id);
+      // "On the app" recency = the later of the last sign-in and the last
+      // recorded app open (users.lastActiveAt). Null when the member has no
+      // linked account at all, so the UI can stay quiet for them.
+      const lastSeenAt = account
+        ? Math.max(
+            account.lastActiveAt ?? 0,
+            lastSignInByUser.get(account._id) ?? 0,
+          ) || null
+        : null;
+      return {
+        ...m,
+        attendanceCount: rows.length,
+        hasAccount: !!account,
+        lastSeenAt,
+        daysSinceSeen:
+          lastSeenAt === null
+            ? null
+            : Math.floor((now - lastSeenAt) / 86400000),
+      };
     });
   },
 });

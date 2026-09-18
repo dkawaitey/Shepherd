@@ -26,10 +26,12 @@ import {
   Church,
   ClipboardCheck,
   Award,
+  Eye,
   Flame,
+  Heart,
   HeartHandshake,
   MapPin,
-  MessageCircle,
+  MessageSquare,
   Target,
   TrendingUp,
   ContactRound,
@@ -421,7 +423,6 @@ export default function Dashboard() {
           )}
           <div className="mt-3 space-y-1.5 border-t pt-3">
             {[
-              { icon: MessageCircle, text: "WhatsApp reminders", href: "#" },
               { icon: MapPin, text: "Get directions to visits", href: "https://maps.google.com" },
             ].map((x) => (
               <a
@@ -467,9 +468,33 @@ export default function Dashboard() {
                 </span>
                 {(p.viewCount > 0 || p.reactionCount > 0 || p.commentCount > 0) && (
                   <span className="ml-auto flex shrink-0 items-center gap-2 self-center text-[9px] tabular-nums text-muted-foreground">
-                    {p.viewCount > 0 && <span title="views">👁 {p.viewCount}</span>}
-                    {p.reactionCount > 0 && <span title="reactions">❤ {p.reactionCount}</span>}
-                    {p.commentCount > 0 && <span title="comments">💬 {p.commentCount}</span>}
+                    {p.viewCount > 0 && (
+                      // Lucide icon, not an emoji: iOS renders 👁 in the emoji
+                      // font, which looked nothing like the icon used on the
+                      // Announcements page.
+                      <span
+                        className="flex items-center gap-1"
+                        title={`${p.viewCount} ${p.viewCount === 1 ? "view" : "views"}`}
+                      >
+                        <Eye className="h-3 w-3" /> {p.viewCount}
+                      </span>
+                    )}
+                    {p.reactionCount > 0 && (
+                      <span
+                        className="flex items-center gap-1"
+                        title={`${p.reactionCount} ${p.reactionCount === 1 ? "reaction" : "reactions"}`}
+                      >
+                        <Heart className="h-3 w-3" /> {p.reactionCount}
+                      </span>
+                    )}
+                    {p.commentCount > 0 && (
+                      <span
+                        className="flex items-center gap-1"
+                        title={`${p.commentCount} ${p.commentCount === 1 ? "comment" : "comments"}`}
+                      >
+                        <MessageSquare className="h-3 w-3" /> {p.commentCount}
+                      </span>
+                    )}
                   </span>
                 )}
               </Link>

@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import {
   CLASS_OPTIONS,
+  MEMBER_INACTIVITY_DAYS,
   POSITION_LABELS,
   POSITION_OPTIONS,
   POSITIONS,
@@ -78,6 +79,7 @@ import {
   Search,
   Trash2,
   UserRoundPlus,
+  WifiOff,
 } from "lucide-react";
 
 /** Dark terminal chips for each ministry position. */
@@ -251,6 +253,18 @@ export default function Members() {
                     Promoted from contacts
                   </span>
                 )}
+                {/* Absence flag: the linked account has not signed in or opened
+                    the app for a long time (see users.touchActivity). */}
+                {typeof m.daysSinceSeen === "number" &&
+                  m.daysSinceSeen >= MEMBER_INACTIVITY_DAYS && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#fbbf24]"
+                      title={`Last signed in or opened the app ${m.daysSinceSeen} days ago`}
+                    >
+                      <WifiOff className="h-2.5 w-2.5" />
+                      Not on app · {m.daysSinceSeen}d
+                    </span>
+                  )}
 
                 <span>{m.klass} Class</span>
                 {m.area && <span>Area: {m.area}</span>}

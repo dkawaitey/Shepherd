@@ -175,6 +175,7 @@ export function AppShell() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const bootstrapAdmin = useMutation(api.users.bootstrapAdmin);
+  const touchActivity = useMutation(api.users.touchActivity);
   const autoLink = useMutation(api.users.autoLinkAccount);
   // Queued offline records belonging to this account (see lib/offline-sync).
   const offline = useOfflineSync(user?._id);
@@ -209,6 +210,27 @@ export function AppShell() {
       bootstrapAdmin().catch(() => undefined);
     }
   }, [user, bootstrapAdmin]);
+
+  // "App opened" heartbeat: keeps users.lastActiveAt fresh so the Members page
+  // can flag accounts that have not signed in or opened the app for a long
+  // time. Pings on open and whenever the tab becomes visible again, at most
+  // once an hour per account (the mutation enforces the same interval).
+  useEffect(() => {
+    if (!user || user.isAnonymous) return;
+    const storageKey = `shepherd:activity:${user._id}`;
+    const ping = () => {
+      const last = Number(localStorage.getItem(storageKey) ?? 0);
+      if (Number.isFinite(last) && Date.now() - last < 60 * 60 * 1000) return;
+      localStorage.setItem(storageKey, String(Date.now()));
+      touchActivity().catch(() => localStorage.removeItem(storageKey));
+    };
+    ping();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") ping();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [user?._id, user?.isAnonymous, touchActivity]);
 
   const current = NAV.find(
     (n) =>

@@ -53,6 +53,11 @@ import {
   AlertCircle,
   Eye,
   Megaphone,
+  Trophy,
+  Medal,
+  Award,
+  CheckCircle2,
+  Lock,
   Heart,
   BarChart3,
   Activity,
@@ -461,6 +466,157 @@ type FeedPost = {
   poll: FeedPoll | null;
 };
 
+type PollResultOption = {
+  id: string;
+  text: string;
+  count: number;
+  /** Who chose this option — only sent to viewers allowed to see details. */
+  voters?: { name: string; at: number }[];
+};
+
+/** Rank medal for the top three options (number badge for the rest). */
+function rankBadge(rank: number) {
+  if (rank === 0) {
+    return {
+      icon: Trophy,
+      className: "border-[#f59e0b]/50 bg-[#2e2408] text-[#fbbf24]",
+    };
+  }
+  if (rank === 1) {
+    return { icon: Medal, className: "border-border bg-muted text-foreground/70" };
+  }
+  if (rank === 2) {
+    return { icon: Award, className: "border-border bg-muted text-foreground/60" };
+  }
+  return { icon: null, className: "border-border bg-muted text-muted-foreground" };
+}
+
+/**
+ * A poll's result as a chart: a ranked bar per option, sized by share of the
+ * votes, with the tally, the percentage and — for viewers allowed to see them —
+ * the names of everyone who chose each option.
+ *
+ * Used by the poll card (anonymous counts) and by the engagement details dialog
+ * (counts plus names), so the result looks the same wherever it appears.
+ */
+function PollResultChart({
+  options,
+  totalVotes,
+  voterCount,
+  allowMultiple,
+  closed,
+  highlightWinner = false,
+  showVoters = false,
+}: {
+  options: PollResultOption[];
+  totalVotes: number;
+  voterCount: number;
+  allowMultiple: boolean;
+  closed: boolean;
+  highlightWinner?: boolean;
+  showVoters?: boolean;
+}) {
+  const ranked = [...options].sort(
+    (a, b) => b.count - a.count || a.text.localeCompare(b.text),
+  );
+
+  if (ranked.length === 0 || totalVotes === 0) {
+    return (
+      <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed py-6 text-center">
+        <Users className="h-4 w-4 text-muted-foreground" />
+        <p className="text-[11px] text-muted-foreground">No votes cast yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Summary strip — one chip per fact, all icon-led. */}
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5">
+          <Users className="h-3 w-3" />
+          {voterCount} {voterCount === 1 ? "person" : "people"}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5">
+          <BarChart3 className="h-3 w-3" />
+          {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5">
+          <CheckCircle2 className="h-3 w-3" />
+          {allowMultiple ? "Multiple answers" : "One answer each"}
+        </span>
+        {closed && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-primary">
+            <Lock className="h-3 w-3" /> Final result
+          </span>
+        )}
+      </div>
+
+      {ranked.map((o, i) => {
+        const pct = Math.round((o.count / totalVotes) * 100);
+        const badge = rankBadge(i);
+        const RankIcon = badge.icon;
+        const winner = i === 0 && highlightWinner && o.count > 0;
+        return (
+          <div
+            key={o.id}
+            className={cn(
+              "overflow-hidden rounded-lg border bg-card",
+              winner ? "border-primary/50 ring-1 ring-primary/20" : "border-border",
+            )}
+          >
+            <div className="flex items-center gap-2 px-2.5 py-2">
+              <span
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[10px] font-bold tabular-nums",
+                  badge.className,
+                )}
+              >
+                {RankIcon ? <RankIcon className="h-3.5 w-3.5" /> : i + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
+                {o.text}
+              </span>
+              {winner && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                  <Trophy className="h-2.5 w-2.5" />
+                  {allowMultiple ? "Top choice" : "Winner"}
+                </span>
+              )}
+              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                <b className="text-foreground">{o.count}</b> · {pct}%
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-muted">
+              <div
+                className={cn(
+                  "h-full rounded-r-full transition-[width] duration-500 ease-out",
+                  winner ? "bg-primary" : "bg-primary/45",
+                )}
+                style={{ width: `${o.count > 0 ? Math.max(pct, 4) : 0}%` }}
+              />
+            </div>
+            {showVoters && o.voters && o.voters.length > 0 && (
+              <div className="flex flex-wrap gap-1 border-t border-border/60 bg-muted/20 px-2.5 py-1.5">
+                {o.voters.map((v, j) => (
+                  <span
+                    key={`${v.name}-${j}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                  >
+                    <UserRound className="h-2.5 w-2.5" />
+                    {v.name}
+                    <span className="text-muted-foreground/60">{timeAgo(v.at)}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * A poll under an announcement. Results are always visible, and the viewer's
  * own answer is highlighted: single-answer polls vote on tap (tapping your own
@@ -542,11 +698,14 @@ function PollCard({
     }
   };
 
-  // Biggest option first, for the result line under a closed poll.
-  const ranked = [...poll.options]
-    .map((o) => ({ ...o, count: poll.counts[o.id] ?? 0 }))
+  // Tally per option, biggest first — the chart needs it sorted, and it is the
+  // shape the details view uses too.
+  const ranked: PollResultOption[] = [...poll.options]
+    .map((o) => ({ id: o.id, text: o.text, count: poll.counts[o.id] ?? 0 }))
     .sort((a, b) => b.count - a.count);
-  const winner = ranked[0];
+  // A closed poll with votes is a result to read, not a ballot to fill, so it
+  // renders as the result chart.
+  const showResult = poll.closed && poll.totalVotes > 0;
 
   return (
     <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
@@ -560,6 +719,18 @@ function PollCard({
       </div>
       <div className="mt-1.5 text-[13px] font-semibold">{poll.question}</div>
 
+      {showResult ? (
+        <div className="mt-2">
+          <PollResultChart
+            options={ranked}
+            totalVotes={poll.totalVotes}
+            voterCount={poll.voterCount}
+            allowMultiple={poll.allowMultiple}
+            closed
+            highlightWinner
+          />
+        </div>
+      ) : (
       <div className="mt-2 space-y-1.5">
         {poll.options.map((o) => {
           const count = poll.counts[o.id] ?? 0;
@@ -609,20 +780,18 @@ function PollCard({
           );
         })}
       </div>
+      )}
 
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-        <span>
-          {poll.totalVotes} {poll.totalVotes === 1 ? "vote" : "votes"} ·{" "}
-          {poll.voterCount} {poll.voterCount === 1 ? "person" : "people"}
-        </span>
+        {!showResult && (
+          <span>
+            {poll.totalVotes} {poll.totalVotes === 1 ? "vote" : "votes"} ·{" "}
+            {poll.voterCount} {poll.voterCount === 1 ? "person" : "people"}
+          </span>
+        )}
         {!poll.closed && !poll.allowMultiple && voted && (
           <span className="text-muted-foreground/70">
             Tap your answer again to clear it
-          </span>
-        )}
-        {poll.closed && poll.totalVotes > 0 && (
-          <span className="text-primary">
-            Result: {winner.text} — {winner.count} of {poll.totalVotes}
           </span>
         )}
       </div>
@@ -969,44 +1138,17 @@ function EngagementDetailsDialog({
                   <BarChart3 className="h-3 w-3" /> Poll — who chose what
                 </div>
                 <p className="mb-2 text-[11px] font-medium">{details.poll.question}</p>
-                <div className="space-y-2">
-                  {details.poll.options.map((o) => (
-                    <div key={o.id} className="overflow-hidden rounded-md border">
-                      <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-2.5 py-1.5">
-                        <span className="truncate text-[11px] font-medium">{o.text}</span>
-                        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                          {o.count} {o.count === 1 ? "vote" : "votes"}
-                        </span>
-                      </div>
-                      {o.voters.length === 0 ? (
-                        <p className="px-2.5 py-1.5 text-[10px] text-muted-foreground">
-                          Nobody chose this one.
-                        </p>
-                      ) : (
-                        <div className="divide-y">
-                          {o.voters.map((v, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center justify-between px-2.5 py-1.5"
-                            >
-                              <span className="truncate text-[11px]">{v.name}</span>
-                              <span className="shrink-0 text-[10px] text-muted-foreground/70">
-                                {timeAgo(v.at)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-2 text-[10px] text-muted-foreground">
-                  {details.poll.totalVotes}{" "}
-                  {details.poll.totalVotes === 1 ? "vote" : "votes"} from{" "}
-                  {details.poll.voterCount}{" "}
-                  {details.poll.voterCount === 1 ? "person" : "people"}
-                  {details.poll.closed && " · closed"}
-                </p>
+                {/* The same chart the poll card shows, with the voters' names
+                    under each option — this view is the one that may see them. */}
+                <PollResultChart
+                  options={details.poll.options}
+                  totalVotes={details.poll.totalVotes}
+                  voterCount={details.poll.voterCount}
+                  allowMultiple={details.poll.allowMultiple}
+                  closed={details.poll.closed}
+                  highlightWinner
+                  showVoters
+                />
               </div>
             )}
           </div>

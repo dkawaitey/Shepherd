@@ -13,6 +13,7 @@ import {
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validatePhone } from "./validate";
 import {
+  ACTIVITY_WRITE_INTERVAL_MS,
   ROLES,
   ROLE_LABELS,
   Role,
@@ -597,6 +598,35 @@ export const updateProfile = mutation({
     const name = validateName(args.name, "Name");
     const phone = args.phone.trim();
     await ctx.db.patch(user._id, { name, phone });
+  },
+});
+
+/**
+ * "App opened" heartbeat. The client calls this when the signed-in user opens
+ * the app or brings the tab back into view, which is what makes the Members page
+ * able to show that a member has not signed in or opened the app for a long
+ * time — a Convex Auth session is created once at sign-in and then refreshed
+ * silently, so session timestamps alone would flag an actively-used account.
+ *
+ * Deliberately cheap and open to every signed-in account (no `requireRole`: a
+ * plain member holds no ministry role but still uses the app). At most one
+ * write per ACTIVITY_WRITE_INTERVAL_MS per account, so a client that pings on
+ * every navigation or tab focus cannot hammer the database. Guests are skipped.
+ */
+export const touchActivity = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) return { recorded: false };
+    const now = Date.now();
+    if (
+      user.lastActiveAt !== undefined &&
+      now - user.lastActiveAt < ACTIVITY_WRITE_INTERVAL_MS
+    ) {
+      return { recorded: false };
+    }
+    await ctx.db.patch(user._id, { lastActiveAt: now });
+    return { recorded: true };
   },
 });
 

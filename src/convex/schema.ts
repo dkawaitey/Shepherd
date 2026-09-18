@@ -40,6 +40,7 @@ const schema = defineSchema(
       testClassScope: v.optional(v.string()), // class used while testing as a class leader
       memberId: v.optional(v.id("members")), // linked member record from the Members module (one-to-one)
       rolesOverridden: v.optional(v.boolean()), // admin manually overrode the roles derived from the member's position
+      lastActiveAt: v.optional(v.number()), // last time this account opened the app (users.touchActivity heartbeat)
     }).index("email", ["email"]), // do not remove or modify
 
     // ===== Contacts (people reached during outreach) =====

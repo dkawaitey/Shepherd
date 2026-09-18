@@ -246,6 +246,15 @@ export const FOLLOWUP_STATUS_COLORS: Record<FollowupStatus, string> = {
   [FOLLOWUP_STATUS.CANCELLED]: "#9ca3af",
 };
 
+// ===== App usage (member cards) =====
+// A member whose linked account has neither signed in nor opened the app for
+// this many days is flagged on their member card. Kept here so the Members page
+// label and any server-side reporting agree on one number.
+export const MEMBER_INACTIVITY_DAYS = 10;
+
+/** How rarely an "app opened" heartbeat may write (see users.touchActivity). */
+export const ACTIVITY_WRITE_INTERVAL_MS = 60 * 60 * 1000;
+
 export const CLASSES = {
   MILLISON: "Millison",
   REUBEN: "Reuben",
