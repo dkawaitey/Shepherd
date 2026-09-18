@@ -70,17 +70,34 @@ export const classScoped = (user: CurrentUser | null | undefined): string | unde
  * May this account read ministry records at all?
  *
  * Ministry data is pastoral PII (contact details, prayer requests, notes), so
- * it is limited to signed-in accounts that actually hold a ministry role:
- *   - guest (anonymous) accounts get nothing — anyone can create one, so they
- *     must never be able to read the contact database
- *   - a plain member holds no role and gets nothing either
- * Administrators, coordinators, workers, read-only leaders and class leaders
- * all pass (class leaders are additionally limited to their own class).
+ * it is limited to signed-in accounts that are a real person on this
+ * deployment:
+ *   - guest (anonymous) accounts get nothing — anyone can tap "Continue as
+ *     guest" and create one, so they must never reach the contact database
+ *   - an account with an email address reached the deployment through the
+ *     sign-in code flow (guests never have one) or was created by an
+ *     administrator, so it belongs to a real person
+ *   - holding a ministry role also passes, for accounts an administrator set
+ *     up without an email
+ *
+ * Reads are the floor, not the ceiling: writes still require an actual role
+ * (`requireRole`), private notes stay with the administrator and their author,
+ * confidential prayer stays with the administrator and coordinator, and a
+ * class leader is still confined to their own class.
+ *
+ * Why the email floor exists: access used to depend purely on roles. Roles are
+ * derived from a member record's ministry position, so every volunteer whose
+ * record still said plain "member" — or whose account was never linked to a
+ * member record at all — silently lost access the moment that rule shipped.
+ * Reading is harmless next to that kind of outage, and it keeps the app usable
+ * for the people the ministry already trusts with the data.
  */
 export const canReadMinistry = (
   user: CurrentUser | null | undefined,
 ): user is CurrentUser =>
-  !!user && !user.isAnonymous && effectiveRoles(user).length > 0;
+  !!user &&
+  !user.isAnonymous &&
+  (effectiveRoles(user).length > 0 || !!user.email);
 
 /**
  * Private / confidential notes are for the administrator and the person who

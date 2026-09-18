@@ -89,16 +89,20 @@ const NAV: NavItem[] = [
 ];
 
 /**
- * Accounts that may see ministry records: signed-in, not a guest, and holding
- * at least one ministry role. A plain member account reads announcements only.
+ * Accounts that may see ministry records: signed-in, not a guest, and either
+ * holding a ministry role or being a real person on this deployment (an account
+ * with an email reached it through the sign-in code flow — guests never have
+ * one). Mirrors `canReadMinistry` in convex/helpers.ts: reads are the floor,
+ * writes still need a role.
  */
 function hasMinistryAccess(user: {
   role?: string;
   roles?: string[];
+  email?: string;
   isAnonymous?: boolean;
 } | null | undefined) {
   if (!user || user.isAnonymous) return false;
-  return user.roles?.length ? true : !!user.role;
+  return user.roles?.length ? true : !!user.role || !!user.email;
 }
 
 /** Administrator check that honours every role an account holds. */
@@ -134,8 +138,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {NAV.map((item) => {
-          // Ministry records need a ministry role; guests and plain members
-          // only get announcements and their own settings.
+          // Ministry records need a real (non-guest) account; guests only get
+          // announcements and their own settings.
           if (item.ministryOnly && !hasMinistryAccess(user)) return null;
           // Analytics, access review and the error log are administrator-only.
           if ((item.adminOnly || item.to === "/analytics") && !isAdminUser(user))

@@ -272,7 +272,10 @@ export const accessReview = query({
               )
             : undefined,
           effectiveRoles: effective,
-          hasAccess: !u.isAnonymous && effective.length > 0,
+          // Mirrors `canReadMinistry` in helpers.ts: a role grants access, and so
+          // does being a real (non-guest) account with an email, which is how
+          // every volunteer who signed in through the code flow is admitted.
+          hasAccess: !u.isAnonymous && (effective.length > 0 || !!u.email),
         };
       })
       .sort((a, b) => (b.lastSignInAt ?? 0) - (a.lastSignInAt ?? 0));
