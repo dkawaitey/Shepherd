@@ -17,7 +17,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { formatError } from "@/components/shared";
-import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { ArrowRight, Loader2, Mail } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
@@ -83,19 +83,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setError("The verification code you entered is incorrect.");
       setIsLoading(false);
       setOtp("");
-    }
-  };
-
-  const handleGuestLogin = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await signIn("anonymous");
-      navigate(redirect);
-    } catch (error) {
-      console.error("Guest login error:", error);
-      setError(`Failed to sign in as guest: ${formatError(error, "Unknown error")}`);
-      setIsLoading(false);
     }
   };
 
@@ -166,34 +153,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       {error && (
                         <p className="mt-2 text-xs text-destructive">{error}</p>
                       )}
-
-                      <div className="mt-4">
-                        <div className="relative">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t" />
-                          </div>
-                          <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
-                            <span className="bg-card px-2 text-muted-foreground">
-                              or
-                            </span>
-                          </div>
-                        </div>
-
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="mt-4 w-full"
-                          onClick={handleGuestLogin}
-                          disabled={isLoading}
-                        >
-                          <UserX className="mr-2 h-4 w-4" />
-                          Continue as Guest
-                        </Button>
-                        <p className="mt-2 text-center text-[10px] text-muted-foreground">
-                          Guests can explore the system — the first account
-                          becomes the Administrator.
-                        </p>
-                      </div>
                     </CardContent>
                   </form>
                 </>
