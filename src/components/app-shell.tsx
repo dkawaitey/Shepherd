@@ -96,20 +96,21 @@ const NAV: NavItem[] = [
 
 /**
  * Accounts that may see ministry records: signed-in, not a guest, and either
- * holding a ministry role or being a real person on this deployment (an account
- * with an email reached it through the sign-in code flow — guests never have
- * one). Mirrors `canReadMinistry` in convex/helpers.ts: reads are the floor,
- * writes still need a role.
+ * linked to a member record (the ministry's source of truth for who belongs)
+ * or holding a ministry role (covers the administrator). Mirrors
+ * `canReadMinistry` in convex/helpers.ts: reads are the floor, writes still
+ * need a role. An account with no linked profile never reaches the shell —
+ * RequireAuth shows it the "link your profile" screen first.
  */
 function hasMinistryAccess(user: {
   role?: string;
   roles?: string[];
   testAs?: string;
-  email?: string;
+  memberId?: string;
   isAnonymous?: boolean;
 } | null | undefined) {
   if (!user || user.isAnonymous) return false;
-  return effectiveUserRoles(user).length > 0 || !!user.email;
+  return effectiveUserRoles(user).length > 0 || !!user.memberId;
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -174,18 +175,9 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const bootstrapAdmin = useMutation(api.users.bootstrapAdmin);
   const touchActivity = useMutation(api.users.touchActivity);
-  const autoLink = useMutation(api.users.autoLinkAccount);
   // Queued offline records belonging to this account (see lib/offline-sync).
   const offline = useOfflineSync(user?._id);
-
-
-  useEffect(() => {
-    if (user && !user.memberId) {
-      autoLink().catch(() => undefined);
-    }
-  }, [user, autoLink]);
 
   const [pushDismissed, setPushDismissed] = useState(false);
   const push = usePushNotifications(!!user);
@@ -202,14 +194,6 @@ export function AppShell() {
 
   const [testAsOpen, setTestAsOpen] = useState(false);
   const setTestAs = useMutation(api.users.setTestAs);
-
-  useEffect(() => {
-    // Mirrors the server guard: only an account holding no role at all is a
-    // bootstrap candidate (users.bootstrapAdmin decides for real).
-    if (user && effectiveUserRoles(user).length === 0) {
-      bootstrapAdmin().catch(() => undefined);
-    }
-  }, [user, bootstrapAdmin]);
 
   // "App opened" heartbeat: keeps users.lastActiveAt fresh so the Members page
   // can flag accounts that have not signed in or opened the app for a long

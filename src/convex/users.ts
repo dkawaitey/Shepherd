@@ -279,9 +279,10 @@ export const accessReview = query({
             : undefined,
           effectiveRoles: effective,
           // Mirrors `canReadMinistry` in helpers.ts: a role grants access, and so
-          // does being a real (non-guest) account with an email, which is how
-          // every volunteer who signed in through the code flow is admitted.
-          hasAccess: !u.isAnonymous && (effective.length > 0 || !!u.email),
+          // does being linked to a member record (the ministry's source of truth
+          // for who belongs). A plain signed-up email with no linked profile does
+          // not — it is shown the "link your profile" screen instead.
+          hasAccess: !u.isAnonymous && (effective.length > 0 || !!u.memberId),
         };
       })
       .sort((a, b) => (b.lastSignInAt ?? 0) - (a.lastSignInAt ?? 0));

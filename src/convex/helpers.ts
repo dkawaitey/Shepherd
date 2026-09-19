@@ -10,6 +10,7 @@ export type CurrentUser = {
   role?: string;
   roles?: string[];
   classScope?: string;
+  memberId?: string;
   testAs?: string;
   testClassScope?: string;
   isAnonymous?: boolean;
@@ -67,37 +68,36 @@ export const classScoped = (user: CurrentUser | null | undefined): string | unde
 };
 
 /**
- * May this account read ministry records at all?
+ * May this account reach ministry records at all?
  *
  * Ministry data is pastoral PII (contact details, prayer requests, notes), so
- * it is limited to signed-in accounts that are a real person on this
- * deployment:
- *   - guest (anonymous) accounts get nothing — anyone can tap "Continue as
- *     guest" and create one, so they must never reach the contact database
- *   - an account with an email address reached the deployment through the
- *     sign-in code flow (guests never have one) or was created by an
- *     administrator, so it belongs to a real person
- *   - holding a ministry role also passes, for accounts an administrator set
- *     up without an email
+ * it is limited to signed-in accounts that an administrator has vouched for:
+ *   - guest (anonymous) accounts get nothing — anyone could create one, so
+ *     they must never reach the contact database
+ *   - an account linked to a member record passes: the member directory is the
+ *     source of truth for who belongs to the ministry, and the account inherits
+ *     that member's permissions
+ *   - holding a ministry role also passes, which covers the administrator's
+ *     own account (bootstrapped or explicitly granted) and any account set up
+ *     without a member record
+ *
+ * An account that signed up with an email but was never linked to a member
+ * profile is intentionally turned away: it has no ministry identity behind it,
+ * so the app shows it a "your profile has not been linked yet" screen and an
+ * administrator links the member record (Settings → User Management or the
+ * member's own profile) before it can do anything.
  *
  * Reads are the floor, not the ceiling: writes still require an actual role
  * (`requireRole`), private notes stay with the administrator and their author,
  * confidential prayer stays with the administrator and coordinator, and a
  * class leader is still confined to their own class.
- *
- * Why the email floor exists: access used to depend purely on roles. Roles are
- * derived from a member record's ministry position, so every volunteer whose
- * record still said plain "member" — or whose account was never linked to a
- * member record at all — silently lost access the moment that rule shipped.
- * Reading is harmless next to that kind of outage, and it keeps the app usable
- * for the people the ministry already trusts with the data.
  */
 export const canReadMinistry = (
   user: CurrentUser | null | undefined,
 ): user is CurrentUser =>
   !!user &&
   !user.isAnonymous &&
-  (effectiveRoles(user).length > 0 || !!user.email);
+  (effectiveRoles(user).length > 0 || !!user.memberId);
 
 /**
  * Private / confidential notes are for the administrator and the person who
