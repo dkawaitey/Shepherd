@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ import {
   Check,
   Search,
   ShieldAlert,
+  UserPlus,
   ShieldCheck,
   Trash2,
   UserCog,
@@ -120,6 +121,10 @@ export default function AccessReview() {
   } | null>(null);
   const [removing, setRemoving] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
+  // Quick link: pick a member for a specific account without opening the full
+  // access editor.
+  const [quickLink, setQuickLink] = useState<Row | null>(null);
+  const [quickQuery, setQuickQuery] = useState("");
 
   const openEditor = (row: Row) => {
     setEditing({
@@ -154,6 +159,46 @@ export default function AccessReview() {
       return true;
     });
   }, [rows, filter, search]);
+
+  // Which account already owns each member record, so the picker can show it
+  // as taken instead of letting the admin hit the server's "already linked"
+  // error.
+  const linkedByMember = useMemo(() => {
+    const map = new Map<string, Row>();
+    for (const row of rows ?? []) if (row.memberId) map.set(row.memberId, row);
+    return map;
+  }, [rows]);
+
+  const quickCandidates = useMemo(() => {
+    const q = quickQuery.trim().toLowerCase();
+    const list = (members ?? []).filter((m) => !m.isDeleted);
+    const matched = q
+      ? list.filter((m) =>
+          [m.fullName, m.membershipId, m.email, m.klass, m.phone]
+            .filter(Boolean)
+            .some((f) => f!.toLowerCase().includes(q)),
+        )
+      : list;
+    return [...matched]
+      .sort((a, b) => a.fullName.localeCompare(b.fullName))
+      .slice(0, 50);
+  }, [members, quickQuery]);
+
+  // The "account awaiting a profile link" notification deep-links to
+  // /access?account=<id>: open the quick-link picker for that account so the
+  // admin goes straight from the alert to fixing it.
+  const [searchParams] = useSearchParams();
+  const focusAccount = searchParams.get("account");
+  const [focusedAccount, setFocusedAccount] = useState(false);
+  useEffect(() => {
+    if (focusedAccount || !focusAccount || !rows) return;
+    const row = rows.find((r) => r._id === focusAccount);
+    if (row) {
+      setQuickQuery("");
+      setQuickLink(row);
+    }
+    setFocusedAccount(true);
+  }, [focusedAccount, focusAccount, rows]);
 
   const stats = useMemo(() => {
     const list = rows ?? [];
@@ -203,6 +248,21 @@ export default function AccessReview() {
       setEditing(null);
     } catch (err) {
       toast.error(formatError(err, "Could not save access"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const linkNow = async (memberId: string) => {
+    if (!quickLink) return;
+    setBusy(true);
+    try {
+      await linkMember({ userId: quickLink._id, memberId: memberId as any });
+      const name = (members ?? []).find((m) => m._id === memberId)?.fullName ?? "member";
+      toast.success(`Linked to ${name} — roles now follow the ministry position`);
+      setQuickLink(null);
+    } catch (err) {
+      toast.error(formatError(err, "Could not link member"));
     } finally {
       setBusy(false);
     }
@@ -411,6 +471,24 @@ export default function AccessReview() {
                         <span className="text-[10px] text-muted-foreground">—</span>
                       ) : (
                         <div className="flex items-center justify-end gap-1">
+                          {!row.isAnonymous && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setQuickQuery("");
+                                setQuickLink(row);
+                              }}
+                              title={
+                                row.memberId
+                                  ? "Change the linked member profile"
+                                  : "Link a member profile"
+                              }
+                            >
+                              <UserPlus className="mr-1 h-3.5 w-3.5" />
+                              {row.memberId ? "Change" : "Link"}
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" onClick={() => openEditor(row)}>
                             <UserCog className="mr-1 h-3.5 w-3.5" /> Manage
                           </Button>
@@ -562,6 +640,96 @@ export default function AccessReview() {
             <Button onClick={saveEditing} disabled={busy}>
               <Check className="mr-1.5 h-3.5 w-3.5" />
               {busy ? "Saving…" : "Save access"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Quick link a member profile ── */}
+      <Dialog open={!!quickLink} onOpenChange={(v) => !v && setQuickLink(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Link a member profile</DialogTitle>
+            <DialogDescription className="text-[11px]">
+              {quickLink?.email ?? quickLink?.name ?? "This account"} has no member
+              profile yet. Pick the member this account belongs to — the ministry
+              position on that record decides the roles.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              autoFocus
+              placeholder="Search name, membership ID, email, class or phone..."
+              className="pl-8"
+              value={quickQuery}
+              onChange={(e) => setQuickQuery(e.target.value)}
+            />
+          </div>
+
+          <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-1">
+            {quickCandidates.length === 0 ? (
+              <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">
+                {quickQuery.trim()
+                  ? `No member matches “${quickQuery.trim()}”. Check the spelling or create the member first.`
+                  : "No members to link yet — create the member record first."}
+              </p>
+            ) : (
+              quickCandidates.map((m) => {
+                const owner = linkedByMember.get(m._id);
+                const ownedByThis = owner?._id === quickLink?._id;
+                const taken = !!owner && !ownedByThis;
+                const pos = effectivePosition(m.position, m.isClassLeader);
+                const meta = [
+                  m.membershipId,
+                  m.klass,
+                  pos ? POSITION_LABELS[pos] : undefined,
+                  m.email,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+                return (
+                  <button
+                    key={m._id}
+                    type="button"
+                    disabled={taken || busy}
+                    onClick={() => void linkNow(m._id)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
+                      taken
+                        ? "cursor-not-allowed opacity-50"
+                        : "hover:bg-muted disabled:opacity-50",
+                    )}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-[11px] font-medium">
+                        {m.fullName}
+                      </span>
+                      <span className="block truncate text-[10px] text-muted-foreground">
+                        {meta}
+                      </span>
+                    </span>
+                    {taken ? (
+                      <Badge variant="secondary" className="shrink-0 text-[9px]">
+                        linked to {owner?.email ?? owner?.name ?? "another account"}
+                      </Badge>
+                    ) : (
+                      <UserPlus className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setQuickLink(null)}
+              disabled={busy}
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

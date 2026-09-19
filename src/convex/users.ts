@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, internalQuery, query, QueryCtx } from "./_generated/server";
 import {
   logAudit,
@@ -628,6 +629,72 @@ export const touchActivity = mutation({
     }
     await ctx.db.patch(user._id, { lastActiveAt: now });
     return { recorded: true };
+  },
+});
+
+/**
+ * A signed-in account that is not linked to any member profile asks the
+ * administrators to link it. Called by the "your profile isn't linked yet"
+ * screen, which is the only place an unlinked account can reach.
+ *
+ * Sends one device push to every administrator (deep-linking to the Access
+ * review page, where the link is fixed) and records an audit entry. The stored
+ * notification job doubles as the dedupe: the same account can alert the admins
+ * only once, so repeatedly opening the blocked screen cannot spam them.
+ */
+export const requestProfileLink = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    // Only a real, still-unlinked account has anything to ask for: an account
+    // that has since been linked (or holds a role) is already through the gate,
+    // and a guest account is not a person on this deployment at all.
+    if (!user || user.isAnonymous || user.memberId || userRoles(user).length > 0) {
+      return { notified: false };
+    }
+    await checkRateLimit(ctx, "users.requestProfileLink");
+
+    const admins = (await ctx.db.query("users").collect()).filter(
+      (u) => !u.isAnonymous && userRoles(u).includes(ROLES.ADMIN),
+    );
+    if (admins.length === 0) return { notified: false };
+
+    const dedupeKey = `unlinked-account:${user._id}`;
+    const existing = await ctx.db
+      .query("notificationJobs")
+      .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", dedupeKey))
+      .first();
+    if (existing) return { notified: false, alreadySent: true };
+
+    const now = Date.now();
+    const label = user.email ?? user.name ?? "A new account";
+    const jobId = await ctx.db.insert("notificationJobs", {
+      kind: "account_unlinked",
+      dedupeKey,
+      deliverAt: now,
+      status: "scheduled",
+      payload: {
+        title: "Account awaiting a profile link",
+        body: `${label} signed in but isn't linked to a member profile. Link it in Access.`,
+        // Unique per account so a second unlinked sign-in doesn't collapse the
+        // first alert on the device (Android groups notifications by tag).
+        url: `/access?account=${user._id}`,
+      },
+      recipientUserIds: admins.map((a) => a._id),
+      createdAt: now,
+    });
+    const sfId = await ctx.scheduler.runAfter(0, internal.pushNode.deliverJob, {
+      jobId,
+    });
+    await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
+
+    await logAudit(ctx, {
+      action: "user.linkRequested",
+      entityType: "users",
+      entityId: user._id,
+      details: `${label} requested a member profile link (admins notified)`,
+    });
+    return { notified: true };
   },
 });
 

@@ -81,6 +81,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   const autoLink = useMutation(api.users.autoLinkAccount);
   const bootstrapAdmin = useMutation(api.users.bootstrapAdmin);
+  const requestProfileLink = useMutation(api.users.requestProfileLink);
 
   // A session can outlive its user record — e.g. an administrator removed the
   // account while it was still signed in. Clear the token instead of leaving
@@ -124,6 +125,19 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     // still needed; the mutations are stable across renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?._id, user?.isAnonymous, user?.memberId, roleCount]);
+
+  const noAccess =
+    !isLoading && isAuthenticated && !!user && !accountHasAccess(user);
+
+  // Tell the administrators that this account is waiting on a member link, so
+  // it does not sit unnoticed. Runs only once the auto-link/bootstrap attempt
+  // has settled (`!linking`), so a member who is about to be linked by email is
+  // never reported as unlinked. The server dedupes per account, so repeated
+  // visits to this screen never spam the admins.
+  useEffect(() => {
+    if (noAccess && !linking) requestProfileLink().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noAccess, linking]);
 
   if (isLoading || isOrphanedSession) {
     return (

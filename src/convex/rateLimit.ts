@@ -59,6 +59,9 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   "users.setRoles": { maxRequests: 10, windowMs: 60_000 },
   "users.setRole": { maxRequests: 10, windowMs: 60_000 },
   "users.bootstrapAdmin": { maxRequests: 3, windowMs: 600_000 },
+  // An unlinked account pings this when it reaches the "link your profile"
+  // screen; the stored job dedupes per account, this just stops a client loop.
+  "users.requestProfileLink": { maxRequests: 5, windowMs: 600_000 },
 
   // Settings — strict
   "settings.set": { maxRequests: 20, windowMs: 60_000 },

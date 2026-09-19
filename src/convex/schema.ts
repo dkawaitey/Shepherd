@@ -502,6 +502,7 @@ const schema = defineSchema(
         v.literal("comment"),
         v.literal("reply"),
         v.literal("poll_result"),
+        v.literal("account_unlinked"),
       ),
       dedupeKey: v.string(),
       deliverAt: v.number(),
