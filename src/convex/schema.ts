@@ -490,6 +490,22 @@ const schema = defineSchema(
       updatedAt: v.number(),
     }).index("by_user", ["userId"]),
 
+    // ===== In-app notifications (the bell) =====
+    // One row per recipient. This is the durable, in-app counterpart to a
+    // device push: an alert that reaches the user even without a registered
+    // device, and stays visible until it is read.
+    notifications: defineTable({
+      userId: v.id("users"),
+      kind: v.string(),
+      title: v.string(),
+      body: v.string(),
+      url: v.string(),
+      read: v.boolean(),
+      createdAt: v.number(),
+    })
+      .index("by_user", ["userId", "createdAt"])
+      .index("by_user_read", ["userId", "read"]),
+
     // ===== Scheduled notification jobs =====
     notificationJobs: defineTable({
       kind: v.union(

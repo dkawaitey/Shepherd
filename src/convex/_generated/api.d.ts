@@ -22,6 +22,7 @@ import type * as errorLogs from "../errorLogs.js";
 import type * as followups from "../followups.js";
 import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
+import type * as inbox from "../inbox.js";
 import type * as members from "../members.js";
 import type * as notificationQueries from "../notificationQueries.js";
 import type * as notifications from "../notifications.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   followups: typeof followups;
   helpers: typeof helpers;
   http: typeof http;
+  inbox: typeof inbox;
   members: typeof members;
   notificationQueries: typeof notificationQueries;
   notifications: typeof notifications;

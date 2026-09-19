@@ -52,6 +52,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
 
 type NavItem = {
   to: string;
@@ -273,6 +274,8 @@ export function AppShell() {
 
 
           <ThemeToggle />
+
+          <NotificationBell />
 
           {/* User menu */}
           <DropdownMenu>

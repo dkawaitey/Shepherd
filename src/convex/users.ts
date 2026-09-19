@@ -11,6 +11,7 @@ import {
   validClassScope,
   canReadMinistry,
 } from "./helpers";
+import { notifyUsers } from "./inbox";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validatePhone } from "./validate";
 import {
@@ -688,6 +689,16 @@ export const requestProfileLink = mutation({
     });
     await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
 
+    // Also drop it on the in-app bell, so an administrator sees it even if no
+    // device is registered for push (or notifications are switched off).
+    await notifyUsers(ctx, {
+      userIds: admins.map((a) => a._id),
+      kind: "account_unlinked",
+      title: "Account awaiting a profile link",
+      body: `${label} signed in but isn't linked to a member profile. Link it in Access.`,
+      url: `/access?account=${user._id}`,
+    });
+
     await logAudit(ctx, {
       action: "user.linkRequested",
       entityType: "users",
@@ -812,6 +823,13 @@ export const removeUser = mutation({
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .collect();
     for (const v of views) await ctx.db.delete(v._id);
+
+    // The account's in-app notifications go with it.
+    const notifications = await ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const note of notifications) await ctx.db.delete(note._id);
 
     await ctx.db.delete(args.userId);
     await logAudit(ctx, {
