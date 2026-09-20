@@ -3,13 +3,18 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Daily reminder digest at 07:00 UTC: follow-up reminders for workers and a
-// ministry digest (birthdays, attendance, follow-ups) for class leaders.
-crons.daily(
-  "daily-reminder-email",
-  { hourUTC: 7, minuteUTC: 0 },
-  internal.emails.dailyDigest,
-);
+// Ministry digest at 07:00 UTC every Monday and Thursday. The same run sends
+// follow-up reminders to workers, a class digest to class leaders, and a
+// role-scoped ministry digest (outreach, follow-ups, workers, and — for
+// administrators only — member directory and account health) to administrators
+// and evangelism coordinators.
+for (const dayOfWeek of ["monday", "thursday"] as const) {
+  crons.weekly(
+    `ministry-digest-${dayOfWeek}`,
+    { dayOfWeek, hourUTC: 7, minuteUTC: 0 },
+    internal.emails.ministryDigest,
+  );
+}
 
 // Daily push notifications at 06:30 UTC: follow-up reminders, birthday alerts,
 // missed follow-ups, and low attendance alerts delivered as device notifications.

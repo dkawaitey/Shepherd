@@ -622,7 +622,7 @@ function EmailRemindersSection() {
                 ? "Checking connection…"
                 : status.configured
                   ? `Connected — sends from ${status.from}`
-                  : "Not connected — add RESEND_API_KEY in the Keys tab"}
+                  : "Not connected — add BREVO_API_KEY in the Keys tab"}
             </div>
           </div>
           <span
@@ -635,15 +635,19 @@ function EmailRemindersSection() {
 
         <div className="flex items-center justify-between border-b border-dashed pb-3">
           <div>
-            <div className="text-[13px] font-medium">Daily reminder emails</div>
-
+            <div className="text-[13px] font-medium">Ministry digest — Mondays &amp; Thursdays</div>
+            <div className="text-[10px] leading-4 text-muted-foreground">
+              Sends twice a week at 07:00 UTC: follow-up reminders to workers, a
+              class digest to class leaders, and a role-scoped ministry digest to
+              administrators and evangelism coordinators.
+            </div>
           </div>
           <Switch
             checked={enabled}
             onCheckedChange={async (v) => {
               setEnabled(v);
               await setSetting({ key: "reminder_email_enabled", value: String(v) });
-              toast.success(v ? "Daily emails enabled" : "Daily emails paused");
+              toast.success(v ? "Ministry digest enabled" : "Ministry digest paused");
             }}
           />
         </div>
@@ -652,6 +656,7 @@ function EmailRemindersSection() {
           {[
             { label: "worker emails", value: c?.workerEmails ?? 0 },
             { label: "class digests", value: c?.classEmails ?? 0 },
+            { label: "ministry digests", value: c?.ministryEmails ?? 0 },
             { label: "upcoming follow-ups", value: c?.upcoming ?? 0 },
             { label: "overdue", value: c?.overdue ?? 0 },
             { label: "birthdays this week", value: c?.birthdays ?? 0 },
@@ -700,15 +705,15 @@ function EmailRemindersSection() {
               setSending("now");
               try {
                 const res = await sendNow();
-                if (res.ok) toast.success(`Sent ${res.sent} reminder email${res.sent === 1 ? "" : "s"}`);
-                else toast.error(res.reason ?? "Could not send reminders");
+                if (res.ok) toast.success(`Sent ${res.sent} digest email${res.sent === 1 ? "" : "s"}`);
+                else toast.error(res.reason ?? "Could not send the ministry digest");
               } finally {
                 setSending(null);
               }
             }}
           >
             <Send className="mr-1.5 h-3.5 w-3.5" />
-            {sending === "now" ? "Sending…" : "Send reminders now"}
+            {sending === "now" ? "Sending…" : "Send digest now"}
           </Button>
         </div>
 

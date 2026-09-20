@@ -5,7 +5,13 @@ import { action, internalAction, ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { userRoles } from "./helpers";
 import { ROLES } from "./constants";
-import { buildTestEmail, buildWorkerEmail, buildClassEmail } from "./emailHtml";
+import {
+  buildTestEmail,
+  buildWorkerEmail,
+  buildClassEmail,
+  buildMinistryEmail,
+  buildMinistrySms,
+} from "./emailHtml";
 
 const APP_NAME = "Shepherd";
 
@@ -189,9 +195,15 @@ export const sendTest = action({
 });
 
 /**
- * Send the current digest: one email per follow-up worker (their schedule) and
- * one per class leader (their class highlights). Emails are only sent when
- * RESEND_API_KEY is configured. Individual failures are logged and skipped.
+ * Send the current ministry digest (twice weekly — Monday and Thursday):
+ *  - one email per follow-up worker with their schedule
+ *  - one email per class leader with their class highlights
+ *  - one email per administrator and evangelism coordinator, scoped to what
+ *    their role may read (see reminders.computeDigest)
+ * Worker and class emails are only sent when an email key is configured, the
+ * ministry digest falls back to SMS for recipients without one.
+ * Individual failures are logged and skipped so one bad address cannot stop
+ * the rest of the batch.
  */
 async function dispatchDigest(
   ctx: ActionCtx,
@@ -245,6 +257,32 @@ async function dispatchDigest(
     }
   }
 
+  // Administrators and coordinators get the role-scoped ministry digest.
+  for (const r of data.ministryRecipients) {
+    if (r.email && emailKey) {
+      const { subject, html, text } = buildMinistryEmail(r);
+      const res = await sendEmail(ctx, {
+        to: r.email,
+        subject,
+        html,
+        text,
+        kind: "ministryDigest",
+        userId: r.userId as never,
+      });
+      if (res.ok) sent++;
+      else failed.push(r.email);
+    } else if (r.phone && smsKey) {
+      const res = await sendSms(ctx, {
+        to: r.phone,
+        body: buildMinistrySms(r),
+        kind: "ministryDigest",
+        userId: r.userId as never,
+      });
+      if (res.ok) sent++;
+      else failed.push(`sms:${r.phone}`);
+    }
+  }
+
   return {
     ok: true,
     reason: !emailKey && !smsKey ? "No BREVO_API_KEY or BREVO_SMS_API_KEY — skipped" : undefined,
@@ -253,13 +291,13 @@ async function dispatchDigest(
   };
 }
 
-/** Daily automatic digest — invoked by the cron. */
-export const dailyDigest = internalAction({
+/** Automatic ministry digest — invoked by the Monday and Thursday crons. */
+export const ministryDigest = internalAction({
   args: {},
   handler: async (ctx) => dispatchDigest(ctx),
 });
 
-/** Send the digest immediately (admin only). */
+/** Send the digest immediately (admin only) — used by Settings to preview/send. */
 export const sendNow = action({
   args: {},
   handler: async (ctx) => {

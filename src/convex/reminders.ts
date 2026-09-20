@@ -1,13 +1,23 @@
 import { internalQuery, query, QueryCtx } from "./_generated/server";
-import { FOLLOWUP_TYPE_LABELS, ROLES } from "./constants";
+import {
+  FOLLOWUP_STATUS,
+  FOLLOWUP_TYPE_LABELS,
+  MEMBER_INACTIVITY_DAYS,
+  ROLE_LABELS,
+  ROLES,
+  STAGES,
+  STAGE_ORDER,
+} from "./constants";
 import { getCurrentUser, userRoles } from "./helpers";
-import type { WorkerRecipient, ClassRecipient } from "./emailHtml";
+import { fmtShortDate } from "./emailHtml";
+import type { WorkerRecipient, ClassRecipient, MinistryRecipient } from "./emailHtml";
 
 export interface Digest {
   enabled: boolean;
   counts: {
     workerEmails: number;
     classEmails: number;
+    ministryEmails: number;
     skippedWorkers: number;
     upcoming: number;
     overdue: number;
@@ -17,6 +27,7 @@ export interface Digest {
   };
   workerRecipients: WorkerRecipient[];
   classRecipients: ClassRecipient[];
+  ministryRecipients: MinistryRecipient[];
 }
 
 const localDate = (d: Date) =>
@@ -26,6 +37,42 @@ const addDays = (from: Date, n: number) => {
   const d = new Date(from.getTime() + n * 86400000);
   return localDate(d);
 };
+
+/** `n` of `total` plus a percentage — the shape used throughout the digest. */
+const tally = (n: number, total: number) =>
+  `${n}${total > 0 ? ` (${Math.round((n / total) * 100)}%)` : ""}`;
+
+/** Bullet list, or a fallback line when there is nothing to report. */
+const bullets = (lines: string[], empty: string) =>
+  lines.length ? lines.map((l) => `• ${l}`).join("<br/>") : empty;
+
+type ContactRow = { _id: string; fullName: string; dateOfBirth?: string };
+
+/** Contacts whose birthday falls between `today` and `in7`, sorted by date. */
+function birthdaysInWindow(
+  contacts: ContactRow[],
+  now: Date,
+  today: string,
+  in7: string,
+) {
+  const rows: { contactId: string; contactName: string; monthDay: string }[] = [];
+  for (const c of contacts) {
+    if (!c.dateOfBirth) continue;
+    const dob = new Date(c.dateOfBirth);
+    if (isNaN(dob.getTime())) continue;
+    const next = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+    if (next < now) next.setFullYear(now.getFullYear() + 1);
+    const dateStr = localDate(next);
+    if (dateStr >= today && dateStr <= in7) {
+      rows.push({
+        contactId: c._id,
+        contactName: c.fullName,
+        monthDay: `${String(dob.getMonth() + 1).padStart(2, "0")}-${String(dob.getDate()).padStart(2, "0")}`,
+      });
+    }
+  }
+  return rows.sort((a, b) => a.monthDay.localeCompare(b.monthDay));
+}
 
 /**
  * Compute who should be emailed today:
@@ -132,23 +179,7 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
     const classOverdue = overdue.filter((f) => classContactIds.has(f.contactId));
 
     // Birthdays in the next 7 days (contacts carry date of birth)
-    const birthdays: ClassRecipient["birthdays"] = [];
-    for (const c of classContacts) {
-      if (!c.dateOfBirth) continue;
-      const dob = new Date(c.dateOfBirth);
-      if (isNaN(dob.getTime())) continue;
-      const next = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
-      if (next < now) next.setFullYear(now.getFullYear() + 1);
-      const dateStr = localDate(next);
-      if (dateStr >= today && dateStr <= in7) {
-        birthdays.push({
-          contactId: c._id,
-          contactName: c.fullName,
-          monthDay: `${String(dob.getMonth() + 1).padStart(2, "0")}-${String(dob.getDate()).padStart(2, "0")}`,
-        });
-      }
-    }
-    birthdays.sort((a, b) => a.monthDay.localeCompare(b.monthDay));
+    const birthdays = birthdaysInWindow(classContacts, now, today, in7);
 
     // Members with no youth-meeting attendance in the last 4 weeks
     const memberRows = attendance.filter(
@@ -198,11 +229,193 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
     };
   });
 
+  // ---- Ministry digest: administrators and evangelism coordinators ----
+  //
+  // Both roles receive a ministry-wide picture, but only the sections their
+  // role may read: an administrator gets the full picture (including account
+  // and member-directory health, which is admin-only), while a coordinator gets
+  // outreach, follow-up and worker oversight but nothing from the member
+  // directory or account management.
+  const stageAtLeast = (stage: string) =>
+    liveContacts.filter(
+      (c) =>
+        STAGE_ORDER.indexOf((c.status ?? STAGES.REACHED) as never) >=
+        STAGE_ORDER.indexOf(stage as never),
+    ).length;
+
+  const weekEnd = addDays(now, 7);
+  const upcomingThisWeek = pending.filter((f) => f.date >= today && f.date <= weekEnd);
+  const newContactsThisWeek = liveContacts.filter((c) => localDate(new Date(c.createdAt)) >= past7);
+  const completedRecent = liveFollowups.filter(
+    (f) => f.status === FOLLOWUP_STATUS.COMPLETED && (f.completedDate ?? "") >= past28,
+  ).length;
+  const missedRecent = liveFollowups.filter(
+    (f) => f.status === FOLLOWUP_STATUS.MISSED && f.date >= past28,
+  ).length;
+  const responseRate =
+    completedRecent + missedRecent > 0
+      ? Math.round((completedRecent / (completedRecent + missedRecent)) * 100)
+      : 0;
+  const unassigned = liveContacts.filter((c) => !c.assignedWorkerId && !c.assignedWorker);
+  const ministryBirthdays = birthdaysInWindow(liveContacts, now, today, in7);
+  const workerLoad = workerRecipients
+    .map((r) => ({
+      name: r.name,
+      open: r.items.length,
+      overdue: r.items.filter((i) => i.overdue).length,
+    }))
+    .sort((a, b) => b.overdue - a.overdue || b.open - a.open)
+    .slice(0, 8);
+
+  // Admin-only: accounts that signed up but no one has vouched for them yet,
+  // and members whose account has gone quiet on the app.
+  const unlinkedAccounts = people.filter((u) => !u.memberId && userRoles(u).length === 0);
+  const activityCutoff = now.getTime() - MEMBER_INACTIVITY_DAYS * 86400000;
+  const userByMemberId = new Map(
+    people.filter((u) => u.memberId).map((u) => [u.memberId as string, u]),
+  );
+  const quietMembers = liveMembers.filter((m) => {
+    const account = userByMemberId.get(m._id);
+    if (!account) return false;
+    return (account.lastActiveAt ?? 0) < activityCutoff;
+  });
+  const lowAttendanceAll = liveMembers.filter(
+    (m) =>
+      !attendance.some(
+        (a) => a.subjectType === "member" && a.memberId === m._id && a.type === "youthMeeting" && a.status === "present" && a.date >= past28,
+      ),
+  );
+
+  /** Sections that both administrators and coordinators may read. */
+  const sharedSections = () => [
+    {
+      heading: "Outreach",
+      body:
+        `• People reached (all time): ${liveContacts.length}<br/>` +
+        `• New contacts this week: ${newContactsThisWeek.length}<br/>` +
+        `• Accepted Christ: ${tally(stageAtLeast(STAGES.ACCEPTED_CHRIST), liveContacts.length)} of contacts reached<br/>` +
+        `• Baptized: ${stageAtLeast(STAGES.BAPTIZED)} · Joined church: ${stageAtLeast(STAGES.JOINED_CHURCH)} · Serving: ${stageAtLeast(STAGES.SERVING)}`,
+    },
+    {
+      heading: "New this week",
+      body: bullets(
+        newContactsThisWeek
+          .slice(0, 6)
+          .map((c) => `${c.fullName}${c.klass ? ` — ${c.klass} Class` : c.area ? ` — ${c.area}` : ""}`),
+        "No new contacts recorded in the last 7 days.",
+      ),
+    },
+    {
+      heading: "Follow-up status",
+      body:
+        `• Active (pending): ${pending.length}<br/>` +
+        `• Overdue: ${overdue.length}<br/>` +
+        `• Due in the next 7 days: ${upcomingThisWeek.length}<br/>` +
+        `• Completed in the last 4 weeks: ${completedRecent}<br/>` +
+        `• Missed in the last 4 weeks: ${missedRecent} · Response rate: ${responseRate}%`,
+    },
+    {
+      heading: "Overdue follow-ups to act on",
+      body: bullets(
+        overdue
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .slice(0, 8)
+          .map(
+            (f) =>
+              `${contactById.get(f.contactId)?.fullName ?? "Unknown"} — ${FOLLOWUP_TYPE_LABELS[f.type] ?? f.type} — was due ${fmtShortDate(f.date)}${f.assignedWorker ? ` (${f.assignedWorker})` : " · no worker"}`,
+          ),
+        "Nothing overdue — every follow-up is on schedule.",
+      ),
+    },
+    {
+      heading: "Follow-up workers",
+      body: bullets(
+        workerLoad.map((w) => `${w.name} — ${w.open} open in the next 3 days, ${w.overdue} overdue`),
+        "No worker has anything due in the next 3 days.",
+      ),
+    },
+    {
+      heading: "Contacts without a follow-up worker",
+      body:
+        unassigned.length === 0
+          ? "Every contact has an assigned follow-up worker."
+          : `${unassigned.length} of ${liveContacts.length} contacts have no worker assigned.<br/>` +
+            bullets(
+              unassigned.slice(0, 6).map((c) => c.fullName),
+              "",
+            ),
+    },
+    {
+      heading: "Birthdays this week",
+      body: bullets(
+        ministryBirthdays.map((b) => `${b.contactName} — ${b.monthDay}`),
+        "No birthdays in the next 7 days.",
+      ),
+    },
+  ];
+
+  const ministryRecipients: MinistryRecipient[] = [];
+  for (const recipient of people) {
+    const roles = userRoles(recipient);
+    const isMinistryAdmin = roles.includes(ROLES.ADMIN);
+    const isCoordinator = roles.includes(ROLES.COORDINATOR);
+    if (!isMinistryAdmin && !isCoordinator) continue;
+    if (!recipient.email && !userPhone(recipient)) continue;
+
+    const sections = sharedSections();
+
+    if (isMinistryAdmin) {
+      // Full system access: account hygiene and the member directory.
+      sections.push(
+        {
+          heading: "Member directory",
+          body:
+            `• Members on record: ${liveMembers.length}<br/>` +
+            `• No youth meeting in the last 4 weeks: ${lowAttendanceAll.length}<br/>` +
+            `• Accounts quiet on the app for ${MEMBER_INACTIVITY_DAYS}+ days: ${quietMembers.length}`,
+        },
+        {
+          heading: "Members needing follow-up",
+          body: bullets(
+            lowAttendanceAll.slice(0, 8).map((m) => `${m.fullName}${m.klass ? ` — ${m.klass} Class` : ""}`),
+            "Every member has attended a youth meeting recently.",
+          ),
+        },
+        {
+          heading: "Access & account health",
+          body:
+            unlinkedAccounts.length === 0
+              ? "Every signed-in account is linked to a member record or holds a role."
+              : `${unlinkedAccounts.length} account${unlinkedAccounts.length === 1 ? "" : "s"} signed up without a linked member profile and cannot reach ministry data. Link them from Settings → Access Review.<br/>` +
+                bullets(
+                  unlinkedAccounts
+                    .slice(0, 6)
+                    .map((u) => `${u.name ?? u.email ?? "Unnamed account"} — awaiting a member link`),
+                  "",
+                ),
+        },
+      );
+    }
+
+    ministryRecipients.push({
+      userId: recipient._id,
+      email: recipient.email ?? "",
+      phone: userPhone(recipient),
+      name: recipient.name ?? (isMinistryAdmin ? "Administrator" : "Coordinator"),
+      roleLabel: ROLE_LABELS[(isMinistryAdmin ? ROLES.ADMIN : ROLES.COORDINATOR) as keyof typeof ROLE_LABELS],
+      scopeNote: isMinistryAdmin
+        ? "ministry-wide outreach, follow-ups, workers, member directory and account health."
+        : "ministry-wide outreach, follow-ups and follow-up worker oversight.",
+      sections,
+    });
+  }
+
   return {
     enabled,
     counts: {
       workerEmails: workerRecipients.length,
       classEmails: classRecipients.length,
+      ministryEmails: ministryRecipients.length,
       skippedWorkers: skippedNames.size,
       upcoming: upcoming.length,
       overdue: overdue.length,
@@ -212,6 +425,7 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
     },
     workerRecipients,
     classRecipients,
+    ministryRecipients,
   };
 }
 
@@ -229,10 +443,14 @@ export const preview = query({
     if (!user) return null;
     const data = await computeDigest(ctx);
     if (userRoles(user).includes(ROLES.ADMIN)) return data;
+    // Everyone else only sees the parts of the digest addressed to them — a
+    // coordinator sees their own ministry digest, never the administrator's.
+    const mine = (recipient: { userId?: string }) => recipient.userId === user._id;
     return {
       ...data,
-      workerRecipients: data.workerRecipients.filter((r) => r.userId === user._id),
-      classRecipients: data.classRecipients.filter((r) => r.userId === user._id),
+      workerRecipients: data.workerRecipients.filter(mine),
+      classRecipients: data.classRecipients.filter(mine),
+      ministryRecipients: data.ministryRecipients.filter(mine),
     };
   },
 });

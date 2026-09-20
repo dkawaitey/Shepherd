@@ -145,6 +145,44 @@ export function buildWorkerEmail(r: WorkerRecipient) {
   return { subject: title, html, text };
 }
 
+export interface MinistrySection {
+  heading: string;
+  body: string;
+}
+
+/**
+ * Role-scoped ministry digest sent to administrators and evangelism
+ * coordinators. The sections are composed on the server (see reminders.ts) so
+ * each recipient only ever receives the information their role may read.
+ */
+export interface MinistryRecipient {
+  userId: string;
+  email: string;
+  phone?: string;
+  name: string;
+  roleLabel: string;
+  /** Short line describing what the sections cover for this role. */
+  scopeNote: string;
+  sections: MinistrySection[];
+}
+
+export function buildMinistryEmail(r: MinistryRecipient) {
+  const title = `Ministry digest — ${r.roleLabel}`;
+  const { html, text } = emailShell(
+    title,
+    r.sections,
+    `Scoped to what your ${r.roleLabel} role can see · ${r.scopeNote} Open Shepherd for the full picture.`,
+  );
+  return { subject: title, html, text };
+}
+
+/** Compact plain-text summary used for the SMS fallback (one message, no HTML). */
+export function buildMinistrySms(r: MinistryRecipient) {
+  const lines = r.sections.slice(0, 4).map((s) => `${s.heading}: ${stripHtml(s.body)}`);
+  const body = `Shepherd — ${r.roleLabel} ministry digest\n\n${lines.join("\n")}`;
+  return body.length > 480 ? `${body.slice(0, 477)}…` : body;
+}
+
 export function buildClassEmail(r: ClassRecipient) {
   const followupLine = (x: { contactName: string; typeLabel: string; date: string }) =>
     `• ${x.contactName} — ${x.typeLabel} — ${fmtShortDate(x.date)}`;
