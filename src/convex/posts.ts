@@ -404,19 +404,24 @@ export const list = query({
 });
 
 /**
- * Polls still taking answers, newest first — the dashboard's poll cards.
+ * The dashboard's poll board: polls still taking answers, plus the results of
+ * the most recent polls that have closed (by hand or on their deadline).
  *
- * Any signed-in team member may read these (they can already read the feed).
+ * Any signed-in team member may read this — they can already read the feed.
  * The walk over recent announcements is capped, so the cost stays bounded even
- * on a busy feed, and closes are honoured on read so a poll drops off the
- * dashboard the moment its deadline passes rather than at the next cron run.
+ * on a busy feed, and closes are honoured on read so a poll moves from "open"
+ * to "result" the moment its deadline passes, not at the next cron run.
  */
-export const openPolls = query({
-  args: { limit: v.optional(v.number()) },
+export const pollBoard = query({
+  args: {
+    openLimit: v.optional(v.number()),
+    resultLimit: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    if (!user || user.isAnonymous) return [];
-    const limit = Math.min(Math.max(Math.trunc(args.limit ?? 6), 1), 12);
+    if (!user || user.isAnonymous) return { open: [], recentResults: [] };
+    const openLimit = Math.min(Math.max(Math.trunc(args.openLimit ?? 6), 1), 12);
+    const resultLimit = Math.min(Math.max(Math.trunc(args.resultLimit ?? 3), 0), 6);
     const MAX_SCAN = 300;
 
     const recent = await ctx.db
@@ -425,7 +430,7 @@ export const openPolls = query({
       .order("desc")
       .take(MAX_SCAN);
 
-    const out: {
+    type OpenPoll = {
       postId: Id<"posts">;
       question: string;
       author: string;
@@ -436,26 +441,72 @@ export const openPolls = query({
       closesAt?: number;
       reminderMinutesBefore?: number;
       myOptionIds: string[];
-    }[] = [];
+    };
+    type ClosedPoll = {
+      postId: Id<"posts">;
+      question: string;
+      author: string;
+      createdAt: number;
+      closedAt?: number;
+      /** True when the poll's own deadline closed it, rather than a leader. */
+      autoClosed: boolean;
+      totalVotes: number;
+      voterCount: number;
+      allowMultiple: boolean;
+      /** Options ranked by votes, biggest first. */
+      ranked: { id: string; text: string; count: number }[];
+      winner: string;
+    };
+
+    const open: OpenPoll[] = [];
+    const recentResults: ClosedPoll[] = [];
 
     for (const post of recent) {
-      if (out.length >= limit) break;
+      if (open.length >= openLimit && recentResults.length >= resultLimit) break;
       const poll = await pollFor(ctx, post, user._id);
-      if (!poll || poll.closed) continue;
-      out.push({
+      if (!poll) continue;
+
+      if (!poll.closed) {
+        if (open.length >= openLimit) continue;
+        open.push({
+          postId: post._id,
+          question: poll.question,
+          author: post.author ?? "Member",
+          createdAt: post.createdAt,
+          totalVotes: poll.totalVotes,
+          voterCount: poll.voterCount,
+          allowMultiple: poll.allowMultiple,
+          closesAt: poll.closesAt,
+          reminderMinutesBefore: poll.reminderMinutesBefore ?? undefined,
+          myOptionIds: poll.myOptionIds,
+        });
+        continue;
+      }
+
+      // A closed poll with no answers has no result to show.
+      if (poll.totalVotes === 0 || recentResults.length >= resultLimit) continue;
+      const ranked = poll.options
+        .map((o) => ({ id: o.id, text: o.text, count: poll.counts[o.id] ?? 0 }))
+        .sort((a, b) => b.count - a.count);
+      recentResults.push({
         postId: post._id,
         question: poll.question,
         author: post.author ?? "Member",
         createdAt: post.createdAt,
+        closedAt: poll.closedAt,
+        autoClosed:
+          poll.closesAt !== undefined &&
+          poll.closedAt !== undefined &&
+          poll.closedAt >= poll.closesAt,
         totalVotes: poll.totalVotes,
         voterCount: poll.voterCount,
         allowMultiple: poll.allowMultiple,
-        closesAt: poll.closesAt,
-        reminderMinutesBefore: poll.reminderMinutesBefore ?? undefined,
-        myOptionIds: poll.myOptionIds,
+        ranked,
+        winner: ranked[0]?.text ?? "",
       });
     }
-    return out;
+
+    return { open, recentResults };
   },
 });
 

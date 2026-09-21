@@ -40,6 +40,8 @@ import {
   Clock,
   CheckCircle2,
   Plus,
+  Trophy,
+  Lock,
 } from "lucide-react";
 import { Link } from "react-router";
 import { PollComposer } from "@/components/poll-composer";
@@ -224,8 +226,14 @@ export default function Dashboard() {
   const stats = useQuery(api.dashboard.stats);
   // Only the latest few are shown here, so don't load the whole feed.
   const posts = useQuery(api.posts.list, { limit: 5 });
-  // Polls still taking answers — each card opens the poll itself.
-  const openPolls = useQuery(api.posts.openPolls, { limit: 6 });
+  // Polls still taking answers, plus the results of recently closed ones —
+  // each card opens that poll in the announcements feed.
+  const pollBoard = useQuery(api.posts.pollBoard, {
+    openLimit: 6,
+    resultLimit: 3,
+  });
+  const openPolls = pollBoard?.open ?? [];
+  const pollResults = pollBoard?.recentResults ?? [];
 
   const rawName = (me?.name || me?.email || "").split(/[\s@.]/).filter(Boolean)[0];
   const firstName = rawName
@@ -343,13 +351,17 @@ export default function Dashboard() {
             <Plus className="mr-1 h-3 w-3" /> New poll
           </Button>
         </div>
-        {(openPolls ?? []).length === 0 ? (
+        {openPolls.length === 0 && pollResults.length === 0 ? (
           <p className="py-3 text-center text-[11px] text-muted-foreground">
-            No open polls — start one and the whole team gets to answer.
+            No polls yet — start one and the whole team gets to answer.
+          </p>
+        ) : openPolls.length === 0 ? (
+          <p className="pb-2 text-[11px] text-muted-foreground">
+            No polls are open right now — start one above.
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {(openPolls ?? []).map((p) => {
+            {openPolls.map((p) => {
               const answered = p.myOptionIds.length > 0;
               return (
                 <Link
@@ -396,6 +408,80 @@ export default function Dashboard() {
                 </Link>
               );
             })}
+          </div>
+        )}
+
+        {/* Results of polls that have closed. Also clickable — tapping one
+            opens the announcement with the full result and voters. */}
+        {pollResults.length > 0 && (
+          <div className="mt-4 border-t border-dashed pt-3">
+            <p className="term-label mb-2 flex items-center gap-1.5">
+              <Trophy className="h-3 w-3" /> recent results
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {pollResults.map((p) => (
+                <Link
+                  key={p.postId}
+                  to={`/announcements?post=${p.postId}`}
+                  className="group flex flex-col gap-1.5 rounded-md border bg-muted/20 p-3 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-muted/40 hover:shadow-md"
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="line-clamp-2 text-[12px] font-semibold group-hover:text-primary">
+                      {p.question}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                      <Lock className="h-2.5 w-2.5" /> closed
+                    </span>
+                  </span>
+
+                  <span className="text-[10px] text-muted-foreground">
+                    <span className="font-semibold text-foreground/90">
+                      {p.winner}
+                    </span>{" "}
+                    {p.allowMultiple ? "led" : "won"} ·{" "}
+                    <span className="font-mono tabular-nums">{p.totalVotes}</span>{" "}
+                    {p.totalVotes === 1 ? "vote" : "votes"} from{" "}
+                    <span className="font-mono tabular-nums">{p.voterCount}</span>{" "}
+                    {p.voterCount === 1 ? "person" : "people"}
+                  </span>
+
+                  {/* A compact share bar per option, so the shape of the vote
+                      is readable at a glance. */}
+                  <span className="space-y-1">
+                    {p.ranked.slice(0, 3).map((o) => {
+                      const pct =
+                        p.totalVotes > 0
+                          ? Math.round((o.count / p.totalVotes) * 100)
+                          : 0;
+                      return (
+                        <span key={o.id} className="block">
+                          <span className="flex items-center justify-between text-[9px] text-muted-foreground">
+                            <span className="truncate">{o.text}</span>
+                            <span className="ml-2 shrink-0 font-mono tabular-nums">
+                              {o.count} · {pct}%
+                            </span>
+                          </span>
+                          <span className="mt-0.5 block h-1.5 overflow-hidden rounded-sm bg-muted">
+                            <span
+                              className="block h-full rounded-sm bg-[#8faf8a]"
+                              style={{ width: `${Math.max(o.count > 0 ? pct : 0, o.count > 0 ? 4 : 0)}%` }}
+                            />
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </span>
+
+                  <span className="text-[9px] text-muted-foreground/70">
+                    {p.autoClosed ? "closed automatically" : "closed by a leader"}
+                    {p.closedAt !== undefined
+                      ? ` · ${fmtDate(new Date(p.closedAt).toISOString())}`
+                      : ""}{" "}
+                    · open →
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
       </div>
