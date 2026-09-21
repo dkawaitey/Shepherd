@@ -129,6 +129,12 @@ export default function Announcements() {
   const [search, setSearch] = useState("");
   const [author, setAuthor] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  // Whether the composer opens as a standalone poll or a regular post.
+  const [createPoll, setCreatePoll] = useState(false);
+  const openComposer = (poll: boolean) => {
+    setCreatePoll(poll);
+    setCreateOpen(true);
+  };
   const [expanded, setExpanded] = useState<string | null>(null);
   const [limit, setLimit] = useState(FEED_PAGE_SIZE);
 
@@ -178,9 +184,14 @@ export default function Announcements() {
         title="Announcements"
         code="ann"
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" /> New post
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => openComposer(true)}>
+              <BarChart3 className="mr-1.5 h-4 w-4" /> New poll
+            </Button>
+            <Button onClick={() => openComposer(false)}>
+              <Plus className="mr-1.5 h-4 w-4" /> New post
+            </Button>
+          </div>
         }
       />
 
@@ -217,7 +228,7 @@ export default function Announcements() {
           title="No posts yet"
           message="Post the first update for the team — a testimony, an announcement or an encouragement."
           action={
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button onClick={() => openComposer(false)}>
               <Plus className="mr-1.5 h-4 w-4" /> New post
             </Button>
           }
@@ -255,7 +266,11 @@ export default function Announcements() {
         </div>
       )}
 
-      <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreatePostDialog
+        open={createOpen}
+        startPoll={createPoll}
+        onOpenChange={setCreateOpen}
+      />
     </div>
   );
 }
@@ -895,7 +910,10 @@ function PostCard({
               <UserRound className="h-3.5 w-3.5 text-primary" />
             </span>
             <div>
-              <div className="text-[13px] font-bold">{post.title}</div>
+              <div className="text-[13px] font-bold">
+                {/* A standalone poll carries no title of its own. */}
+                {post.title.trim() || (post.poll ? "Poll" : "Announcement")}
+              </div>
               <div className="text-[10px] text-muted-foreground">
                 {post.author} · {fmtDateTime(new Date(post.createdAt).toISOString())}
               </div>
@@ -921,9 +939,11 @@ function PostCard({
           </div>
         </div>
 
-        <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6 text-foreground/90">
-          {post.body}
-        </p>
+        {post.body.trim() && (
+          <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6 text-foreground/90">
+            {post.body}
+          </p>
+        )}
 
         {post.media && post.media.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -995,7 +1015,7 @@ function PostCard({
 
       <EngagementDetailsDialog
         postId={post._id}
-        title={post.title}
+        title={post.title.trim() || (post.poll ? "Poll" : "Announcement")}
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
       />
@@ -1455,9 +1475,12 @@ type PendingFile = {
 
 function CreatePostDialog({
   open,
+  startPoll,
   onOpenChange,
 }: {
   open: boolean;
+  /** Open the composer with the standalone-poll fields already showing. */
+  startPoll: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
   const create = useMutation(api.posts.create);
@@ -1474,6 +1497,11 @@ function CreatePostDialog({
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollMultiple, setPollMultiple] = useState(false);
+
+  // Opened as a poll versus a post. Reset whenever the dialog is opened.
+  useEffect(() => {
+    if (open) setPollOpen(startPoll);
+  }, [open, startPoll]);
 
   const reset = () => {
     setTitle("");
@@ -1516,16 +1544,19 @@ function CreatePostDialog({
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>New post</DialogTitle>
+          <DialogTitle>{pollOpen ? "New poll" : "New post"}</DialogTitle>
           <DialogDescription>
-            Share an update with the team. Posts appear on the dashboard and in the announcements feed.
+            {pollOpen
+              ? "Polls are standalone — a title and content are optional. Add them if you want to give the poll some context."
+              : "Share an update with the team. Posts appear on the dashboard and in the announcements feed."}
           </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-3"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (!title.trim() || !body.trim()) {
+            // A post needs a title and content; a standalone poll needs neither.
+            if (!pollOpen && (!title.trim() || !body.trim())) {
               setError("Title and content are required");
               return;
             }
@@ -1591,8 +1622,8 @@ function CreatePostDialog({
               }
 
               await create({
-                title: title.trim(),
-                body: body.trim(),
+                title: title.trim() || undefined,
+                body: body.trim() || undefined,
                 tags: tags
                   .split(/[,\s]+/)
                   .map((t) => t.trim().replace(/^#/, ""))
@@ -1607,7 +1638,7 @@ function CreatePostDialog({
                     }
                   : undefined,
               });
-              toast.success("Post published");
+              toast.success(pollOpen ? "Poll published" : "Post published");
               reset();
               onOpenChange(false);
             } catch (err: any) {
@@ -1618,7 +1649,9 @@ function CreatePostDialog({
           }}
         >
           <div>
-            <Label htmlFor="ap-title">Title *</Label>
+            <Label htmlFor="ap-title">
+              Title {pollOpen ? "(optional)" : "*"}
+            </Label>
             <Input
               id="ap-title"
               className="mt-1"
@@ -1629,7 +1662,9 @@ function CreatePostDialog({
             />
           </div>
           <div>
-            <Label htmlFor="ap-body">Content *</Label>
+            <Label htmlFor="ap-body">
+              Content {pollOpen ? "(optional)" : "*"}
+            </Label>
             <Textarea
               id="ap-body"
               rows={5}

@@ -654,11 +654,16 @@ export const engagementDetails = query({
   },
 });
 
-/** Post an update / announcement. Any signed-in team member can post. */
+/**
+ * Post an update / announcement. Any signed-in team member can post.
+ *
+ * A post needs a title and content — unless it is a standalone poll, which can
+ * be published on its own with neither.
+ */
 export const create = mutation({
   args: {
-    title: v.string(),
-    body: v.string(),
+    title: v.optional(v.string()),
+    body: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     media: v.optional(v.array(v.object({
       storageId: v.string(),
@@ -689,8 +694,20 @@ export const create = mutation({
       ROLES.LEADER,
     ]);
     await checkRateLimit(ctx, "post.create");
-    const title = validatePostTitle(args.title);
-    const body = validatePostBody(args.body);
+    // A standalone poll carries no title/content of its own.
+    const standalonePoll = args.poll !== undefined;
+    const title = standalonePoll
+      ? (args.title ?? "").trim()
+      : validatePostTitle(args.title ?? "");
+    const body = standalonePoll
+      ? (args.body ?? "").trim()
+      : validatePostBody(args.body ?? "");
+    if (title.length > 500) {
+      throw new ConvexError("Title must be 500 characters or fewer");
+    }
+    if (body.length > 10000) {
+      throw new ConvexError("Content must be 10000 characters or fewer");
+    }
 
     // Validate media attachments server-side
     if (args.media) {
@@ -779,7 +796,7 @@ export const create = mutation({
       action: "post.create",
       entityType: "posts",
       entityId: id,
-      details: title,
+      details: pollInput ? `Poll: ${pollInput.question}` : title,
     });
 
     // Schedule push notification for all active users including the author
@@ -799,7 +816,11 @@ export const create = mutation({
           status: "scheduled",
           payload: {
             title: pollInput ? "New poll" : "New announcement",
-            body: `${user.name ?? user.email ?? "Someone"}: ${title}`,
+            body: `${user.name ?? user.email ?? "Someone"}: ${
+              pollInput
+                ? pollInput.question
+                : title || body || "posted an update"
+            }`,
             url: "/announcements",
           },
           recipientUserIds: recipientIds as any,
@@ -1249,7 +1270,7 @@ export const remove = mutation({
       action: "post.delete",
       entityType: "posts",
       entityId: args.id,
-      details: post.title,
+      details: post.title.trim() || (post.pollId ? "Poll" : "Announcement"),
     });
   },
 });

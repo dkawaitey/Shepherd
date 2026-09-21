@@ -461,7 +461,10 @@ export default function Dashboard() {
               >
                 <span className="mt-0.5 text-[10px] font-bold text-primary">❯</span>
                 <span className="min-w-0">
-                  <span className="block truncate text-[12px] font-semibold">{p.title}</span>
+                  <span className="block truncate text-[12px] font-semibold">
+                    {/* A standalone poll has no title — show its question. */}
+                    {p.title.trim() || p.poll?.question || "Announcement"}
+                  </span>
                   <span className="block truncate text-[10px] text-muted-foreground">
                     {p.author} · {fmtDate(new Date(p.createdAt).toISOString())}
                   </span>
