@@ -233,6 +233,7 @@ async function pollFor(ctx: Ctx, post: Doc<"posts">, userId: Id<"users">) {
     closed: pollIsClosed(poll),
     closedAt: poll.closedAt,
     closesAt: poll.closesAt,
+    reminderMinutesBefore: poll.reminderMinutesBefore,
     myOptionIds: mine.map((v) => v.optionId),
   };
 }
@@ -248,11 +249,24 @@ async function pollDetail(ctx: Ctx, poll: Doc<"polls">) {
     .collect();
 
   const byOption = new Map<string, { name: string; at: number }[]>();
+  const voterIds = new Set<string>();
   for (const v of votes) {
     const list = byOption.get(v.optionId) ?? [];
     list.push({ name: v.userName ?? "Member", at: v.createdAt });
     byOption.set(v.optionId, list);
+    voterIds.add(v.userId);
   }
+
+  // Who the poll went out to but has not answered. The audience is every
+  // signed-in account (that is who the push reaches), so guests are excluded —
+  // they cannot vote and nobody should be counting them as a laggard.
+  const nonVoters: string[] = [];
+  for (const u of await ctx.db.query("users").collect()) {
+    if (u.isAnonymous) continue;
+    if (voterIds.has(u._id)) continue;
+    nonVoters.push(u.name ?? u.email ?? "Member");
+  }
+  nonVoters.sort((a, b) => a.localeCompare(b));
 
   return {
     _id: poll._id,
@@ -265,6 +279,9 @@ async function pollDetail(ctx: Ctx, poll: Doc<"polls">) {
     reminderSentAt: poll.reminderSentAt,
     totalVotes: poll.totalVotes,
     voterCount: poll.voterCount,
+    /** Accounts that have not answered yet, by name. */
+    nonVoters,
+    nonVoterCount: nonVoters.length,
     options: poll.options.map((o) => ({
       id: o.id,
       text: o.text,
@@ -383,6 +400,62 @@ export const list = query({
         poll: await pollFor(ctx, p, user._id),
       })),
     );
+  },
+});
+
+/**
+ * Polls still taking answers, newest first — the dashboard's poll cards.
+ *
+ * Any signed-in team member may read these (they can already read the feed).
+ * The walk over recent announcements is capped, so the cost stays bounded even
+ * on a busy feed, and closes are honoured on read so a poll drops off the
+ * dashboard the moment its deadline passes rather than at the next cron run.
+ */
+export const openPolls = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) return [];
+    const limit = Math.min(Math.max(Math.trunc(args.limit ?? 6), 1), 12);
+    const MAX_SCAN = 300;
+
+    const recent = await ctx.db
+      .query("posts")
+      .withIndex("createdAt")
+      .order("desc")
+      .take(MAX_SCAN);
+
+    const out: {
+      postId: Id<"posts">;
+      question: string;
+      author: string;
+      createdAt: number;
+      totalVotes: number;
+      voterCount: number;
+      allowMultiple: boolean;
+      closesAt?: number;
+      reminderMinutesBefore?: number;
+      myOptionIds: string[];
+    }[] = [];
+
+    for (const post of recent) {
+      if (out.length >= limit) break;
+      const poll = await pollFor(ctx, post, user._id);
+      if (!poll || poll.closed) continue;
+      out.push({
+        postId: post._id,
+        question: poll.question,
+        author: post.author ?? "Member",
+        createdAt: post.createdAt,
+        totalVotes: poll.totalVotes,
+        voterCount: poll.voterCount,
+        allowMultiple: poll.allowMultiple,
+        closesAt: poll.closesAt,
+        reminderMinutesBefore: poll.reminderMinutesBefore ?? undefined,
+        myOptionIds: poll.myOptionIds,
+      });
+    }
+    return out;
   },
 });
 
@@ -1053,6 +1126,130 @@ export const setPollClosed = mutation({
       entityId: poll._id,
       details: poll.question,
     });
+  },
+});
+
+/**
+ * Move (or clear) an open poll's deadline and its closing reminder.
+ *
+ * Allowed for the post's author, a coordinator, or an administrator — the same
+ * people who may close the poll. A closed poll must be reopened first, so a
+ * reschedule can never silently undo a result that was already announced.
+ */
+export const setPollSchedule = mutation({
+  args: {
+    postId: v.id("posts"),
+    /** New deadline (epoch ms), or null to clear it. Omit to leave it alone. */
+    closesAt: v.optional(v.union(v.number(), v.null())),
+    /** Reminder lead time in minutes, or null to switch the reminder off. */
+    reminderMinutesBefore: v.optional(v.union(v.number(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.LEADER,
+    ]);
+    const post = await ctx.db.get(args.postId);
+    if (!post) throw new ConvexError("Post not found");
+    if (!canManagePost(user, post)) {
+      throw new ConvexError("You can only reschedule your own poll");
+    }
+    const poll = await ctx.db
+      .query("polls")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .first();
+    if (!poll) throw new ConvexError("This announcement has no poll");
+    if (pollIsClosed(poll)) {
+      throw new ConvexError(
+        "This poll is closed — reopen it before changing its schedule",
+      );
+    }
+
+    const now = Date.now();
+
+    // –– deadline ––
+    let closesAt = poll.closesAt;
+    if (args.closesAt !== undefined) {
+      if (args.closesAt === null) {
+        closesAt = undefined;
+      } else {
+        const t = args.closesAt;
+        if (!Number.isFinite(t)) {
+          throw new ConvexError("That close time is not a valid date");
+        }
+        if (t <= now + 60_000) {
+          throw new ConvexError(
+            "The close time must be at least a minute in the future",
+          );
+        }
+        if (t > now + 365 * 24 * 60 * 60 * 1000) {
+          throw new ConvexError("The close time must be within a year");
+        }
+        closesAt = t;
+      }
+    }
+
+    // –– reminder ––
+    let reminder = poll.reminderMinutesBefore;
+    if (args.reminderMinutesBefore !== undefined) {
+      if (args.reminderMinutesBefore === null) {
+        reminder = undefined;
+      } else {
+        const mins = args.reminderMinutesBefore;
+        if (
+          !Number.isFinite(mins) ||
+          mins < 1 ||
+          mins > MAX_POLL_REMINDER_MINUTES
+        ) {
+          throw new ConvexError("That reminder lead time is not supported");
+        }
+        reminder = Math.round(mins);
+      }
+    }
+    // Clearing the deadline drops a reminder that was set for it, rather than
+    // failing — a reminder without a deadline cannot be honoured anyway.
+    if (closesAt === undefined && args.reminderMinutesBefore === undefined) {
+      reminder = undefined;
+    }
+    if (reminder !== undefined) {
+      if (closesAt === undefined) {
+        throw new ConvexError("A closing reminder needs a close time");
+      }
+      if (closesAt - now <= reminder * 60_000) {
+        throw new ConvexError(
+          "The reminder must land before the poll closes — pick a longer close time or a shorter reminder",
+        );
+      }
+    }
+
+    // A reminder already sent for the old deadline may go out again for the new
+    // one — but only while the new reminder moment is still ahead of us, so
+    // moving a deadline can never fire an immediate second push.
+    let reminderSentAt = poll.reminderSentAt;
+    if (reminder === undefined) {
+      reminderSentAt = undefined;
+    } else if (closesAt !== undefined && closesAt - reminder * 60_000 > now) {
+      reminderSentAt = undefined;
+    }
+
+    await ctx.db.patch(poll._id, {
+      closesAt,
+      reminderMinutesBefore: reminder,
+      reminderSentAt,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "poll.reschedule",
+      entityType: "polls",
+      entityId: poll._id,
+      details:
+        closesAt === undefined
+          ? `${poll.question} — deadline cleared`
+          : `${poll.question} — closes ${new Date(closesAt).toISOString()}`,
+    });
+
+    return { closesAt, reminderMinutesBefore: reminder };
   },
 });
 

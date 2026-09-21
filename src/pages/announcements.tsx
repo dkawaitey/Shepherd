@@ -37,6 +37,7 @@ import {
 } from "@/convex/constants";
 import { userHasRole, userIsAdmin } from "@/components/shared";
 import { PollComposer } from "@/components/poll-composer";
+import { PollScheduleDialog } from "@/components/poll-schedule";
 
 import {
   Check,
@@ -488,6 +489,8 @@ type FeedPoll = {
   closed: boolean;
   /** Auto-close deadline (epoch ms), if the poll has one. */
   closesAt?: number;
+  /** Minutes before that deadline to send a reminder push, if one is set. */
+  reminderMinutesBefore?: number;
   myOptionIds: string[];
 };
 
@@ -687,6 +690,8 @@ function PollCard({
   const [busy, setBusy] = useState(false);
   const [closing, setClosing] = useState(false);
   const [announcing, setAnnouncing] = useState(false);
+  // Rescheduling an open poll (deadline + closing reminder).
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   // Local selection for multiple-answer polls. Deliberately not synced from the
   // query result on every render: the feed re-runs whenever anyone votes, which
   // would wipe a selection the reader is still making.
@@ -837,6 +842,12 @@ function PollCard({
             {poll.voterCount} {poll.voterCount === 1 ? "person" : "people"}
           </span>
         )}
+        {!poll.closed && poll.reminderMinutesBefore !== undefined && (
+          <span className="flex items-center gap-1">
+            <Bell className="h-2.5 w-2.5" />
+            reminder {reminderLeadLabel(poll.reminderMinutesBefore)}
+          </span>
+        )}
         {!poll.closed && !poll.allowMultiple && voted && (
           <span className="text-muted-foreground/70">
             Tap your answer again to clear it
@@ -870,6 +881,17 @@ function PollCard({
               {poll.closed ? "Reopen poll" : "Close poll"}
             </Button>
           )}
+          {canManage && !poll.closed && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-[10px] text-muted-foreground"
+              title="Move or clear the deadline, and set the closing reminder"
+              onClick={() => setScheduleOpen(true)}
+            >
+              <CalendarClock className="mr-1 h-3 w-3" /> Edit timing
+            </Button>
+          )}
           {!poll.closed && poll.allowMultiple && (
             <>
               <Button
@@ -898,6 +920,15 @@ function PollCard({
           )}
         </div>
       )}
+
+      <PollScheduleDialog
+        postId={postId}
+        question={poll.question}
+        closesAt={poll.closesAt}
+        reminderMinutesBefore={poll.reminderMinutesBefore}
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+      />
     </div>
   );
 }
@@ -1224,6 +1255,31 @@ function EngagementDetailsDialog({
                       {" · "}
                       {details.poll.reminderSentAt !== undefined ? "sent" : "scheduled"}
                     </span>
+                  )}
+                </div>
+
+                {/* Who has not answered yet — the people to nudge before the
+                    deadline. Everyone the poll went out to is counted. */}
+                <div className="mb-2">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Hasn't answered yet · {details.poll.nonVoterCount}
+                  </div>
+                  {details.poll.nonVoters.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Everyone has answered.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {details.poll.nonVoters.map((name) => (
+                        <span
+                          key={name}
+                          className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                        >
+                          <AlertCircle className="h-2.5 w-2.5" />
+                          {name}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
 

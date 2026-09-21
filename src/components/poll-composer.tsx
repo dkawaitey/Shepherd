@@ -15,36 +15,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatError } from "@/components/shared";
-import { BarChart3, Bell, CalendarClock, Plus, X } from "lucide-react";
+import {
+  EMPTY_SCHEDULE,
+  PollScheduleFields,
+  PollScheduleValue,
+  parsePollSchedule,
+} from "@/components/poll-schedule";
+import { BarChart3, Plus, X } from "lucide-react";
 
 // Mirrors the server's poll rules (convex/posts.ts) so the composer fails early.
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 8;
 const MAX_QUESTION = 200;
 const MAX_OPTION = 120;
-
-/** Quick auto-close presets, in hours from now. */
-const CLOSE_PRESETS: { label: string; hours: number }[] = [
-  { label: "24 hours", hours: 24 },
-  { label: "3 days", hours: 72 },
-  { label: "1 week", hours: 168 },
-];
-
-/** "Remind everyone before it closes" lead times, in minutes. */
-const REMIND_PRESETS: { label: string; minutes: number }[] = [
-  { label: "1 hour before", minutes: 60 },
-  { label: "1 day before", minutes: 60 * 24 },
-  { label: "3 days before", minutes: 60 * 24 * 3 },
-];
-
-/** Epoch ms → the value a datetime-local input expects (local time). */
-function toLocalInput(ts: number) {
-  const d = new Date(ts);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`;
-}
 
 /**
  * Publish a standalone poll.
@@ -68,10 +51,8 @@ export function PollComposer({
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [multiple, setMultiple] = useState(false);
-  // Empty string = no deadline; otherwise a datetime-local value.
-  const [closesAt, setClosesAt] = useState("");
-  // Lead time for the "closes soon" push, in minutes. null = no reminder.
-  const [remindMinutes, setRemindMinutes] = useState<number | null>(null);
+  // Deadline + closing reminder, shared with the reschedule dialog.
+  const [schedule, setSchedule] = useState<PollScheduleValue>(EMPTY_SCHEDULE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,8 +60,7 @@ export function PollComposer({
     setQuestion("");
     setOptions(["", ""]);
     setMultiple(false);
-    setClosesAt("");
-    setRemindMinutes(null);
+    setSchedule(EMPTY_SCHEDULE);
     setError(null);
   };
 
@@ -124,30 +104,10 @@ export function PollComposer({
               setError("Poll options must all be different");
               return;
             }
-            let deadline: number | undefined;
-            if (closesAt) {
-              const t = new Date(closesAt).getTime();
-              if (!Number.isFinite(t)) {
-                setError("That close time is not a valid date");
-                return;
-              }
-              if (t <= Date.now() + 60_000) {
-                setError("Pick a close time at least a minute from now");
-                return;
-              }
-              deadline = t;
-            }
-            if (remindMinutes !== null) {
-              if (deadline === undefined) {
-                setError("Add a close time to send a reminder");
-                return;
-              }
-              if (deadline - Date.now() <= remindMinutes * 60_000) {
-                setError(
-                  "The reminder must land before the poll closes — pick a shorter reminder or a later close time",
-                );
-                return;
-              }
+            const parsed = parsePollSchedule(schedule);
+            if (parsed.error) {
+              setError(parsed.error);
+              return;
             }
 
             setBusy(true);
@@ -158,11 +118,8 @@ export function PollComposer({
                   question: question.trim(),
                   allowMultiple: multiple,
                   options: texts,
-                  closesAt: deadline,
-                  reminderMinutesBefore:
-                    deadline !== undefined && remindMinutes !== null
-                      ? remindMinutes
-                      : undefined,
+                  closesAt: parsed.closesAt,
+                  reminderMinutesBefore: parsed.reminderMinutesBefore,
                 },
               });
               toast.success("Poll published");
@@ -249,103 +206,11 @@ export function PollComposer({
             </Label>
           </div>
 
-          <div className="rounded-lg border border-dashed p-3">
-            <div className="flex items-center gap-2">
-              <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
-              <Label htmlFor="poll-closes" className="text-[12px]">
-                Close automatically (optional)
-              </Label>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {CLOSE_PRESETS.map((p) => {
-                const ts = Date.now() + p.hours * 60 * 60 * 1000;
-                const value = toLocalInput(ts);
-                const active = closesAt === value;
-                return (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setClosesAt(active ? "" : value)}
-                    className={
-                      "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors " +
-                      (active
-                        ? "border-primary/50 bg-accent text-primary"
-                        : "border-border bg-muted/40 text-muted-foreground hover:text-primary")
-                    }
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
-              {closesAt && (
-                <button
-                  type="button"
-                  onClick={() => setClosesAt("")}
-                  className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-primary"
-                >
-                  No deadline
-                </button>
-              )}
-            </div>
-            <Input
-              id="poll-closes"
-              type="datetime-local"
-              className="mt-2 h-8 text-[12px]"
-              value={closesAt}
-              onChange={(e) => setClosesAt(e.target.value)}
-            />
-            <p className="mt-1.5 text-[10px] text-muted-foreground">
-              Answers stop being accepted at this time. Leave it empty to close
-              the poll yourself whenever you are ready.
-            </p>
-
-            {/* Reminder push — only meaningful with a deadline, so the whole
-                block stays hidden until one is set. */}
-            {closesAt && (
-              <div className="mt-3 border-t border-dashed pt-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Bell className="h-3.5 w-3.5 text-muted-foreground" />
-                    <Label htmlFor="poll-remind" className="text-[12px]">
-                      Remind everyone before it closes
-                    </Label>
-                  </div>
-                  <Switch
-                    id="poll-remind"
-                    checked={remindMinutes !== null}
-                    onCheckedChange={(v: boolean) =>
-                      setRemindMinutes(v ? 60 * 24 : null)
-                    }
-                  />
-                </div>
-                {remindMinutes !== null && (
-                  <>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {REMIND_PRESETS.map((r) => (
-                        <button
-                          key={r.minutes}
-                          type="button"
-                          onClick={() => setRemindMinutes(r.minutes)}
-                          className={
-                            "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors " +
-                            (remindMinutes === r.minutes
-                              ? "border-primary/50 bg-accent text-primary"
-                              : "border-border bg-muted/40 text-muted-foreground hover:text-primary")
-                          }
-                        >
-                          {r.label}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="mt-1.5 text-[10px] text-muted-foreground">
-                      A device notification goes out to everyone at that time,
-                      so nobody misses the deadline.
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          <PollScheduleFields
+            idPrefix="poll"
+            value={schedule}
+            onChange={setSchedule}
+          />
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 

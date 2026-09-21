@@ -37,6 +37,9 @@ import {
   ContactRound,
   BarChart3,
   Megaphone,
+  Clock,
+  CheckCircle2,
+  Plus,
 } from "lucide-react";
 import { Link } from "react-router";
 import { PollComposer } from "@/components/poll-composer";
@@ -51,6 +54,15 @@ const CARDS = [
   { key: "missedFollowups", label: "Missed Follow-ups", to: "/followups?status=missed", icon: TriangleAlert, accent: "#f87171" },
   { key: "upcomingVisitsThisWeek", label: "Upcoming Visits This Week", to: "/followups?status=pending", icon: Flame, accent: "#fbbf24" },
 ];
+
+/** "2d" / "5h" / "12m" until a poll's deadline. */
+function closesInLabel(ts: number) {
+  const mins = Math.max(1, Math.round((ts - Date.now()) / 60_000));
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
 
 // ---------- Month calendar ----------
 function buildMonthGrid(year: number, month: number) {
@@ -212,6 +224,8 @@ export default function Dashboard() {
   const stats = useQuery(api.dashboard.stats);
   // Only the latest few are shown here, so don't load the whole feed.
   const posts = useQuery(api.posts.list, { limit: 5 });
+  // Polls still taking answers — each card opens the poll itself.
+  const openPolls = useQuery(api.posts.openPolls, { limit: 6 });
 
   const rawName = (me?.name || me?.email || "").split(/[\s@.]/).filter(Boolean)[0];
   const firstName = rawName
@@ -310,6 +324,80 @@ export default function Dashboard() {
             </button>
           );
         })}
+      </div>
+
+      {/* Open polls. Every card is clickable, like the stat cards above: it
+          opens the poll in the announcements feed. */}
+      <div className="rounded-lg border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <p className="term-label">open polls</p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[10px]"
+            onClick={() => setPollOpen(true)}
+          >
+            <Plus className="mr-1 h-3 w-3" /> New poll
+          </Button>
+        </div>
+        {(openPolls ?? []).length === 0 ? (
+          <p className="py-3 text-center text-[11px] text-muted-foreground">
+            No open polls — start one and the whole team gets to answer.
+          </p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(openPolls ?? []).map((p) => {
+              const answered = p.myOptionIds.length > 0;
+              return (
+                <Link
+                  key={p.postId}
+                  to={`/announcements?post=${p.postId}`}
+                  className="group flex flex-col gap-1.5 rounded-md border bg-muted/20 p-3 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-muted/40 hover:shadow-md"
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="line-clamp-2 text-[12px] font-semibold group-hover:text-primary">
+                      {p.question}
+                    </span>
+                    {answered ? (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                        <CheckCircle2 className="h-2.5 w-2.5" /> answered
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-medium text-status-amber">
+                        answer it
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                    <span className="font-mono tabular-nums">
+                      {p.totalVotes} {p.totalVotes === 1 ? "vote" : "votes"}
+                    </span>
+                    <span>
+                      · {p.voterCount} {p.voterCount === 1 ? "person" : "people"}
+                    </span>
+                    {p.closesAt !== undefined && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-2.5 w-2.5" /> closes in{" "}
+                        {closesInLabel(p.closesAt)}
+                      </span>
+                    )}
+                    {p.reminderMinutesBefore !== undefined && (
+                      <span className="flex items-center gap-1">
+                        <Bell className="h-2.5 w-2.5" /> reminder set
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/70">
+                    {p.author} · open →
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
