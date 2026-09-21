@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatError } from "@/components/shared";
-import { BarChart3, CalendarClock, Plus, X } from "lucide-react";
+import { BarChart3, Bell, CalendarClock, Plus, X } from "lucide-react";
 
 // Mirrors the server's poll rules (convex/posts.ts) so the composer fails early.
 const MIN_OPTIONS = 2;
@@ -28,6 +28,13 @@ const CLOSE_PRESETS: { label: string; hours: number }[] = [
   { label: "24 hours", hours: 24 },
   { label: "3 days", hours: 72 },
   { label: "1 week", hours: 168 },
+];
+
+/** "Remind everyone before it closes" lead times, in minutes. */
+const REMIND_PRESETS: { label: string; minutes: number }[] = [
+  { label: "1 hour before", minutes: 60 },
+  { label: "1 day before", minutes: 60 * 24 },
+  { label: "3 days before", minutes: 60 * 24 * 3 },
 ];
 
 /** Epoch ms → the value a datetime-local input expects (local time). */
@@ -63,6 +70,8 @@ export function PollComposer({
   const [multiple, setMultiple] = useState(false);
   // Empty string = no deadline; otherwise a datetime-local value.
   const [closesAt, setClosesAt] = useState("");
+  // Lead time for the "closes soon" push, in minutes. null = no reminder.
+  const [remindMinutes, setRemindMinutes] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +80,7 @@ export function PollComposer({
     setOptions(["", ""]);
     setMultiple(false);
     setClosesAt("");
+    setRemindMinutes(null);
     setError(null);
   };
 
@@ -127,6 +137,18 @@ export function PollComposer({
               }
               deadline = t;
             }
+            if (remindMinutes !== null) {
+              if (deadline === undefined) {
+                setError("Add a close time to send a reminder");
+                return;
+              }
+              if (deadline - Date.now() <= remindMinutes * 60_000) {
+                setError(
+                  "The reminder must land before the poll closes — pick a shorter reminder or a later close time",
+                );
+                return;
+              }
+            }
 
             setBusy(true);
             setError(null);
@@ -137,6 +159,10 @@ export function PollComposer({
                   allowMultiple: multiple,
                   options: texts,
                   closesAt: deadline,
+                  reminderMinutesBefore:
+                    deadline !== undefined && remindMinutes !== null
+                      ? remindMinutes
+                      : undefined,
                 },
               });
               toast.success("Poll published");
@@ -272,6 +298,53 @@ export function PollComposer({
               Answers stop being accepted at this time. Leave it empty to close
               the poll yourself whenever you are ready.
             </p>
+
+            {/* Reminder push — only meaningful with a deadline, so the whole
+                block stays hidden until one is set. */}
+            {closesAt && (
+              <div className="mt-3 border-t border-dashed pt-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Label htmlFor="poll-remind" className="text-[12px]">
+                      Remind everyone before it closes
+                    </Label>
+                  </div>
+                  <Switch
+                    id="poll-remind"
+                    checked={remindMinutes !== null}
+                    onCheckedChange={(v: boolean) =>
+                      setRemindMinutes(v ? 60 * 24 : null)
+                    }
+                  />
+                </div>
+                {remindMinutes !== null && (
+                  <>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {REMIND_PRESETS.map((r) => (
+                        <button
+                          key={r.minutes}
+                          type="button"
+                          onClick={() => setRemindMinutes(r.minutes)}
+                          className={
+                            "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors " +
+                            (remindMinutes === r.minutes
+                              ? "border-primary/50 bg-accent text-primary"
+                              : "border-border bg-muted/40 text-muted-foreground hover:text-primary")
+                          }
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-muted-foreground">
+                      A device notification goes out to everyone at that time,
+                      so nobody misses the deadline.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}

@@ -427,6 +427,10 @@ const schema = defineSchema(
       closedAt: v.optional(v.number()),
       /** Auto-close deadline: the poll stops taking answers at this time. */
       closesAt: v.optional(v.number()),
+      /** Minutes before the deadline to send a reminder push. */
+      reminderMinutesBefore: v.optional(v.number()),
+      /** When that reminder went out, so it is only ever sent once. */
+      reminderSentAt: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
@@ -524,6 +528,7 @@ const schema = defineSchema(
         v.literal("comment"),
         v.literal("reply"),
         v.literal("poll_result"),
+        v.literal("poll_reminder"),
         v.literal("account_unlinked"),
       ),
       dedupeKey: v.string(),

@@ -182,6 +182,17 @@ const MIN_POLL_OPTIONS = 2;
 const MAX_POLL_OPTIONS = 8;
 const MAX_POLL_QUESTION = 200;
 const MAX_POLL_OPTION = 120;
+/** Longest "remind me before it closes" lead time we accept (one week). */
+const MAX_POLL_REMINDER_MINUTES = 7 * 24 * 60;
+
+/** "in 24h" / "in 3d" — for push copy about an upcoming poll deadline. */
+function shortUntil(ms: number) {
+  const mins = Math.max(1, Math.round(ms / 60_000));
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
 
 /** One poll option as id + label, both generated from the submitted texts. */
 type PollOptions = { id: string; text: string }[];
@@ -250,6 +261,8 @@ async function pollDetail(ctx: Ctx, poll: Doc<"polls">) {
     closed: pollIsClosed(poll),
     closedAt: poll.closedAt,
     closesAt: poll.closesAt,
+    reminderMinutesBefore: poll.reminderMinutesBefore,
+    reminderSentAt: poll.reminderSentAt,
     totalVotes: poll.totalVotes,
     voterCount: poll.voterCount,
     options: poll.options.map((o) => ({
@@ -701,6 +714,8 @@ export const create = mutation({
         options: v.array(v.string()),
         /** Deadline in epoch ms; the poll stops taking answers then. */
         closesAt: v.optional(v.number()),
+        /** Minutes before the deadline to send a reminder push. */
+        reminderMinutesBefore: v.optional(v.number()),
       }),
     ),
   },
@@ -745,6 +760,7 @@ export const create = mutation({
           allowMultiple: boolean;
           options: PollOptions;
           closesAt?: number;
+          reminderMinutesBefore?: number;
         }
       | undefined;
     if (args.poll) {
@@ -791,11 +807,31 @@ export const create = mutation({
         }
         closesAt = t;
       }
+
+      // Optional "remind everyone before it closes" lead time.
+      let reminderMinutesBefore: number | undefined;
+      if (args.poll.reminderMinutesBefore !== undefined) {
+        const mins = args.poll.reminderMinutesBefore;
+        if (!Number.isFinite(mins) || mins < 1 || mins > MAX_POLL_REMINDER_MINUTES) {
+          throw new ConvexError("That reminder lead time is not supported");
+        }
+        if (closesAt === undefined) {
+          throw new ConvexError("A closing reminder needs a close time");
+        }
+        if (closesAt - now <= mins * 60_000) {
+          throw new ConvexError(
+            "The reminder must land before the poll closes — pick a longer close time or a shorter reminder",
+          );
+        }
+        reminderMinutesBefore = Math.round(mins);
+      }
+
       pollInput = {
         question,
         allowMultiple: args.poll.allowMultiple,
         options: texts.map((text, i) => ({ id: `opt${i + 1}`, text })),
         closesAt,
+        reminderMinutesBefore,
       };
     }
 
@@ -827,6 +863,7 @@ export const create = mutation({
         totalVotes: 0,
         voterCount: 0,
         closesAt: pollInput.closesAt,
+        reminderMinutesBefore: pollInput.reminderMinutesBefore,
         createdAt: now,
         updatedAt: now,
       });
@@ -1050,8 +1087,21 @@ export const closeDuePolls = internalMutation({
       });
       closedCount += 1;
 
-      // The author and the people who may announce a result.
       const post = await ctx.db.get(poll.postId);
+
+      // A poll with answers has a result: publish it exactly as the manual
+      // "Announce result" action would, so nobody has to remember to do it.
+      if (post && poll.totalVotes > 0) {
+        await publishPollResult(ctx, {
+          post,
+          poll,
+          announcedBy: post.author || "Shepherd",
+          authorId: post.authorId,
+          automaticNote: `Posted automatically — the poll closed on its deadline`,
+        });
+      }
+
+      // The author and the people who may announce a result.
       const recipients: Id<"users">[] = [];
       if (post?.authorId) recipients.push(post.authorId);
       const staff = await ctx.db.query("users").collect();
@@ -1066,9 +1116,10 @@ export const closeDuePolls = internalMutation({
           userIds: recipients,
           kind: "poll_closed",
           title: "Poll closed",
-          body: `${poll.question.slice(0, 90)} — ${poll.totalVotes} ${
-            poll.totalVotes === 1 ? "vote" : "votes"
-          }. Announce the result to share it.`,
+          body:
+            poll.totalVotes > 0
+              ? `${poll.question.slice(0, 80)} — the result was posted to the feed.`
+              : `${poll.question.slice(0, 90)} — nobody voted.`,
           url: `/announcements?post=${poll.postId}`,
         });
       }
@@ -1084,6 +1135,73 @@ export const closeDuePolls = internalMutation({
   },
 });
 
+/**
+ * Send the "this poll closes soon" device push for polls whose author asked
+ * for one (run every 15 minutes alongside the auto-close pass).
+ *
+ * A reminder is sent at most once per poll: `reminderSentAt` is stamped as it
+ * goes out, and the push job's dedupe key backs that up.
+ */
+export const sendPollClosingReminders = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    // Only polls whose deadline is within the longest lead time we allow are
+    // worth reading; the index range skips everything without a deadline.
+    const upcoming = await ctx.db
+      .query("polls")
+      .withIndex("by_closesAt", (q) =>
+        q
+          .gte("closesAt", now)
+          .lte("closesAt", now + MAX_POLL_REMINDER_MINUTES * 60_000),
+      )
+      .collect();
+
+    let sent = 0;
+    for (const poll of upcoming) {
+      const lead = poll.reminderMinutesBefore;
+      if (lead === undefined) continue;
+      if (poll.reminderSentAt !== undefined) continue;
+      if (poll.closedAt !== undefined) continue;
+      if (poll.closesAt === undefined) continue;
+      if (poll.closesAt - lead * 60_000 > now) continue; // not due yet
+
+      const allUsers = await ctx.db.query("users").collect();
+      const recipientIds = allUsers
+        .filter((u) => !u.isAnonymous)
+        .map((u) => u._id);
+      if (recipientIds.length > 0) {
+        const ts = Date.now();
+        const jobId = await ctx.db.insert("notificationJobs", {
+          kind: "poll_reminder",
+          dedupeKey: `poll-reminder:${poll._id}`,
+          deliverAt: ts,
+          status: "scheduled",
+          payload: {
+            title: "Poll closes soon",
+            body: `${poll.question.slice(0, 70)} — closes in ${shortUntil(
+              poll.closesAt - now,
+            )}. Tap to answer.`,
+            url: `/announcements?post=${poll.postId}`,
+          },
+          recipientUserIds: recipientIds as any,
+          createdAt: ts,
+        });
+        const sfId = await ctx.scheduler.runAfter(
+          0,
+          internal.pushNode.deliverJob,
+          { jobId },
+        );
+        await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
+      }
+
+      await ctx.db.patch(poll._id, { reminderSentAt: now, updatedAt: now });
+      sent += 1;
+    }
+    return sent;
+  },
+});
+
 /** Headline for a poll's outcome, e.g. "Saturday outreach won with 5 of 9 votes (56%)". */
 function pollOutcome(poll: Doc<"polls">) {
   const ranked = poll.options
@@ -1095,6 +1213,95 @@ function pollOutcome(poll: Doc<"polls">) {
     ranked,
     headline: `${top.text} ${poll.allowMultiple ? "led" : "won"} with ${top.count} of ${poll.totalVotes} votes (${pct}%)`,
   };
+}
+
+/**
+ * Publish a poll's result: a results comment on the announcement (so the
+ * outcome sits in the thread right under the poll, visible to everyone who
+ * opens the feed) plus a device push to every signed-in member.
+ *
+ * Shared by the manual "Announce result" action and the auto-close cron, so a
+ * poll closed by its own deadline reads exactly like one announced by hand.
+ */
+async function publishPollResult(
+  ctx: MutationCtx,
+  args: {
+    post: Doc<"posts">;
+    poll: Doc<"polls">;
+    announcedBy: string;
+    authorId?: Id<"users">;
+    /** Line explaining an automatic post, e.g. that the deadline closed it. */
+    automaticNote?: string;
+  },
+) {
+  const { ranked, headline } = pollOutcome(args.poll);
+  const body = [
+    `Poll result — ${args.poll.question}`,
+    "",
+    headline,
+    ...ranked.map(
+      (r) => `${r.text} — ${r.count} ${r.count === 1 ? "vote" : "votes"}`,
+    ),
+    "",
+    `${args.poll.totalVotes} ${args.poll.totalVotes === 1 ? "vote" : "votes"} from ${args.poll.voterCount} ${args.poll.voterCount === 1 ? "person" : "people"}`,
+    args.automaticNote ?? `Announced by ${args.announcedBy}`,
+  ].join("\n");
+
+  const eng = await engagementFor(ctx, args.post);
+  const commentId = await ctx.db.insert("comments", {
+    postId: args.post._id,
+    author: args.announcedBy,
+    authorId: args.authorId,
+    body,
+    createdAt: Date.now(),
+  });
+  await ctx.db.patch(args.post._id, {
+    ...eng,
+    commentCount: eng.commentCount + 1,
+  });
+
+  // Device push to every signed-in member (mirrors the post/comment flow).
+  try {
+    const allUsers = await ctx.db.query("users").collect();
+    const recipientIds = allUsers
+      .filter((u) => !u.isAnonymous)
+      .map((u) => u._id);
+    if (recipientIds.length > 0) {
+      const ts = Date.now();
+      const jobId = await ctx.db.insert("notificationJobs", {
+        kind: "poll_result",
+        dedupeKey: `poll-result:${args.poll._id}:${args.poll.totalVotes}`,
+        deliverAt: ts,
+        status: "scheduled",
+        payload: {
+          title: "Poll result",
+          body: `${args.poll.question.slice(0, 70)} — ${headline}`,
+          url: `/announcements?post=${args.post._id}`,
+        },
+        recipientUserIds: recipientIds as any,
+        createdAt: ts,
+      });
+      const sfId = await ctx.scheduler.runAfter(
+        0,
+        internal.pushNode.deliverJob,
+        { jobId },
+      );
+      await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
+    }
+  } catch (err) {
+    console.error("[posts] Poll result push scheduling failed:", err);
+    try {
+      await ctx.db.insert("pushDeliveryLogs", {
+        jobId: undefined,
+        endpoint: `poll:${args.poll._id}`,
+        success: false,
+        error: `Poll result notification scheduling failed: ${String(err)}`,
+        createdAt: Date.now(),
+      });
+    } catch { /* best effort */ }
+  }
+
+  return { commentId, headline };
 }
 
 /**
@@ -1128,72 +1335,12 @@ export const announcePollResult = mutation({
       throw new ConvexError("Nobody has voted yet — there is no result to announce");
     }
 
-    const { ranked, headline } = pollOutcome(poll);
-    const body = [
-      `Poll result — ${poll.question}`,
-      "",
-      headline,
-      ...ranked.map((r) => `${r.text} — ${r.count} ${r.count === 1 ? "vote" : "votes"}`),
-      "",
-      `${poll.totalVotes} ${poll.totalVotes === 1 ? "vote" : "votes"} from ${poll.voterCount} ${poll.voterCount === 1 ? "person" : "people"}`,
-      `Announced by ${user.name ?? user.email ?? "a leader"}`,
-    ].join("\n");
-
-    // In-app: a comment on the announcement, so the result is visible to
-    // everyone who opens the feed — not only to those who can see details.
-    const eng = await engagementFor(ctx, post);
-    const commentId = await ctx.db.insert("comments", {
-      postId: args.postId,
-      author: user.name ?? user.email ?? "Member",
+    const { commentId, headline } = await publishPollResult(ctx, {
+      post,
+      poll,
+      announcedBy: user.name ?? user.email ?? "Member",
       authorId: user._id,
-      body,
-      createdAt: Date.now(),
     });
-    await ctx.db.patch(args.postId, {
-      ...eng,
-      commentCount: eng.commentCount + 1,
-    });
-
-    // Device push to every signed-in member (mirrors the post/comment flow).
-    try {
-      const allUsers = await ctx.db.query("users").collect();
-      const recipientIds = allUsers
-        .filter((u) => !u.isAnonymous)
-        .map((u) => u._id);
-      if (recipientIds.length > 0) {
-        const ts = Date.now();
-        const jobId = await ctx.db.insert("notificationJobs", {
-          kind: "poll_result",
-          dedupeKey: `poll-result:${poll._id}:${poll.totalVotes}`,
-          deliverAt: ts,
-          status: "scheduled",
-          payload: {
-            title: "Poll result",
-            body: `${poll.question.slice(0, 70)} — ${headline}`,
-            url: `/announcements?post=${args.postId}`,
-          },
-          recipientUserIds: recipientIds as any,
-          createdAt: ts,
-        });
-        const sfId = await ctx.scheduler.runAfter(
-          0,
-          internal.pushNode.deliverJob,
-          { jobId },
-        );
-        await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
-      }
-    } catch (err) {
-      console.error("[posts] Poll result push scheduling failed:", err);
-      try {
-        await ctx.db.insert("pushDeliveryLogs", {
-          jobId: undefined,
-          endpoint: `poll:${poll._id}`,
-          success: false,
-          error: `Poll result notification scheduling failed: ${String(err)}`,
-          createdAt: Date.now(),
-        });
-      } catch { /* best effort */ }
-    }
 
     await logAudit(ctx, {
       action: "poll.announce",

@@ -24,14 +24,19 @@ crons.daily(
   internal.pushScheduler.dailyPushNotifications,
 );
 
-// Close polls whose auto-close deadline has passed, every 15 minutes. Answers
-// stop counting the instant the deadline passes (posts.vote honours it), so
-// this only flips the poll to closed and notifies the people who can announce
-// its result.
+// Poll deadlines, every 15 minutes. Answers stop counting the instant a
+// deadline passes (posts.vote honours it), so these two passes only settle the
+// aftermath: one closes due polls and publishes their result, the other sends
+// the "closes soon" reminder the creator asked for.
 crons.interval(
   "close-due-polls",
   { minutes: 15 },
   internal.posts.closeDuePolls,
+);
+crons.interval(
+  "poll-closing-reminders",
+  { minutes: 15 },
+  internal.posts.sendPollClosingReminders,
 );
 
 // Daily error-log housekeeping at 03:15 UTC: drop entries older than 30 days and

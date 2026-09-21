@@ -61,6 +61,8 @@ import {
   Lock,
   Heart,
   BarChart3,
+  Bell,
+  CalendarClock,
   Activity,
   Users,
 } from "lucide-react";
@@ -287,6 +289,19 @@ function timeUntil(ts: number) {
   const days = Math.floor(hours / 24);
   if (days < 30) return `in ${days}d`;
   return `on ${fmtDateTime(new Date(ts).toISOString())}`;
+}
+
+/** "1 day before closing" — the lead time a closing reminder uses. */
+function reminderLeadLabel(minutes: number) {
+  if (minutes % (60 * 24) === 0) {
+    const days = minutes / (60 * 24);
+    return `${days} ${days === 1 ? "day" : "days"} before closing`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} ${hours === 1 ? "hour" : "hours"} before closing`;
+  }
+  return `${minutes} minutes before closing`;
 }
 
 /** Short relative time, e.g. "4m", "3h", "2d". */
@@ -1176,6 +1191,42 @@ function EngagementDetailsDialog({
                   <BarChart3 className="h-3 w-3" /> Poll — who chose what
                 </div>
                 <p className="mb-2 text-[11px] font-medium">{details.poll.question}</p>
+
+                {/* How the poll is running: still open, when its deadline is,
+                    and the reminder the creator asked for. */}
+                <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                  {details.poll.closed ? (
+                    <span className="flex items-center gap-1">
+                      <Lock className="h-3 w-3" />
+                      {details.poll.closesAt !== undefined &&
+                      details.poll.closedAt !== undefined &&
+                      details.poll.closedAt >= details.poll.closesAt
+                        ? `Closed automatically ${fmtDateTime(new Date(details.poll.closedAt).toISOString())}`
+                        : details.poll.closedAt !== undefined
+                          ? `Closed ${fmtDateTime(new Date(details.poll.closedAt).toISOString())}`
+                          : "Closed"}
+                    </span>
+                  ) : details.poll.closesAt !== undefined ? (
+                    <span className="flex items-center gap-1">
+                      <CalendarClock className="h-3 w-3" />
+                      Closes {timeUntil(details.poll.closesAt)} ·{" "}
+                      {fmtDateTime(new Date(details.poll.closesAt).toISOString())}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <CalendarClock className="h-3 w-3" /> Open until it is closed
+                    </span>
+                  )}
+                  {details.poll.reminderMinutesBefore !== undefined && (
+                    <span className="flex items-center gap-1">
+                      <Bell className="h-3 w-3" />
+                      Reminder {reminderLeadLabel(details.poll.reminderMinutesBefore)}
+                      {" · "}
+                      {details.poll.reminderSentAt !== undefined ? "sent" : "scheduled"}
+                    </span>
+                  )}
+                </div>
+
                 {/* The same chart the poll card shows, with the voters' names
                     under each option — this view is the one that may see them. */}
                 <PollResultChart
