@@ -36,7 +36,6 @@ import {
   TrendingUp,
   ContactRound,
   BarChart3,
-  Megaphone,
   Clock,
   CheckCircle2,
   Plus,
@@ -292,21 +291,6 @@ export default function Dashboard() {
             Serve Your Creator Now, {firstName}
           </h1>
         </div>
-      </div>
-
-      {/* Quick actions — a poll is its own announcement, so it can be created
-          right here and lands in the announcements feed. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => setPollOpen(true)}>
-          <BarChart3 className="mr-1.5 h-4 w-4" /> New poll
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => navigate("/announcements")}
-        >
-          <Megaphone className="mr-1.5 h-4 w-4" /> Announcements
-        </Button>
       </div>
 
       {/* Stat cards */}
