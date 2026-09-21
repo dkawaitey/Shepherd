@@ -35,8 +35,11 @@ import {
   Target,
   TrendingUp,
   ContactRound,
+  BarChart3,
+  Megaphone,
 } from "lucide-react";
 import { Link } from "react-router";
+import { PollComposer } from "@/components/poll-composer";
 
 const CARDS = [
   { key: "totalReached", label: "Total People Reached", to: "/contacts", icon: ContactRound, accent: "#9db392" },
@@ -203,6 +206,8 @@ function FollowupCalendar({ events }: { events: any[] }) {
 // ---------- Page ----------
 export default function Dashboard() {
   const navigate = useNavigate();
+  // Standalone poll composer, so a poll can be published without leaving here.
+  const [pollOpen, setPollOpen] = useState(false);
   const me = useQuery(api.users.currentUser);
   const stats = useQuery(api.dashboard.stats);
   // Only the latest few are shown here, so don't load the whole feed.
@@ -265,6 +270,21 @@ export default function Dashboard() {
             Serve Your Creator Now, {firstName}
           </h1>
         </div>
+      </div>
+
+      {/* Quick actions — a poll is its own announcement, so it can be created
+          right here and lands in the announcements feed. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={() => setPollOpen(true)}>
+          <BarChart3 className="mr-1.5 h-4 w-4" /> New poll
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/announcements")}
+        >
+          <Megaphone className="mr-1.5 h-4 w-4" /> Announcements
+        </Button>
       </div>
 
       {/* Stat cards */}
@@ -536,6 +556,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <PollComposer open={pollOpen} onOpenChange={setPollOpen} />
     </div>
   );
 }

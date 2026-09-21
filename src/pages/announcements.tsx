@@ -36,6 +36,7 @@ import {
   ROLES,
 } from "@/convex/constants";
 import { userHasRole, userIsAdmin } from "@/components/shared";
+import { PollComposer } from "@/components/poll-composer";
 
 import {
   Check,
@@ -129,12 +130,9 @@ export default function Announcements() {
   const [search, setSearch] = useState("");
   const [author, setAuthor] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  // Whether the composer opens as a standalone poll or a regular post.
-  const [createPoll, setCreatePoll] = useState(false);
-  const openComposer = (poll: boolean) => {
-    setCreatePoll(poll);
-    setCreateOpen(true);
-  };
+  // The standalone poll composer (a poll is its own announcement).
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const openComposer = () => setCreateOpen(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [limit, setLimit] = useState(FEED_PAGE_SIZE);
 
@@ -185,10 +183,10 @@ export default function Announcements() {
         code="ann"
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => openComposer(true)}>
+            <Button variant="outline" onClick={() => setPollComposerOpen(true)}>
               <BarChart3 className="mr-1.5 h-4 w-4" /> New poll
             </Button>
-            <Button onClick={() => openComposer(false)}>
+            <Button onClick={openComposer}>
               <Plus className="mr-1.5 h-4 w-4" /> New post
             </Button>
           </div>
@@ -228,7 +226,7 @@ export default function Announcements() {
           title="No posts yet"
           message="Post the first update for the team — a testimony, an announcement or an encouragement."
           action={
-            <Button onClick={() => openComposer(false)}>
+            <Button onClick={openComposer}>
               <Plus className="mr-1.5 h-4 w-4" /> New post
             </Button>
           }
@@ -266,16 +264,30 @@ export default function Announcements() {
         </div>
       )}
 
-      <CreatePostDialog
-        open={createOpen}
-        startPoll={createPoll}
-        onOpenChange={setCreateOpen}
+      <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <PollComposer
+        open={pollComposerOpen}
+        onOpenChange={setPollComposerOpen}
       />
     </div>
   );
 }
 
 // ── Engagement helpers ─────────────────────────────────────────────
+
+/** Short countdown, e.g. "in 12m", "in 5h", "in 2d". */
+function timeUntil(ts: number) {
+  const secs = Math.floor((ts - Date.now()) / 1000);
+  if (secs <= 0) return "any moment now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 1) return "in under a minute";
+  if (mins < 60) return `in ${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `in ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `in ${days}d`;
+  return `on ${fmtDateTime(new Date(ts).toISOString())}`;
+}
 
 /** Short relative time, e.g. "4m", "3h", "2d". */
 function timeAgo(ts: number) {
@@ -459,6 +471,8 @@ type FeedPoll = {
   totalVotes: number;
   voterCount: number;
   closed: boolean;
+  /** Auto-close deadline (epoch ms), if the poll has one. */
+  closesAt?: number;
   myOptionIds: string[];
 };
 
@@ -729,7 +743,11 @@ function PollCard({
         Poll
         <span className="font-normal normal-case tracking-normal">
           · {poll.allowMultiple ? "choose one or more" : "choose one"}
-          {poll.closed && " · closed"}
+          {poll.closed
+            ? " · closed"
+            : poll.closesAt
+              ? ` · closes ${timeUntil(poll.closesAt)}`
+              : ""}
         </span>
       </div>
       <div className="mt-1.5 text-[13px] font-semibold">{poll.question}</div>
@@ -1475,12 +1493,9 @@ type PendingFile = {
 
 function CreatePostDialog({
   open,
-  startPoll,
   onOpenChange,
 }: {
   open: boolean;
-  /** Open the composer with the standalone-poll fields already showing. */
-  startPoll: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
   const create = useMutation(api.posts.create);
@@ -1497,11 +1512,6 @@ function CreatePostDialog({
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollMultiple, setPollMultiple] = useState(false);
-
-  // Opened as a poll versus a post. Reset whenever the dialog is opened.
-  useEffect(() => {
-    if (open) setPollOpen(startPoll);
-  }, [open, startPoll]);
 
   const reset = () => {
     setTitle("");

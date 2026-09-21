@@ -17,6 +17,7 @@ import {
 } from "./helpers";
 import { REACTION_KINDS, ROLES } from "./constants";
 import { checkRateLimit } from "./rateLimit";
+import { notifyUsers } from "./inbox";
 import { validatePostTitle, validatePostBody, validateCommentBody } from "./validate";
 
 // ── Media validation constants ───────────────────────────────────────
@@ -186,6 +187,16 @@ const MAX_POLL_OPTION = 120;
 type PollOptions = { id: string; text: string }[];
 
 /**
+ * Is this poll shut? Either someone closed it by hand, or its auto-close
+ * deadline has passed. The deadline is honoured immediately on read, so a poll
+ * stops taking answers on time even between auto-close cron runs.
+ */
+function pollIsClosed(poll: Doc<"polls">, now = Date.now()) {
+  if (poll.closedAt !== undefined) return true;
+  return poll.closesAt !== undefined && now >= poll.closesAt;
+}
+
+/**
  * A poll plus the viewer's own answer, shaped for the announcement feed.
  * Costs one document read and one bounded index lookup, and only for the
  * handful of posts that actually carry a poll.
@@ -208,7 +219,9 @@ async function pollFor(ctx: Ctx, post: Doc<"posts">, userId: Id<"users">) {
     counts: poll.counts,
     totalVotes: poll.totalVotes,
     voterCount: poll.voterCount,
-    closed: poll.closedAt !== undefined,
+    closed: pollIsClosed(poll),
+    closedAt: poll.closedAt,
+    closesAt: poll.closesAt,
     myOptionIds: mine.map((v) => v.optionId),
   };
 }
@@ -234,7 +247,9 @@ async function pollDetail(ctx: Ctx, poll: Doc<"polls">) {
     _id: poll._id,
     question: poll.question,
     allowMultiple: poll.allowMultiple,
-    closed: poll.closedAt !== undefined,
+    closed: pollIsClosed(poll),
+    closedAt: poll.closedAt,
+    closesAt: poll.closesAt,
     totalVotes: poll.totalVotes,
     voterCount: poll.voterCount,
     options: poll.options.map((o) => ({
@@ -684,6 +699,8 @@ export const create = mutation({
         question: v.string(),
         allowMultiple: v.boolean(),
         options: v.array(v.string()),
+        /** Deadline in epoch ms; the poll stops taking answers then. */
+        closesAt: v.optional(v.number()),
       }),
     ),
   },
@@ -723,7 +740,12 @@ export const create = mutation({
 
     // Validate the poll up front, so a bad option list fails before any writes.
     let pollInput:
-      | { question: string; allowMultiple: boolean; options: PollOptions }
+      | {
+          question: string;
+          allowMultiple: boolean;
+          options: PollOptions;
+          closesAt?: number;
+        }
       | undefined;
     if (args.poll) {
       const question = args.poll.question.trim();
@@ -752,10 +774,28 @@ export const create = mutation({
       if (new Set(texts.map((t) => t.toLowerCase())).size !== texts.length) {
         throw new ConvexError("Poll options must all be different");
       }
+      // Optional auto-close deadline, validated against the server clock.
+      let closesAt: number | undefined;
+      if (args.poll.closesAt !== undefined) {
+        const t = args.poll.closesAt;
+        if (!Number.isFinite(t)) {
+          throw new ConvexError("That close time is not a valid date");
+        }
+        if (t <= now + 60_000) {
+          throw new ConvexError(
+            "The close time must be at least a minute in the future",
+          );
+        }
+        if (t > now + 365 * 24 * 60 * 60 * 1000) {
+          throw new ConvexError("The close time must be within a year");
+        }
+        closesAt = t;
+      }
       pollInput = {
         question,
         allowMultiple: args.poll.allowMultiple,
         options: texts.map((text, i) => ({ id: `opt${i + 1}`, text })),
+        closesAt,
       };
     }
 
@@ -786,6 +826,7 @@ export const create = mutation({
         counts: {},
         totalVotes: 0,
         voterCount: 0,
+        closesAt: pollInput.closesAt,
         createdAt: now,
         updatedAt: now,
       });
@@ -877,7 +918,7 @@ export const vote = mutation({
       .withIndex("by_post", (q) => q.eq("postId", args.postId))
       .first();
     if (!poll) throw new ConvexError("This announcement has no poll");
-    if (poll.closedAt !== undefined) throw new ConvexError("This poll is closed");
+    if (pollIsClosed(poll)) throw new ConvexError("This poll is closed");
 
     const chosen = [...new Set(args.optionIds)];
     const known = new Set(poll.options.map((o) => o.id));
@@ -958,8 +999,15 @@ export const setPollClosed = mutation({
     if (!poll) throw new ConvexError("This announcement has no poll");
 
     const now = Date.now();
+    // Reopening a poll whose deadline has already passed clears that deadline —
+    // otherwise it would be closed again the moment it is read.
+    const closesAt =
+      !args.closed && poll.closesAt !== undefined && poll.closesAt <= now
+        ? undefined
+        : poll.closesAt;
     await ctx.db.patch(poll._id, {
       closedAt: args.closed ? now : undefined,
+      closesAt,
       updatedAt: now,
     });
     await logAudit(ctx, {
@@ -968,6 +1016,71 @@ export const setPollClosed = mutation({
       entityId: poll._id,
       details: poll.question,
     });
+  },
+});
+
+/**
+ * Close every poll whose auto-close deadline has passed (run by a cron every
+ * few minutes). Answers stop being accepted the moment the deadline passes —
+ * this only stamps the poll closed and tells the people who can announce the
+ * result, so the feed stops showing it as open for voting.
+ */
+export const closeDuePolls = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    // Convex orders `undefined` before every real value, so a bare upper bound
+    // would also match polls that have no deadline at all. The lower bound
+    // keeps the range to polls that really did set one.
+    const due = await ctx.db
+      .query("polls")
+      .withIndex("by_closesAt", (q) =>
+        q.gte("closesAt", 0).lte("closesAt", now),
+      )
+      .collect();
+
+    let closedCount = 0;
+    for (const poll of due) {
+      // Belt and braces: never touch a poll without a deadline.
+      if (poll.closesAt === undefined) continue;
+      if (poll.closedAt !== undefined) continue;
+      await ctx.db.patch(poll._id, {
+        closedAt: poll.closesAt ?? now,
+        updatedAt: now,
+      });
+      closedCount += 1;
+
+      // The author and the people who may announce a result.
+      const post = await ctx.db.get(poll.postId);
+      const recipients: Id<"users">[] = [];
+      if (post?.authorId) recipients.push(post.authorId);
+      const staff = await ctx.db.query("users").collect();
+      for (const u of staff) {
+        if (u.isAnonymous) continue;
+        if (hasRole(u, ROLES.ADMIN) || hasRole(u, ROLES.COORDINATOR)) {
+          recipients.push(u._id);
+        }
+      }
+      if (recipients.length > 0) {
+        await notifyUsers(ctx, {
+          userIds: recipients,
+          kind: "poll_closed",
+          title: "Poll closed",
+          body: `${poll.question.slice(0, 90)} — ${poll.totalVotes} ${
+            poll.totalVotes === 1 ? "vote" : "votes"
+          }. Announce the result to share it.`,
+          url: `/announcements?post=${poll.postId}`,
+        });
+      }
+
+      await logAudit(ctx, {
+        action: "poll.auto_close",
+        entityType: "polls",
+        entityId: poll._id,
+        details: poll.question,
+      });
+    }
+    return closedCount;
   },
 });
 

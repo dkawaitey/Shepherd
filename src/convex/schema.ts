@@ -425,9 +425,15 @@ const schema = defineSchema(
       totalVotes: v.number(),
       voterCount: v.number(),
       closedAt: v.optional(v.number()),
+      /** Auto-close deadline: the poll stops taking answers at this time. */
+      closesAt: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
-    }).index("by_post", ["postId"]),
+    })
+      .index("by_post", ["postId"])
+      // Only polls with a deadline appear here, so the auto-close cron reads a
+      // range rather than scanning every poll ever created.
+      .index("by_closesAt", ["closesAt"]),
 
     // One row per (poll, option, voter): a single-answer vote is one row, a
     // multiple-answer vote is one row per chosen option. Voting again replaces
