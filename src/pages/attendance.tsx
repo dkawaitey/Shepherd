@@ -68,6 +68,7 @@ import {
   FileText,
   Heart,
   TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 
 /**
@@ -320,24 +321,30 @@ export default function Attendance() {
               <p className="term-label">attendance trends by member</p>
             </div>
             <span className="text-[10px] text-muted-foreground">
-              last 6 months · rate &amp; punctuality · weakest first
+              last 6 months · two lines each: <span className="text-foreground/70">attendance</span> then{" "}
+              <span className="text-foreground/70">arriving on time</span> · weakest first
             </span>
           </div>
-          {/* A quiet legend, so the tinted rows below read as a flag rather
-              than as an unexplained decoration. */}
-          {lateMembers > 0 && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/20 px-4 py-1.5 text-[9px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-status-red" /> often late
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-status-amber" /> sometimes late
-              </span>
+          {/* A legend, so the lines and badges below read as measurements rather
+              than as unexplained decoration. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/20 px-4 py-1.5 text-[9px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <TrendingUp className="h-3 w-3 text-status-green" /> arrow badge = this
+              member's 6-month direction (up = improving)
+            </span>
+            <span className="hidden text-muted-foreground/40 sm:inline">·</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-status-red" /> often late
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-status-amber" /> sometimes late
+            </span>
+            {lateMembers > 0 && (
               <span className="text-muted-foreground/70">
-                {lateMembers} member{lateMembers === 1 ? "" : "s"} highlighted
+                {lateMembers} member{lateMembers === 1 ? "" : "s"} tinted
               </span>
-            </div>
-          )}
+            )}
+          </div>
           <div className="divide-y">
             {memberTrends.map(({ member, points, summary, punctuality, punctualityTrend, participation, drift, total }) => {
               const v = trendDirectionMeta(summary.direction);
@@ -361,18 +368,31 @@ export default function Attendance() {
                     {member.fullName}
                   </Link>
                   <div className="flex flex-col items-end gap-0.5">
-                    <AttendanceWaveline points={points} direction={summary.direction} />
+                    {/* Both lines are captioned: two unlabelled curves plus an
+                        arrow badge was the part that read as a puzzle. */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-14 text-right text-[8px] uppercase tracking-wider text-muted-foreground">
+                        attendance
+                      </span>
+                      <AttendanceWaveline points={points} direction={summary.direction} />
+                    </div>
                     {/* Punctuality, drawn directly under the attendance line —
                         the leading signal below the lagging one. */}
                     {punctualityTrend.some((p) => p.timed > 0) && (
-                      <AttendanceWaveline
-                        className="opacity-80"
-                        points={punctualityAsTrend(punctualityTrend)}
-                        direction={trendSummary(punctualityAsTrend(punctualityTrend)).direction}
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-14 text-right text-[8px] uppercase tracking-wider text-muted-foreground">
+                          on time
+                        </span>
+                        <AttendanceWaveline
+                          className="opacity-80"
+                          points={punctualityAsTrend(punctualityTrend)}
+                          direction={trendSummary(punctualityAsTrend(punctualityTrend)).direction}
+                        />
+                      </div>
                     )}
                   </div>
                   <span
+                    title={`6-month attendance direction: ${v.label}`}
                     className={cn(
                       "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
                       v.cls,

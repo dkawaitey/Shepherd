@@ -2,13 +2,16 @@ import { useMemo, useState } from "react";
 import {
   Activity,
   Clock,
+  Eye,
   Flame,
   Minus,
   Timer,
   TrendingDown,
   TrendingUp,
+  TriangleAlert,
   Trophy,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ATTENDANCE_TYPE_LABELS } from "@/convex/constants";
@@ -987,7 +990,7 @@ export function AttendanceWaveline({
  */
 export const DRIFT_META: Record<
   DriftLevel,
-  { label: string; cls: string; icon: typeof TrendingDown; title: string }
+  { label: string; cls: string; icon: LucideIcon; title: string }
 > = {
   none: {
     label: "Steady",
@@ -995,16 +998,19 @@ export const DRIFT_META: Record<
     icon: Minus,
     title: "Attendance and punctuality are holding.",
   },
+  // Deliberately *not* a trend arrow: the drift badge sits beside the attendance
+  // direction badge, and a second arrow there reads as the same measurement.
+  // An eye and a warning triangle say "watch this person" instead.
   watch: {
     label: "Watch",
     cls: "border-status-amber/40 bg-status-amber/10 text-status-amber",
-    icon: TrendingDown,
+    icon: Eye,
     title: "One signal is slipping — worth a look.",
   },
   atRisk: {
     label: "Drifting",
     cls: "border-status-red/40 bg-status-red/10 text-status-red",
-    icon: TrendingDown,
+    icon: TriangleAlert,
     title: "Attendance is falling and lateness rising — reach out now.",
   },
 };
