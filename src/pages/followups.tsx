@@ -483,8 +483,8 @@ export default function Followups() {
             <FollowupRow
               key={f._id}
               f={f}
-              onStatus={() => setChanging(f)}
-              onDelete={() => setConfirmDelete(f)}
+              onStatus={canWork ? () => setChanging(f) : undefined}
+              onDelete={canWork ? () => setConfirmDelete(f) : undefined}
             />
           ))}
           {grouped.done.map((f) => (

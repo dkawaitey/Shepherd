@@ -97,12 +97,12 @@ const NAV: NavItem[] = [
 ];
 
 /**
- * Accounts that may see ministry records: signed-in, not a guest, and either
- * linked to a member record (the ministry's source of truth for who belongs)
- * or holding a ministry role (covers the administrator). Mirrors
- * `canReadMinistry` in convex/helpers.ts: reads are the floor, writes still
- * need a role. An account with no linked profile never reaches the shell —
- * RequireAuth shows it the "link your profile" screen first.
+ * Accounts that may see ministry records: signed-in, not a guest, and holding
+ * a ministry role. Mirrors `canReadMinistry` in convex/helpers.ts: a linked
+ * member profile on its own (an Ordinary Member holds no system role) reads
+ * only announcements and its own profile. An account with no linked profile
+ * never reaches the shell — RequireAuth shows it the "link your profile"
+ * screen first.
  */
 function hasMinistryAccess(user: {
   role?: string;
@@ -112,7 +112,7 @@ function hasMinistryAccess(user: {
   isAnonymous?: boolean;
 } | null | undefined) {
   if (!user || user.isAnonymous) return false;
-  return effectiveUserRoles(user).length > 0 || !!user.memberId;
+  return effectiveUserRoles(user).length > 0;
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

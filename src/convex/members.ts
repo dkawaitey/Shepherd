@@ -227,6 +227,48 @@ export const get = query({
   },
 });
 
+/**
+ * The member record belonging to the signed-in account, if any.
+ *
+ * Every account kept out of ministry records — an Ordinary Member position
+ * derives no system role, so `canReadMinistry` is false for it — still has the
+ * right to see its own details. This stays deliberately narrow: it resolves the
+ * member from the account's own link (explicit `memberId`, or an email match to
+ * cover a profile whose log-in details are newer than the last auto-link pass)
+ * and never accepts an id from the caller, so it cannot be used to read someone
+ * else's record.
+ */
+export const getMine = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) return null;
+
+    let member = user.memberId
+      ? await ctx.db.get(user.memberId as unknown as Doc<"members">["_id"])
+      : null;
+    if (!member || member.isDeleted) {
+      const email = user.email?.trim().toLowerCase();
+      if (!email) return null;
+      const all = await ctx.db.query("members").collect();
+      member =
+        all.find((m) => !m.isDeleted && m.email?.trim().toLowerCase() === email) ??
+        null;
+    }
+    if (!member) return null;
+
+    const attendance = await ctx.db
+      .query("attendance")
+      .withIndex("memberId", (q) => q.eq("memberId", member!._id))
+      .collect();
+
+    return {
+      member,
+      attendance: attendance.sort((a, b) => b.date.localeCompare(a.date)),
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     fullName: v.string(),

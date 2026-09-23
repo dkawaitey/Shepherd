@@ -482,6 +482,10 @@ function UsersTab() {
 function ProfileTab() {
   const me = useQuery(api.users.currentUser);
   const updateProfile = useMutation(api.users.updateProfile);
+  // The account's own member record. Available to every linked account, even
+  // an Ordinary Member who holds no ministry role and so cannot open the
+  // Members directory — this is the one place their own details stay visible.
+  const myRecord = useQuery(api.members.getMine);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [saved, setSaved] = useState(false);
@@ -489,6 +493,32 @@ function ProfileTab() {
   const isLoaded = me !== undefined;
   const displayName = isLoaded && name === "" && me?.name ? me.name : name;
   const displayPhone = isLoaded && phone === "" && me?.phone ? me.phone : phone;
+
+  const record = myRecord?.member;
+  const attendance = myRecord?.attendance ?? [];
+  const presentCount = attendance.filter((a) => a.status === "present").length;
+  const recordFields: { label: string; value?: string | number | null }[] = record
+    ? [
+        {
+          label: "Position",
+          value:
+            POSITION_LABELS[effectivePosition(record.position, record.isClassLeader)] ??
+            "Member",
+        },
+        { label: "Class", value: record.klass },
+        { label: "Membership ID", value: record.membershipId },
+        { label: "Status", value: record.status === "inactive" ? "Inactive" : "Active" },
+        { label: "Phone", value: record.phone },
+        { label: "WhatsApp", value: record.whatsapp },
+        { label: "Email", value: record.email },
+        { label: "Area", value: record.area },
+        { label: "Date joined", value: record.dateJoined },
+        {
+          label: "Youth meetings attended",
+          value: attendance.length ? `${presentCount} of ${attendance.length}` : "None yet",
+        },
+      ].filter((f) => f.value)
+    : [];
 
   return (
     <div className="max-w-md space-y-4">
@@ -522,6 +552,32 @@ function ProfileTab() {
           {saved && <p className="text-[11px] text-status-green">✓ Saved</p>}
         </div>
       </div>
+
+      {record && (
+        <div className="rounded-lg border bg-card p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <ContactRound className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">My ministry record</span>
+            <Badge variant="outline" className="ml-auto text-[10px]">
+              read only
+            </Badge>
+          </div>
+          <p className="mb-3 text-[11px] text-muted-foreground">
+            {record.fullName} — these details come from the member directory. Ask
+            an administrator to correct anything that is wrong.
+          </p>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
+            {recordFields.map((f) => (
+              <div key={f.label} className="min-w-0">
+                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {f.label}
+                </dt>
+                <dd className="truncate text-[12px] font-medium">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
     </div>
   );
 }

@@ -84,28 +84,37 @@ export function formatRoles(user?: {
   return base;
 }
 
-/** True when the user may add contacts/members: administrators and class leaders. */
+/**
+ * True when the user may add / edit contacts and members: administrators,
+ * evangelism coordinators and class leaders. Mirrors the server's
+ * `requireRole([coordinator, classLeader])` on the contact record mutations.
+ */
 export function canAddRecords(user?: {
   role?: string;
   roles?: string[];
   testAs?: string;
   isAnonymous?: boolean;
 } | null) {
-  return userIsAdmin(user) || userHasRole(user, ROLES.CLASS_LEADER);
+  return (
+    userIsAdmin(user) ||
+    userHasRole(user, ROLES.COORDINATOR) ||
+    userHasRole(user, ROLES.CLASS_LEADER)
+  );
 }
 
 /**
  * Accounts that may publish an announcement or poll. Mirrors the server's
- * `requireRole([coordinator, worker, leader])` in `posts.create` — a plain
- * member (linked profile, no ministry position) can react, comment and vote,
- * but not publish.
+ * `requireRole([coordinator, worker, leader, classLeader])` in `posts.create` —
+ * a plain member (linked profile, no ministry position) can react, comment and
+ * vote, but not publish.
  */
 export function canPublishPosts(user?: RoleBearingUser) {
   return (
     userIsAdmin(user) ||
     userHasRole(user, ROLES.COORDINATOR) ||
     userHasRole(user, ROLES.WORKER) ||
-    userHasRole(user, ROLES.LEADER)
+    userHasRole(user, ROLES.LEADER) ||
+    userHasRole(user, ROLES.CLASS_LEADER)
   );
 }
 

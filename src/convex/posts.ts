@@ -848,6 +848,7 @@ export const create = mutation({
       ROLES.COORDINATOR,
       ROLES.WORKER,
       ROLES.LEADER,
+      ROLES.CLASS_LEADER,
     ]);
     await checkRateLimit(ctx, "post.create");
     // A standalone poll carries no title/content of its own.
@@ -1146,6 +1147,7 @@ export const setPollClosed = mutation({
       ROLES.COORDINATOR,
       ROLES.WORKER,
       ROLES.LEADER,
+      ROLES.CLASS_LEADER,
     ]);
     const post = await ctx.db.get(args.postId);
     if (!post) throw new ConvexError("Post not found");
@@ -1200,6 +1202,7 @@ export const setPollSchedule = mutation({
       ROLES.COORDINATOR,
       ROLES.WORKER,
       ROLES.LEADER,
+      ROLES.CLASS_LEADER,
     ]);
     const post = await ctx.db.get(args.postId);
     if (!post) throw new ConvexError("Post not found");
@@ -1716,6 +1719,7 @@ export const remove = mutation({
       ROLES.COORDINATOR,
       ROLES.WORKER,
       ROLES.LEADER,
+      ROLES.CLASS_LEADER,
     ]);
     const post = await ctx.db.get(args.id);
     if (!post) throw new ConvexError("Post not found");

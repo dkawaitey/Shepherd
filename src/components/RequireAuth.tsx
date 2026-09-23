@@ -10,9 +10,15 @@ import { Navigate, useLocation } from "react-router";
 /**
  * A signed-in account reaches the app only when it belongs to a member of this
  * deployment: either its member profile is linked, or it holds a ministry role
- * (which covers the administrator's own account). This mirrors `canReadMinistry`
- * on the server — the same rule has to hold in both places, or the UI would
- * offer a screen the backend refuses to fill.
+ * (which covers the administrator's own account).
+ *
+ * This is the app *entry* gate, and it is deliberately broader than the
+ * server's `canReadMinistry`: a member whose profile is linked but who holds an
+ * Ordinary Member position (no system role) still gets in — to read
+ * announcements, their own profile and their own member record — while every
+ * ministry-wide record stays closed to them (the dashboard explains this). The
+ * server keeps that second, narrower line via `canReadMinistry`; here we only
+ * decide whether the account has a place in the app at all.
  */
 function accountHasAccess(
   user:

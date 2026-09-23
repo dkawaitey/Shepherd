@@ -211,7 +211,7 @@ export const create = mutation({
   args: { ...contactFields, dateMetRequired: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     await checkRateLimit(ctx, "contacts.create");
-    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
     const { dateMetRequired: _unused, ...data } = args;
     data.fullName = validateName(data.fullName);
     if (data.email) data.email = validateEmail(data.email);
@@ -301,7 +301,7 @@ export const quickAdd = mutation({
   },
   handler: async (ctx, args) => {
     await checkRateLimit(ctx, "contacts.quickAdd");
-    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
     args.fullName = validateName(args.fullName);
     if (args.phone) args.phone = validatePhone(args.phone);
     const scope = classScoped(user);
@@ -363,11 +363,11 @@ export const quickAdd = mutation({
   },
 });
 
-/** Update contact fields. Admins + coordinators; workers only their own assigned. */
+/** Update contact fields. Admins, coordinators + class leaders; workers only their own assigned. */
 export const update = mutation({
   args: { id: v.id("contacts"), ...contactFields },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
     const { id, ...data } = args;
     const existing = await ctx.db.get(id);
     if (!existing || existing.isDeleted) throw new ConvexError("Contact not found");
@@ -431,7 +431,7 @@ export const setStage = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
     if (!contact) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);
@@ -514,7 +514,7 @@ export const addJourneyEvent = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
     if (!contact) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);
@@ -590,7 +590,7 @@ export const merge = mutation({
 export const promoteToMember = mutation({
   args: { id: v.id("contacts") },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.CLASS_LEADER]);
+    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
     const contact = await ctx.db.get(args.id);
     if (!contact || contact.isDeleted) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);

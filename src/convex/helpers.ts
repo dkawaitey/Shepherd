@@ -71,21 +71,22 @@ export const classScoped = (user: CurrentUser | null | undefined): string | unde
  * May this account reach ministry records at all?
  *
  * Ministry data is pastoral PII (contact details, prayer requests, notes), so
- * it is limited to signed-in accounts that an administrator has vouched for:
+ * it is limited to signed-in accounts that hold a ministry role:
  *   - guest (anonymous) accounts get nothing — anyone could create one, so
  *     they must never reach the contact database
- *   - an account linked to a member record passes: the member directory is the
- *     source of truth for who belongs to the ministry, and the account inherits
- *     that member's permissions
- *   - holding a ministry role also passes, which covers the administrator's
- *     own account (bootstrapped or explicitly granted) and any account set up
- *     without a member record
+ *   - a linked member record is NOT enough on its own. Every member profile
+ *     lives in the directory, and an Ordinary Member position derives no
+ *     system role, so an account linked to such a profile reads nothing
+ *     ministry-wide — only announcements and its own profile stay open to it
+ *   - holding a ministry role passes, which covers the administrator's own
+ *     account (bootstrapped or explicitly granted) and every appointed
+ *     position (coordinator, worker, leader, class leader)
  *
  * An account that signed up with an email but was never linked to a member
- * profile is intentionally turned away: it has no ministry identity behind it,
- * so the app shows it a "your profile has not been linked yet" screen and an
- * administrator links the member record (Settings → User Management or the
- * member's own profile) before it can do anything.
+ * profile is turned away too: it has no ministry identity behind it, so the app
+ * shows it a "your profile has not been linked yet" screen and an administrator
+ * links the member record (Settings → User Management or the member's own
+ * profile) before it can do anything.
  *
  * Reads are the floor, not the ceiling: writes still require an actual role
  * (`requireRole`), private notes stay with the administrator and their author,
@@ -95,9 +96,7 @@ export const classScoped = (user: CurrentUser | null | undefined): string | unde
 export const canReadMinistry = (
   user: CurrentUser | null | undefined,
 ): user is CurrentUser =>
-  !!user &&
-  !user.isAnonymous &&
-  (effectiveRoles(user).length > 0 || !!user.memberId);
+  !!user && !user.isAnonymous && effectiveRoles(user).length > 0;
 
 /**
  * Private / confidential notes are for the administrator and the person who
