@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   Activity,
+  Clock,
   Flame,
   Minus,
   TrendingDown,
@@ -16,6 +17,7 @@ import {
   attendanceTrend,
   attendanceTrendAll,
   trendSummary,
+  type PunctualitySummary,
   type TrendGranularity,
   type TrendPoint,
   type TrendRow,
@@ -50,7 +52,42 @@ export function trendDirectionMeta(direction: TrendSummary["direction"]) {
       label: "Steady",
       cls: "border-border bg-muted/40 text-muted-foreground",
     },
+    // Never present at all — deliberately not "steady", which would describe a
+    // member who never attends as stable.
+    none: {
+      icon: TrendingDown,
+      label: "Not attending",
+      cls: "border-status-red/40 bg-status-red/10 text-status-red",
+    },
   }[direction];
+}
+
+/** How a punctuality verdict reads, and how it is coloured. */
+export const PUNCTUALITY_META: Record<
+  PunctualitySummary["verdict"],
+  { label: string; cls: string }
+> = {
+  punctual: { label: "Punctual", cls: "border-status-green/40 bg-status-green/10 text-status-green" },
+  mostlyPunctual: { label: "Usually punctual", cls: "border-status-green/40 bg-status-green/10 text-status-green" },
+  sometimesLate: { label: "Sometimes late", cls: "border-status-amber/40 bg-status-amber/10 text-status-amber" },
+  oftenLate: { label: "Often late", cls: "border-status-red/40 bg-status-red/10 text-status-red" },
+  unknown: { label: "Not enough times", cls: "border-border bg-muted/40 text-muted-foreground" },
+};
+
+/** The punctuality bands, weakest last, with the colour each is drawn in. */
+const PUNCTUALITY_BANDS = [
+  { key: "onTime", label: "On time", color: "#86efac" },
+  { key: "slightlyLate", label: "A little late", color: "#fbbf24" },
+  { key: "late", label: "Late", color: "#fb923c" },
+  { key: "veryLate", label: "Very late", color: "#f87171" },
+] as const;
+
+/** Plain-language description of a mean arrival offset in minutes. */
+function describeDelay(minutes: number) {
+  if (minutes <= 1) return "the first to arrive";
+  if (minutes <= 10) return `about ${minutes} min after the session began`;
+  if (minutes < 60) return `${minutes} min after the session began`;
+  return `${Math.round(minutes / 60)}h ${minutes % 60}m after the session began`;
 }
 
 /**
@@ -62,7 +99,13 @@ export function trendDirectionMeta(direction: TrendSummary["direction"]) {
  * trend (a brand-new member, or one with nothing recorded) get an honest empty
  * state rather than a flat line at zero.
  */
-export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
+export function AttendanceTrendPanel({
+  rows,
+  punctuality,
+}: {
+  rows: TrendRow[];
+  punctuality?: PunctualitySummary | null;
+}) {
   // Default to the member's full recorded history, so a trend appears for
   // attendance that was already on file long before this panel existed.
   const [range, setRange] = useState<TrendRange>("all");
@@ -95,12 +138,15 @@ export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
 
   const verdict = trendDirectionMeta(summary.direction);
   const verdictDetail =
-    summary.direction === "steady"
-      ? withRecords.length >= 2
-        ? "holding around the same rate"
-        : "not enough history yet"
-      : `${summary.direction === "up" ? "+" : ""}${summary.delta} pts vs earlier months`;
+    summary.direction === "none"
+      ? "never marked present in the recorded sessions"
+      : summary.direction === "steady"
+        ? withRecords.length >= 2
+          ? "holding around the same rate"
+          : "not enough history yet"
+        : `${summary.direction === "up" ? "+" : ""}${summary.delta} pts vs earlier months`;
   const VerdictIcon = verdict.icon;
+  const presentCount = rows.filter((r) => r.status === "present").length;
 
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -233,6 +279,73 @@ export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Punctuality — the time dimension, read from when each arrival was marked. */}
+      {punctuality && (
+        <div className="mt-4 border-t pt-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3 w-3 text-muted-foreground" />
+              <p className="term-label">punctuality</p>
+            </div>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                PUNCTUALITY_META[punctuality.verdict].cls,
+              )}
+            >
+              {PUNCTUALITY_META[punctuality.verdict].label}
+            </span>
+          </div>
+          {punctuality.timed === 0 ? (
+            <p className="text-[10px] leading-4 text-muted-foreground">
+              No arrival times to compare yet — recording the time each person is marked
+              builds this.
+            </p>
+          ) : (
+            <>
+              <div className="flex h-3 overflow-hidden rounded-sm bg-muted">
+                {PUNCTUALITY_BANDS.map((b) => {
+                  const count = punctuality[b.key];
+                  if (count === 0) return null;
+                  return (
+                    <div
+                      key={b.key}
+                      title={`${b.label}: ${count}`}
+                      style={{
+                        width: `${(count / punctuality.timed) * 100}%`,
+                        backgroundColor: b.color,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                {PUNCTUALITY_BANDS.map((b) => (
+                  <span key={b.key} className="inline-flex items-center gap-1">
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: b.color }}
+                    />
+                    {b.label}{" "}
+                    <b className="font-mono tabular-nums text-foreground/80">
+                      {punctuality[b.key]}
+                    </b>
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
+                Typically {describeDelay(punctuality.averageDelay)} · {punctuality.timed} of{" "}
+                {presentCount} arrivals timed
+                {punctuality.worstDelay > 0
+                  ? ` · latest was ${punctuality.worstDelay} min after the session began`
+                  : ""}
+                .
+              </p>
+            </>
+          )}
         </div>
       )}
 

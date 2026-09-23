@@ -17,6 +17,16 @@ import {
 import { checkRateLimit } from "./rateLimit";
 import { validateText, validateOptionalText } from "./validate";
 
+/** Time of day a person was marked, 24h "HH:MM". */
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Normalize an optional marked time, refusing anything malformed. */
+const normalizeTime = (time?: string) => {
+  const t = time?.trim() || undefined;
+  if (t && !TIME_RE.test(t)) throw new ConvexError("Invalid time");
+  return t;
+};
+
 // ================= Bible Studies =================
 
 /** Get (or lazily default) bible studies for a contact — one row per lesson 1-8. */
@@ -158,6 +168,7 @@ export const recordAttendance = mutation({
     type: v.string(),
     programName: v.optional(v.string()),
     status: v.union(v.literal("present"), v.literal("absent"), v.literal("excused")),
+    time: v.optional(v.string()),
     remarks: v.optional(v.string()),
     recordedBy: v.optional(v.string()),
   },
@@ -178,6 +189,7 @@ export const recordAttendance = mutation({
       type: args.type as any,
       programName: args.programName,
       status: args.status,
+      time: normalizeTime(args.time),
       recordedBy: user.name,
       createdAt: Date.now(),
     });
@@ -201,11 +213,13 @@ export const setAttendance = mutation({
     type: v.string(),
     programName: v.optional(v.string()),
     status: v.union(v.literal("present"), v.literal("absent"), v.literal("excused")),
+    time: v.optional(v.string()),
     remarks: v.optional(v.string()),
     recordedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    const time = normalizeTime(args.time);
     if (args.memberId && isScopedClassLeader(user)) {
       throw new ConvexError("Member attendance can only be recorded by administrators or coordinators");
     }
@@ -235,6 +249,9 @@ export const setAttendance = mutation({
       await ctx.db.patch(existing._id, {
         status: args.status,
         programName,
+        // Keep the original mark time when no new one is supplied, so a status
+        // correction doesn't silently wipe the arrival time behind punctuality.
+        time: time ?? existing.time,
         remarks: args.remarks?.trim() || undefined,
         recordedBy,
       });
@@ -248,6 +265,7 @@ export const setAttendance = mutation({
       type: args.type as any,
       programName,
       status: args.status,
+      time,
       remarks: args.remarks?.trim() || undefined,
       recordedBy,
       createdAt: Date.now(),
@@ -308,6 +326,7 @@ export const updateAttendance = mutation({
     type: v.optional(v.string()),
     programName: v.optional(v.string()),
     status: v.optional(v.union(v.literal("present"), v.literal("absent"), v.literal("excused"))),
+    time: v.optional(v.string()),
     remarks: v.optional(v.string()),
     recordedBy: v.optional(v.string()),
   },
@@ -320,6 +339,7 @@ export const updateAttendance = mutation({
     if (args.type !== undefined) patch.type = args.type;
     if (args.programName !== undefined) patch.programName = args.programName?.trim() || undefined;
     if (args.status !== undefined) patch.status = args.status;
+    if (args.time !== undefined) patch.time = normalizeTime(args.time);
     if (args.remarks !== undefined) patch.remarks = args.remarks?.trim() || undefined;
     if (args.recordedBy !== undefined) patch.recordedBy = args.recordedBy?.trim() || user.name;
     await ctx.db.patch(args.id, patch);

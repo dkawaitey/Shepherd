@@ -30,6 +30,7 @@ import {
   PageHeader,
   StatusPill,
   fmtDate,
+  fmtTime,
   downloadCsv,
   downloadPdf,
   formatError,
@@ -38,12 +39,19 @@ import {
 } from "@/components/shared";
 import {
   AttendanceSparkline,
+  PUNCTUALITY_META,
   trendDirectionMeta,
 } from "@/components/attendance-trend";
-import { attendanceTrend, trendSummary } from "@/lib/attendance-trend";
+import {
+  attendanceTrend,
+  punctualitySummary,
+  sessionStarts,
+  trendSummary,
+} from "@/lib/attendance-trend";
 import { cn } from "@/lib/utils";
 import {
   Activity,
+  Clock,
   TriangleAlert,
   CircleCheck,
   ClipboardCheck,
@@ -115,11 +123,20 @@ export default function Attendance() {
     list.push(r);
     rowsByMember.set(r.memberId, list);
   }
+  // When each session actually began, from the earliest present mark across all
+  // members — the baseline each arrival is judged against.
+  const starts = sessionStarts(rows);
   const memberTrends = (members ?? [])
     .map((m) => {
       const mine = rowsByMember.get(m._id) ?? [];
       const points = attendanceTrend(mine, 6);
-      return { member: m, points, summary: trendSummary(points), total: mine.length };
+      return {
+        member: m,
+        points,
+        summary: trendSummary(points),
+        punctuality: punctualitySummary(mine, starts),
+        total: mine.length,
+      };
     })
     .filter((t) => t.total > 0)
     .sort((a, b) => a.summary.average - b.summary.average);
@@ -190,6 +207,7 @@ export default function Attendance() {
                 <th className="px-3 py-2">Member</th>
                 <th className="px-3 py-2">Class</th>
                 <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2">Marked</th>
                 <th className="px-3 py-2">Activity</th>
                 <th className="px-3 py-2">Program</th>
                 <th className="px-3 py-2">Status</th>
@@ -214,6 +232,9 @@ export default function Attendance() {
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">{m?.klass ?? "—"}</td>
                     <td className="px-3 py-2">{fmtDate(r.date)}</td>
+                    <td className="px-3 py-2 font-mono tabular-nums">
+                      {r.time ? fmtTime(r.time) : "—"}
+                    </td>
                     <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[r.type] ?? r.type}</td>
                     <td className="px-3 py-2">{r.programName || "—"}</td>
                     <td className="px-3 py-2"><StatusPill status={r.status} /></td>
@@ -235,11 +256,11 @@ export default function Attendance() {
               <p className="term-label">attendance trends by member</p>
             </div>
             <span className="text-[10px] text-muted-foreground">
-              last 6 months · weakest first
+              last 6 months · rate &amp; punctuality · weakest first
             </span>
           </div>
           <div className="divide-y">
-            {memberTrends.map(({ member, points, summary, total }) => {
+            {memberTrends.map(({ member, points, summary, punctuality, total }) => {
               const v = trendDirectionMeta(summary.direction);
               const Icon = v.icon;
               return (
@@ -262,6 +283,18 @@ export default function Attendance() {
                   >
                     <Icon className="h-2.5 w-2.5" /> {v.label}
                   </span>
+                  {punctuality.timed > 0 && (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+                        PUNCTUALITY_META[punctuality.verdict].cls,
+                      )}
+                      title={`Average ${punctuality.averageDelay} min after the session began`}
+                    >
+                      <Clock className="h-2.5 w-2.5" />
+                      {PUNCTUALITY_META[punctuality.verdict].label}
+                    </span>
+                  )}
                   <span
                     className="w-10 text-right font-mono text-[11px] font-semibold tabular-nums"
                     style={{ color: progressColor(summary.average) }}

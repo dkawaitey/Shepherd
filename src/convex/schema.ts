@@ -210,6 +210,9 @@ const schema = defineSchema(
         v.literal(ATTENDANCE_STATUS.ABSENT),
         v.literal(ATTENDANCE_STATUS.EXCUSED),
       ),
+      // Time of day the person was marked ("HH:MM"), used for punctuality.
+      // Older records have none and fall back to their creation time.
+      time: v.optional(v.string()),
       remarks: v.optional(v.string()),
       recordedBy: v.optional(v.string()),
       createdAt: v.number(),

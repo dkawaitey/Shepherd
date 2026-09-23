@@ -16,6 +16,12 @@ export type TrendRow = {
   date: string;
   status: string;
   type?: string;
+  /** Time of day the person was marked, "HH:MM". */
+  time?: string;
+  /** When the record was entered (epoch ms) — the mark time for older rows. */
+  createdAt?: number;
+  /** Program / session name, which separates two sessions on the same day. */
+  programName?: string;
 };
 
 /** One month of a member's attendance. */
@@ -37,8 +43,11 @@ export type TrendSummary = {
   average: number;
   /** Percentage-point change between the older and newer halves of the range. */
   delta: number;
-  /** Which way the member is moving. */
-  direction: "up" | "down" | "steady";
+  /**
+   * Which way the member is moving. `none` is distinct from `steady`: it means
+   * they were never present at all, which must never read as "holding steady".
+   */
+  direction: "up" | "down" | "steady" | "none";
   /** The strongest and weakest months with records (null when none). */
   best: TrendPoint | null;
   worst: TrendPoint | null;
@@ -191,6 +200,19 @@ export function trendSummary(points: TrendPoint[]): TrendSummary {
     ? Math.round(filled.reduce((sum, p) => sum + p.percentage, 0) / filled.length)
     : 0;
 
+  let best: TrendPoint | null = null;
+  let worst: TrendPoint | null = null;
+  for (const p of filled) {
+    if (!best || p.percentage > best.percentage) best = p;
+    if (!worst || p.percentage < worst.percentage) worst = p;
+  }
+
+  // Never present in any recorded session — not a plateau, an absence. Calling
+  // this "steady" would describe a member who never attends as stable.
+  if (filled.length > 0 && filled.every((p) => p.percentage === 0)) {
+    return { average: 0, delta: 0, direction: "none", best, worst };
+  }
+
   let delta = 0;
   let direction: TrendSummary["direction"] = "steady";
   if (filled.length >= 2) {
@@ -206,12 +228,6 @@ export function trendSummary(points: TrendPoint[]): TrendSummary {
     }
   }
 
-  let best: TrendPoint | null = null;
-  let worst: TrendPoint | null = null;
-  for (const p of filled) {
-    if (!best || p.percentage > best.percentage) best = p;
-    if (!worst || p.percentage < worst.percentage) worst = p;
-  }
   return { average, delta, direction, best, worst };
 }
 
@@ -249,4 +265,139 @@ export function attendanceByType(
       percentage: b.total === 0 ? 0 : Math.round((b.present / b.total) * 100),
     }))
     .sort((a, b) => b.total - a.total);
+}
+
+// ================= Punctuality =================
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Minutes past midnight when a record was marked.
+ *
+ * An explicit `time` (what the recorder entered) wins. Older records predate
+ * that field, so they fall back to the moment the record was *created* — which
+ * is exactly when the person was marked, and so still meaningful. UTC is used
+ * for that fallback so the Convex backend and the browser agree on the value.
+ */
+export function markedMinute(row: TrendRow): number | null {
+  if (row.time && HHMM.test(row.time)) {
+    const [h, m] = row.time.split(":").map(Number);
+    return h! * 60 + m!;
+  }
+  if (typeof row.createdAt === "number" && row.createdAt > 0) {
+    const d = new Date(row.createdAt);
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  }
+  return null;
+}
+
+/** A session is one date + activity + program name; two sessions can share a day. */
+const sessionKey = (row: TrendRow) =>
+  `${(row.date || "").slice(0, 10)}|${row.type ?? ""}|${(row.programName ?? "").trim()}`;
+
+/**
+ * When each session actually began, as minutes past midnight.
+ *
+ * A session begins with its first recorded arrival — the earliest present mark
+ * for that date/activity/program. Using the session's own data means punctuality
+ * needs no configured start time, and stays correct when a meeting is moved.
+ */
+export function sessionStarts(rows: TrendRow[]): Map<string, number> {
+  const starts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.status !== "present") continue;
+    const minute = markedMinute(row);
+    if (minute === null) continue;
+    const key = sessionKey(row);
+    const current = starts.get(key);
+    if (current === undefined || minute < current) starts.set(key, minute);
+  }
+  return starts;
+}
+
+export type PunctualityBand = "onTime" | "slightlyLate" | "late" | "veryLate";
+
+export const PUNCTUALITY_LABELS: Record<PunctualityBand, string> = {
+  onTime: "On time",
+  slightlyLate: "A little late",
+  late: "Late",
+  veryLate: "Very late",
+};
+
+/** Boundaries, in minutes after the first arrival, between the bands. */
+const PUNCTUAL_GRACE = 10;
+const SLIGHTLY_LATE = 25;
+const LATE = 45;
+
+export type PunctualitySummary = {
+  /** Present records with a mark time we could compare against a session. */
+  timed: number;
+  onTime: number;
+  slightlyLate: number;
+  late: number;
+  veryLate: number;
+  /** Mean minutes after the session began (0 = first to arrive). */
+  averageDelay: number;
+  /** The latest arrival observed, in minutes after that session began. */
+  worstDelay: number;
+  verdict: "punctual" | "mostlyPunctual" | "sometimesLate" | "oftenLate" | "unknown";
+};
+
+const bandFor = (delay: number): PunctualityBand =>
+  delay <= PUNCTUAL_GRACE
+    ? "onTime"
+    : delay <= SLIGHTLY_LATE
+      ? "slightlyLate"
+      : delay <= LATE
+        ? "late"
+        : "veryLate";
+
+/**
+ * How punctual a member is: each arrival measured against the session's first
+ * arrival. Records without a usable time (and sessions with no earlier arrival
+ * to compare to) are simply left out, and `timed` reports how many counted.
+ */
+export function punctualitySummary(
+  rows: TrendRow[],
+  starts: Map<string, number>,
+): PunctualitySummary {
+  const counts: Record<PunctualityBand, number> = {
+    onTime: 0,
+    slightlyLate: 0,
+    late: 0,
+    veryLate: 0,
+  };
+  let timed = 0;
+  let delayTotal = 0;
+  let worstDelay = 0;
+
+  for (const row of rows) {
+    if (row.status !== "present") continue;
+    const minute = markedMinute(row);
+    if (minute === null) continue;
+    const start = starts.get(sessionKey(row));
+    if (start === undefined) continue;
+    const delay = Math.max(0, minute - start);
+    counts[bandFor(delay)] += 1;
+    timed += 1;
+    delayTotal += delay;
+    if (delay > worstDelay) worstDelay = delay;
+  }
+
+  const averageDelay = timed === 0 ? 0 : Math.round(delayTotal / timed);
+  let verdict: PunctualitySummary["verdict"] = "unknown";
+  if (timed > 0) {
+    const onTimeShare = counts.onTime / timed;
+    const lateShare = (counts.late + counts.veryLate) / timed;
+    verdict =
+      onTimeShare >= 0.8
+        ? "punctual"
+        : lateShare >= 0.5
+          ? "oftenLate"
+          : onTimeShare >= 0.5
+            ? "mostlyPunctual"
+            : "sometimesLate";
+  }
+
+  return { timed, ...counts, averageDelay, worstDelay, verdict };
 }

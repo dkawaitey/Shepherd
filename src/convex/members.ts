@@ -27,7 +27,7 @@ import {
 import { Doc } from "./_generated/dataModel";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone } from "./validate";
-import { attendanceTrend } from "../lib/attendance-trend";
+import { punctualitySummary, sessionStarts } from "../lib/attendance-trend";
 
 /** Validate + normalize a member's position / class-leader flag (admin-only
  *  values). Prevents contradictory combinations, e.g. Read-only Leader + Class
@@ -190,27 +190,11 @@ export const list = query({
       memberActivity(ctx, members),
     ]);
 
-    // Group once, then reuse for both the count and the six-month trend the
-    // member card draws, instead of re-scanning all attendance per member.
-    const rowsByMember = new Map<string, typeof attendance>();
-    for (const row of attendance) {
-      if (!row.memberId) continue;
-      const list = rowsByMember.get(row.memberId) ?? [];
-      list.push(row);
-      rowsByMember.set(row.memberId, list);
-    }
-
-    return members.map((m) => {
-      const rows = rowsByMember.get(m._id) ?? [];
-      return {
-        ...m,
-        ...(activity.get(m._id) ?? NO_ACTIVITY),
-        attendanceCount: rows.length,
-        // Time-trend analysis: last six months of attendance (see the shared
-        // attendanceTrend helper, used by both this list and the profile chart).
-        attendanceTrend: attendanceTrend(rows, 6),
-      };
-    });
+    return members.map((m) => ({
+      ...m,
+      ...(activity.get(m._id) ?? NO_ACTIVITY),
+      attendanceCount: attendance.filter((a) => a.memberId === m._id).length,
+    }));
   },
 });
 
@@ -223,16 +207,21 @@ export const get = query({
     const member = await ctx.db.get(args.id);
     if (!member || member.isDeleted) return null;
     if (!withinClassScope(user, member.klass)) return null;
-    const [attendance, prayers, notes, activity] = await Promise.all([
+    const [attendance, prayers, notes, activity, allAttendance] = await Promise.all([
       ctx.db.query("attendance").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("prayerRequests").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("notes").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       memberActivity(ctx, [member]),
+      // Every attendance record, so this member's arrivals can be judged against
+      // when each session actually began (its first recorded arrival).
+      ctx.db.query("attendance").collect(),
     ]);
     return {
       // The profile header carries the same last-seen dot as the member card.
       member: { ...member, ...(activity.get(member._id) ?? NO_ACTIVITY) },
       attendance: attendance.sort((a, b) => b.date.localeCompare(a.date)),
+      // Punctuality: each arrival measured against that session's first arrival.
+      punctuality: punctualitySummary(attendance, sessionStarts(allAttendance)),
       // Confidential prayers and private notes are filtered per viewer.
       prayers: prayers
         .filter((p) => canSeeConfidentialPrayer(user, p))

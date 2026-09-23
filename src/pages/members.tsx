@@ -48,6 +48,7 @@ import {
   StatusPill,
   fmtDate,
   fmtDateTime,
+  fmtTime,
   downloadCsv,
   downloadPdf,
   progressColor,
@@ -58,10 +59,8 @@ import {
   userIsAdmin,
   ContactChannelActions,
 } from "@/components/shared";
-import {
-  AttendanceSparkline,
-  AttendanceTrendPanel,
-} from "@/components/attendance-trend";
+import { AttendanceTrendPanel } from "@/components/attendance-trend";
+import type { PunctualitySummary } from "@/lib/attendance-trend";
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
 const deriveShortcut = (area: string) =>
@@ -297,11 +296,8 @@ export default function Members() {
                 {m.classLeader && <span>Leader: {m.classLeader}</span>}
                 {m.ministryRoles && <span>{m.ministryRoles}</span>}
               </div>
-              <div className="mt-2.5 flex items-center justify-between gap-2 border-t pt-2 text-[10px] text-muted-foreground">
-                <span>
-                  {m.dateJoined ? `Joined ${fmtDate(m.dateJoined)}` : "No join date"} · {m.attendanceCount} attendance records
-                </span>
-                <AttendanceSparkline points={m.attendanceTrend ?? []} />
+              <div className="mt-2.5 border-t pt-2 text-[10px] text-muted-foreground">
+                {m.dateJoined ? `Joined ${fmtDate(m.dateJoined)}` : "No join date"} · {m.attendanceCount} attendance records
               </div>
             </Link>
           ))}
@@ -863,7 +859,13 @@ export function MemberProfile() {
 
         {/* ============ Attendance tab ============ */}
         {tab === "attendance" && (
-          <AttendanceTab member={member} rows={attendance} isAdmin={isAdmin} canRecord={canRecord} />
+          <AttendanceTab
+            member={member}
+            rows={attendance}
+            punctuality={data.punctuality}
+            isAdmin={isAdmin}
+            canRecord={canRecord}
+          />
         )}
 
         {/* ============ Prayer journal tab ============ */}
@@ -884,11 +886,13 @@ export function MemberProfile() {
 function AttendanceTab({
   member,
   rows,
+  punctuality,
   isAdmin,
   canRecord,
 }: {
   member: any;
   rows: any[];
+  punctuality?: PunctualitySummary;
   isAdmin: boolean;
   canRecord: boolean;
 }) {
@@ -899,6 +903,9 @@ function AttendanceTab({
 
   const [type, setType] = useState<string>(ATTENDANCE_TYPES.YOUTH_MEETING);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  // Default to now, so marking someone as they arrive records the time for the
+  // punctuality analysis without extra typing. It stays editable.
+  const [time, setTime] = useState(() => new Date().toTimeString().slice(0, 5));
   const [status, setStatus] = useState("present");
   const [program, setProgram] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -918,6 +925,7 @@ function AttendanceTab({
         type: type as any,
         programName: program.trim() || undefined,
         status: status as any,
+        time: time || undefined,
         remarks: remarks.trim() || undefined,
         recordedBy: recordedBy.trim() || me?.name || me?.email || undefined,
       });
@@ -932,6 +940,7 @@ function AttendanceTab({
         type: type as any,
         programName: program.trim() || undefined,
         status: status as any,
+        time: time || undefined,
         remarks: remarks.trim() || undefined,
         recordedBy: recordedBy.trim() || me?.name || me?.email || undefined,
       });
@@ -945,6 +954,9 @@ function AttendanceTab({
     setType(a.type);
     setDate(a.date.slice(0, 10));
     setStatus(a.status);
+    // Leave the field blank for a record that predates the time field, so
+    // correcting an old record doesn't stamp it with the current time.
+    setTime(a.time || "");
     setProgram(a.programName || "");
     setRemarks(a.remarks || "");
     setRecordedBy(a.recordedBy || "");
@@ -983,7 +995,7 @@ function AttendanceTab({
       )}
 
       {/* Time-trend analysis for this member's attendance. */}
-      <AttendanceTrendPanel rows={rows} />
+      <AttendanceTrendPanel rows={rows} punctuality={punctuality} />
 
       {/* Record attendance */}
       {canRecord && (
@@ -1007,6 +1019,10 @@ function AttendanceTab({
               <div>
                 <Label>Date</Label>
                 <Input type="date" className="mt-1 w-36" value={date} onChange={(e) => setDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Time marked</Label>
+                <Input type="time" className="mt-1 w-28" value={time} onChange={(e) => setTime(e.target.value)} />
               </div>
               <div>
                 <Label>Status</Label>
@@ -1057,6 +1073,7 @@ function AttendanceTab({
               <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Time marked</th>
                   <th className="px-3 py-2">Activity</th>
                   <th className="px-3 py-2">Program</th>
                   <th className="px-3 py-2">Status</th>
@@ -1069,6 +1086,7 @@ function AttendanceTab({
                 {rows.map((a) => (
                   <tr key={a._id} className="border-t">
                     <td className="px-3 py-2">{fmtDate(a.date)}</td>
+                    <td className="px-3 py-2 font-mono tabular-nums">{a.time ? fmtTime(a.time) : "—"}</td>
                     <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[a.type]}</td>
                     <td className="px-3 py-2">{a.programName || "—"}</td>
                     <td className="px-3 py-2"><StatusPill status={a.status} /></td>
