@@ -27,7 +27,12 @@ import {
 import { Doc } from "./_generated/dataModel";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone } from "./validate";
-import { parseStartTimes, punctualitySummary, sessionStarts } from "../lib/attendance-trend";
+import {
+  parseStartTimes,
+  punctualityByType,
+  punctualitySummary,
+  sessionStarts,
+} from "../lib/attendance-trend";
 
 /** Validate + normalize a member's position / class-leader flag (admin-only
  *  values). Prevents contradictory combinations, e.g. Read-only Leader + Class
@@ -229,6 +234,13 @@ export const get = query({
       // Punctuality: each arrival measured against its session's official start
       // time when one is configured, and against the first arrival otherwise.
       punctuality: punctualitySummary(
+        attendance,
+        sessionStarts(allAttendance, startTimes),
+        startTimes,
+      ),
+      // The same reading per activity — early to the youth meeting, late to
+      // Sunday service is a schedule problem, not a discipline one.
+      punctualityByActivity: punctualityByType(
         attendance,
         sessionStarts(allAttendance, startTimes),
         startTimes,

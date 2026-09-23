@@ -371,8 +371,14 @@ export const PUNCTUALITY_LABELS: Record<PunctualityBand, string> = {
   veryLate: "Very late",
 };
 
-/** Boundaries, in minutes after the first arrival, between the bands. */
-const PUNCTUAL_GRACE = 10;
+/**
+ * Boundaries, in minutes after the session's start, between the bands.
+ *
+ * `PUNCTUAL_GRACE` is exported because the recording form warns with the same
+ * threshold the analysis uses — so "it warned me" and "it counted as late"
+ * can never disagree.
+ */
+export const PUNCTUAL_GRACE = 10;
 const SLIGHTLY_LATE = 25;
 const LATE = 45;
 
@@ -466,4 +472,38 @@ export function punctualitySummary(
           : "inferred";
 
   return { timed, ...counts, averageDelay, worstDelay, verdict, baseline };
+}
+
+/** One activity's punctuality, so a late habit can be traced to a service. */
+export type ActivityPunctuality = PunctualitySummary & {
+  /** The attendance type this row covers (`youthMeeting`, `bibleStudy`…). */
+  type: string;
+};
+
+/**
+ * Punctuality broken down by activity.
+ *
+ * Members are rarely uniformly late — someone who is early to the youth meeting
+ * and late to Sunday service has a schedule problem, not a discipline one. Each
+ * activity is measured against its own session starts (its configured start time,
+ * or that session's first arrival), and activities where nothing was timed are
+ * left out rather than reported as zero. Late-to-most first, so the activity to
+ * talk about is at the top.
+ */
+export function punctualityByType(
+  rows: TrendRow[],
+  starts: Map<string, number>,
+  configured: SessionStartTimes = {},
+): ActivityPunctuality[] {
+  const byType = new Map<string, TrendRow[]>();
+  for (const row of rows) {
+    const type = row.type || "other";
+    const list = byType.get(type) ?? [];
+    list.push(row);
+    byType.set(type, list);
+  }
+  return [...byType.entries()]
+    .map(([type, list]) => ({ type, ...punctualitySummary(list, starts, configured) }))
+    .filter((t) => t.timed > 0)
+    .sort((a, b) => b.averageDelay - a.averageDelay || b.timed - a.timed);
 }

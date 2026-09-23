@@ -38,8 +38,9 @@ import {
   userCanWrite,
 } from "@/components/shared";
 import {
-  AttendanceSparkline,
+  AttendanceWaveline,
   PUNCTUALITY_META,
+  PunctualityBaselinePill,
   trendDirectionMeta,
 } from "@/components/attendance-trend";
 import {
@@ -277,7 +278,7 @@ export default function Attendance() {
                   >
                     {member.fullName}
                   </Link>
-                  <AttendanceSparkline points={points} />
+                  <AttendanceWaveline points={points} direction={summary.direction} />
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
@@ -298,6 +299,9 @@ export default function Attendance() {
                       {PUNCTUALITY_META[punctuality.verdict].label}
                     </span>
                   )}
+                  <PunctualityBaselinePill
+                    baseline={punctuality.timed > 0 ? punctuality.baseline : "none"}
+                  />
                   <span
                     className="w-10 text-right font-mono text-[11px] font-semibold tabular-nums"
                     style={{ color: progressColor(summary.average) }}

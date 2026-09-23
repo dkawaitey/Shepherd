@@ -60,7 +60,13 @@ import {
   ContactChannelActions,
 } from "@/components/shared";
 import { AttendanceTrendPanel } from "@/components/attendance-trend";
-import type { PunctualitySummary } from "@/lib/attendance-trend";
+import {
+  PUNCTUAL_GRACE,
+  hhmmToMinutes,
+  parseStartTimes,
+  type ActivityPunctuality,
+  type PunctualitySummary,
+} from "@/lib/attendance-trend";
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
 const deriveShortcut = (area: string) =>
@@ -69,6 +75,7 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   ClipboardList,
+  Clock,
   Crown,
   Download,
   FileText,
@@ -863,6 +870,7 @@ export function MemberProfile() {
             member={member}
             rows={attendance}
             punctuality={data.punctuality}
+            punctualityByActivity={data.punctualityByActivity}
             isAdmin={isAdmin}
             canRecord={canRecord}
           />
@@ -887,16 +895,20 @@ function AttendanceTab({
   member,
   rows,
   punctuality,
+  punctualityByActivity,
   isAdmin,
   canRecord,
 }: {
   member: any;
   rows: any[];
   punctuality?: PunctualitySummary;
+  punctualityByActivity?: ActivityPunctuality[];
   isAdmin: boolean;
   canRecord: boolean;
 }) {
   const me = useQuery(api.users.currentUser);
+  const settings = useQuery(api.settings.get);
+  const startTimes = parseStartTimes(settings?.attendance_start_times);
   const setAttendance = useMutation(api.discipleship.setAttendance);
   const updateAttendance = useMutation(api.discipleship.updateAttendance);
   const deleteAttendance = useMutation(api.discipleship.deleteAttendance);
@@ -915,6 +927,18 @@ function AttendanceTab({
   const present = rows.filter((r) => r.status === "present").length;
   const rate = rows.length ? Math.round((present / rows.length) * 100) : 0;
   const needsFollowUp = rows.length >= 2 && rate < 60;
+
+  // Late-mark warning: the same threshold the punctuality analysis uses, so the
+  // recorder is told at the moment of entry that this will count as late — and
+  // only when the ministry has actually set a start time for the activity.
+  const officialStart = startTimes[type];
+  const startMinute = hhmmToMinutes(officialStart);
+  const markedMinuteValue = hhmmToMinutes(time);
+  const lateBy =
+    status === "present" && startMinute !== null && markedMinuteValue !== null
+      ? markedMinuteValue - startMinute
+      : 0;
+  const lateWarning = lateBy > PUNCTUAL_GRACE;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -995,7 +1019,11 @@ function AttendanceTab({
       )}
 
       {/* Time-trend analysis for this member's attendance. */}
-      <AttendanceTrendPanel rows={rows} punctuality={punctuality} />
+      <AttendanceTrendPanel
+        rows={rows}
+        punctuality={punctuality}
+        punctualityByActivity={punctualityByActivity}
+      />
 
       {/* Record attendance */}
       {canRecord && (
@@ -1059,6 +1087,19 @@ function AttendanceTab({
               </div>
             </div>
           </div>
+
+          {/* Late-mark warning — informational, never blocks the record. */}
+          {lateWarning && (
+            <div className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+              <Clock className="mt-px h-3.5 w-3.5 shrink-0" />
+              <span>
+                This marks {member.fullName.split(" ")[0]} {lateBy} min after the{" "}
+                {ATTENDANCE_TYPE_LABELS[type] ?? type} start time
+                {officialStart ? ` (${fmtTime(officialStart)})` : ""}. Anything past{" "}
+                {PUNCTUAL_GRACE} min counts as late in the punctuality analysis.
+              </span>
+            </div>
+          )}
         </form>
       )}
 

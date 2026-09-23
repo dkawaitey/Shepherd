@@ -4,6 +4,7 @@ import {
   Clock,
   Flame,
   Minus,
+  Timer,
   TrendingDown,
   TrendingUp,
   Trophy,
@@ -17,6 +18,7 @@ import {
   attendanceTrend,
   attendanceTrendAll,
   trendSummary,
+  type ActivityPunctuality,
   type PunctualitySummary,
   type TrendGranularity,
   type TrendPoint,
@@ -87,6 +89,66 @@ export const PUNCTUALITY_BASELINE_NOTE: Record<
   none: "",
 };
 
+/**
+ * How the punctuality baseline is labelled in the UI.
+ *
+ * A punctuality figure is only as good as what it was measured against, so the
+ * reader is told which one it was: the ministry's configured start times, the
+ * sessions' first arrivals, or a mix of both.
+ */
+export const PUNCTUALITY_BASELINE_META: Record<
+  PunctualitySummary["baseline"],
+  { icon: typeof Clock | null; label: string; title: string }
+> = {
+  configured: {
+    icon: Timer,
+    label: "set start times",
+    title: "Measured against the start time set for each activity",
+  },
+  inferred: {
+    icon: Clock,
+    label: "first arrival",
+    title: "No start times set — measured against each session's first arrival",
+  },
+  mixed: {
+    icon: Timer,
+    label: "mixed baseline",
+    title: "Set start times where they exist, first arrivals otherwise",
+  },
+  none: { icon: null, label: "", title: "" },
+};
+
+/**
+ * A small pill naming the punctuality baseline.
+ *
+ * Rendered wherever a punctuality verdict is shown so the number is never read
+ * as more precise than it is — deliberately neutral, since this is provenance,
+ * not a score.
+ */
+export function PunctualityBaselinePill({
+  baseline,
+  className,
+}: {
+  baseline: PunctualitySummary["baseline"];
+  className?: string;
+}) {
+  const meta = PUNCTUALITY_BASELINE_META[baseline];
+  if (!meta.icon) return null;
+  const Icon = meta.icon;
+  return (
+    <span
+      title={meta.title}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground",
+        className,
+      )}
+    >
+      <Icon className="h-2.5 w-2.5" />
+      {meta.label}
+    </span>
+  );
+}
+
 /** The punctuality bands, weakest last, with the colour each is drawn in. */
 const PUNCTUALITY_BANDS = [
   { key: "onTime", label: "On time", color: "#86efac" },
@@ -103,6 +165,12 @@ function describeDelay(minutes: number) {
   return `${Math.round(minutes / 60)}h ${minutes % 60}m after the session began`;
 }
 
+/** One-line breakdown of an activity's punctuality, for a hover title. */
+function punctualityTooltip(a: ActivityPunctuality): string {
+  const label = ATTENDANCE_TYPE_LABELS[a.type] ?? a.type;
+  return `${label}: ${a.onTime} on time, ${a.slightlyLate} a little late, ${a.late} late, ${a.veryLate} very late — ${a.timed} timed`;
+}
+
 /**
  * A member's attendance over time, as a verdict plus a month-by-month chart.
  *
@@ -115,9 +183,12 @@ function describeDelay(minutes: number) {
 export function AttendanceTrendPanel({
   rows,
   punctuality,
+  punctualityByActivity,
 }: {
   rows: TrendRow[];
   punctuality?: PunctualitySummary | null;
+  /** The same punctuality reading split per activity, strongest lateness first. */
+  punctualityByActivity?: ActivityPunctuality[] | null;
 }) {
   // Default to the member's full recorded history, so a trend appears for
   // attendance that was already on file long before this panel existed.
@@ -299,9 +370,10 @@ export function AttendanceTrendPanel({
       {punctuality && (
         <div className="mt-4 border-t pt-3">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Clock className="h-3 w-3 text-muted-foreground" />
               <p className="term-label">punctuality</p>
+              <PunctualityBaselinePill baseline={punctuality.baseline} />
             </div>
             <span
               className={cn(
@@ -355,9 +427,57 @@ export function AttendanceTrendPanel({
                 {punctuality.worstDelay > 0
                   ? ` · latest was ${punctuality.worstDelay} min after the session began`
                   : ""}
-                .{" "}
-                {PUNCTUALITY_BASELINE_NOTE[punctuality.baseline]}
+                .
+                {punctuality.baseline === "inferred"
+                  ? ` ${PUNCTUALITY_BASELINE_NOTE.inferred}`
+                  : ""}
               </p>
+
+              {/* The same reading split per activity — someone early to the youth
+                  meeting and late to Sunday service has a schedule problem. */}
+              {punctualityByActivity && punctualityByActivity.length > 1 && (
+                <div className="mt-3 space-y-1.5 border-t border-dashed pt-3">
+                  {punctualityByActivity.map((a) => (
+                    <div key={a.type} className="flex items-center gap-2">
+                      <span className="w-28 shrink-0 truncate text-[10px] text-muted-foreground">
+                        {ATTENDANCE_TYPE_LABELS[a.type] ?? a.type}
+                      </span>
+                      <div
+                        className="flex h-2 flex-1 overflow-hidden rounded-sm bg-muted"
+                        title={punctualityTooltip(a)}
+                      >
+                        {PUNCTUALITY_BANDS.map((b) => {
+                          const count = a[b.key];
+                          if (count === 0) return null;
+                          return (
+                            <div
+                              key={b.key}
+                              style={{
+                                width: `${(count / a.timed) * 100}%`,
+                                backgroundColor: b.color,
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      <span
+                        className={cn(
+                          "inline-flex w-24 shrink-0 items-center justify-end gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+                          PUNCTUALITY_META[a.verdict].cls,
+                        )}
+                      >
+                        {PUNCTUALITY_META[a.verdict].label}
+                      </span>
+                      <span
+                        className="w-20 shrink-0 text-right font-mono text-[9px] tabular-nums text-muted-foreground"
+                        title="Average minutes after the session began · arrivals timed"
+                      >
+                        {a.averageDelay === 0 ? "first" : `+${a.averageDelay}m`} · {a.timed}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -402,34 +522,115 @@ function TrendStat({
  * labels. It only needs to say "this member is trending up / down" at a glance;
  * the member profile carries the full analysis.
  */
-export function AttendanceSparkline({
+/** Colour a trend line by its verdict, so an improving 40% still reads upward. */
+const WAVE_TONE: Record<TrendSummary["direction"], string> = {
+  up: "var(--status-green)",
+  down: "var(--status-red)",
+  steady: "var(--status-grey)",
+  none: "var(--status-red)",
+};
+
+/**
+ * Catmull-Rom through the points, emitted as cubic beziers — a smooth line.
+ *
+ * A polyline would read as a jagged chart; the roster wants a *shape*, and a
+ * gentle curve makes a direction legible at 88px wide.
+ */
+function smoothPath(pts: { x: number; y: number }[]): string {
+  let d = `M ${pts[0]!.x.toFixed(1)} ${pts[0]!.y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i]!;
+    const p1 = pts[i]!;
+    const p2 = pts[i + 1]!;
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+/**
+ * A member's attendance drawn as a smooth wavy line rather than bars.
+ *
+ * Six bars read as six separate numbers; a line reads as a direction, which is
+ * the question the roster is actually asking ("who is slipping?"). Months with
+ * no records are left as real gaps — the line breaks instead of dropping to
+ * zero, so an unrecorded month is never mistaken for a collapse in attendance.
+ * The colour follows the trend verdict, not just the average rate.
+ */
+export function AttendanceWaveline({
   points,
+  direction,
   className,
 }: {
   points: TrendPoint[];
+  direction: TrendSummary["direction"];
   className?: string;
 }) {
-  const hasData = points.some((p) => p.total > 0);
-  if (!hasData) return null;
+  const known = points.filter((p) => p.total > 0);
+  if (known.length === 0) return null;
+
+  const W = 88;
+  const H = 26;
+  const pad = 4;
+  const lastIdx = Math.max(1, points.length - 1);
+  const xOf = (i: number) => pad + (i / lastIdx) * (W - pad * 2);
+  const yOf = (pct: number) => H - pad - (pct / 100) * (H - pad * 2);
+
+  // Consecutive months with records become one continuous stroke; a break in
+  // the records breaks the line.
+  const segments: { x: number; y: number }[][] = [];
+  let run: { x: number; y: number }[] = [];
+  points.forEach((p, i) => {
+    if (p.total === 0) {
+      if (run.length) segments.push(run);
+      run = [];
+      return;
+    }
+    run.push({ x: xOf(i), y: yOf(p.percentage) });
+  });
+  if (run.length) segments.push(run);
+
+  const stroke = WAVE_TONE[direction];
+  const tail = segments[segments.length - 1]!;
+  const last = tail[tail.length - 1]!;
+
   return (
     <span
-      className={cn("inline-flex items-end gap-0.5", className)}
+      className={cn("inline-flex shrink-0", className)}
       title={points
         .filter((p) => p.total > 0)
-        .map((p) => `${p.label} ${p.percentage}%`)
+        .map((p) => `${p.label} ${p.percentage}% (${p.present}/${p.total})`)
         .join(" · ")}
       aria-label="Attendance trend over the last six months"
     >
-      {points.map((p) => (
-        <span
-          key={p.key}
-          className="w-1 rounded-sm"
-          style={{
-            height: `${Math.max(2, (p.total === 0 ? 0 : p.percentage) / 100) * 14}px`,
-            backgroundColor: p.total === 0 ? "var(--border)" : progressColor(p.percentage),
-          }}
-        />
-      ))}
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden>
+        {segments.map((seg, i) =>
+          seg.length >= 2 ? (
+            <g key={i}>
+              <path
+                d={`${smoothPath(seg)} L ${seg[seg.length - 1]!.x.toFixed(1)} ${H} L ${seg[0]!.x.toFixed(1)} ${H} Z`}
+                style={{ fill: stroke, opacity: 0.12 }}
+              />
+              <path
+                d={smoothPath(seg)}
+                fill="none"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ stroke }}
+              />
+            </g>
+          ) : (
+            <circle key={i} cx={seg[0]!.x} cy={seg[0]!.y} r={1.6} style={{ fill: stroke }} />
+          ),
+        )}
+        {/* The most recent month, marked so the eye lands on where it stands. */}
+        <circle cx={last.x} cy={last.y} r={2.4} style={{ fill: stroke }} />
+      </svg>
     </span>
   );
 }
