@@ -758,11 +758,14 @@ function NotificationsTab() {
   const [actionError, setActionError] = useState("");
   const [testing, setTesting] = useState(false);
   const sendTestNotif = useMutation(api.push.sendTestNotification);
-  const diag = useQuery(api.push.deliveryDiagnostics);
 
   const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
   const inIframe = typeof window !== "undefined" && window.self !== window.top;
   const isAdmin = me?.role === ROLES.ADMIN || me?.roles?.includes(ROLES.ADMIN);
+  // Delivery diagnostics are administrator-only on the server, so this query is
+  // skipped for everyone else. Subscribing it for a member would throw
+  // "you do not have permission" and take the whole Settings page down.
+  const diag = useQuery(api.push.deliveryDiagnostics, isAdmin ? {} : "skip");
 
   return (
     <div className="max-w-lg space-y-4">
@@ -845,7 +848,9 @@ function NotificationsTab() {
             </div>
           )}
 
-          {subscribed && isAdmin && (
+          {/* Every account can verify and turn off notifications on its own
+              device; the delivery diagnostics below stay administrator-only. */}
+          {subscribed && (
             <div className="flex items-center gap-2 border-b border-dashed pb-3">
               <Button
                 size="sm"
@@ -883,7 +888,7 @@ function NotificationsTab() {
           )}
 
           {/* ── Diagnostics (admin only) ── */}
-          {diag && isAdmin && (
+          {diag && (
             <div className="rounded-md border bg-muted/40 px-3 py-2.5 text-[10px] leading-4">
               <div className="mb-1.5 text-[11px] font-semibold">Delivery Diagnostics</div>
               <div className="grid grid-cols-2 gap-1.5">
