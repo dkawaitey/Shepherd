@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
+import { RouteErrorBoundary } from "@/components/error-boundary";
 
 type NavItem = {
   to: string;
@@ -419,7 +420,11 @@ export function AppShell() {
         )}
 
         <main className="flex-1 px-4 py-6 md:px-6">
-          <Outlet />
+          {/* A crashed page shows a recovery card here instead of blanking the
+              whole app — the sidebar, topbar and notifications stay usable. */}
+          <RouteErrorBoundary>
+            <Outlet />
+          </RouteErrorBoundary>
         </main>
       </div>
 

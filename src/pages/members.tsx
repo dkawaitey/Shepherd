@@ -581,9 +581,12 @@ export function MemberProfile() {
   const navigate = useNavigate();
   const data = useQuery(api.members.get, { id: id as any });
   const me = useQuery(api.users.currentUser);
-  const accounts = useQuery(api.users.list);
-  const linkMember = useMutation(api.users.linkMember);
   const isAdmin = userIsAdmin(me);
+  // The linked-account card is administrator-only, and on the server the account
+  // list is limited to admins and coordinators — subscribing it for any other
+  // role throws a permission error and blanks the whole profile page.
+  const accounts = useQuery(api.users.list, isAdmin ? {} : "skip");
+  const linkMember = useMutation(api.users.linkMember);
   // Confidential notes and record edits are for everyone except a pure
   // read-only Leader — checked over every role the account holds.
   const canSeeConfidential = userCanWrite(me);

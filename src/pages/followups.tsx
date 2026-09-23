@@ -35,7 +35,7 @@ import {
   StatusPill,
   fmtDate,
   formatError,
-  userIsAdmin,
+  userCanWrite,
 } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
@@ -366,7 +366,10 @@ export default function Followups() {
     search: search || undefined,
   });
   const me = useQuery(api.users.currentUser);
-  const isAdmin = userIsAdmin(me);
+  // Scheduling, updating and deleting follow-ups is coordinators, workers and
+  // class leaders (plus admins) on the server — a read-only leader or a plain
+  // member may follow along, but not act.
+  const canWork = userCanWrite(me);
   const remove = useMutation(api.followups.remove);
 
   const setParam = (key: string, value: string) => {
@@ -396,9 +399,11 @@ export default function Followups() {
         title="Follow-ups"
         code="fup"
         actions={
-          <Button onClick={() => setScheduleOpen(true)}>
-            <CalendarPlus className="mr-1.5 h-4 w-4" /> Schedule follow-up
-          </Button>
+          canWork ? (
+            <Button onClick={() => setScheduleOpen(true)}>
+              <CalendarPlus className="mr-1.5 h-4 w-4" /> Schedule follow-up
+            </Button>
+          ) : null
         }
       />
 
@@ -455,9 +460,11 @@ export default function Followups() {
           title="No follow-ups here"
           message="Schedule your first follow-up to start the discipleship journey."
           action={
-            <Button onClick={() => setScheduleOpen(true)}>
-              <CalendarPlus className="mr-1.5 h-4 w-4" /> Schedule follow-up
-            </Button>
+            canWork ? (
+              <Button onClick={() => setScheduleOpen(true)}>
+                <CalendarPlus className="mr-1.5 h-4 w-4" /> Schedule follow-up
+              </Button>
+            ) : null
           }
         />
       ) : (
@@ -474,8 +481,8 @@ export default function Followups() {
             <FollowupRow
               key={f._id}
               f={f}
-              onStatus={isAdmin ? () => setChanging(f) : undefined}
-              onDelete={isAdmin ? () => setConfirmDelete(f) : undefined}
+              onStatus={canWork ? () => setChanging(f) : undefined}
+              onDelete={canWork ? () => setConfirmDelete(f) : undefined}
             />
           ))}
         </div>

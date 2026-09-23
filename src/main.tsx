@@ -99,14 +99,29 @@ class RootErrorBoundary extends React.Component<
       return (
         <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
           <div className="max-w-lg text-center">
-            <p className="text-sm font-semibold">Preview runtime error</p>
+            <p className="text-sm font-semibold">Shepherd hit an unexpected error</p>
             <p className="mt-2 text-xs text-muted-foreground break-words">
+              The screen couldn't finish loading. Reloading usually clears it, and
+              no ministry records were changed.
+            </p>
+            <p className="mt-2 text-[11px] text-muted-foreground/80 break-words">
               {this.state.message}
             </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              Reload Shepherd
+            </button>
             {this.state.stack && (
-              <pre className="mt-3 text-left text-[10px] leading-4 text-muted-foreground/80 max-h-40 overflow-auto rounded border border-border/60 p-2">
-                {this.state.stack}
-              </pre>
+              <details className="mt-4 text-left">
+                <summary className="cursor-pointer text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Technical details
+                </summary>
+                <pre className="mt-2 max-h-40 overflow-auto rounded border border-border/60 p-2 text-[10px] leading-4 text-muted-foreground/80">
+                  {this.state.stack}
+                </pre>
+              </details>
             )}
           </div>
         </div>

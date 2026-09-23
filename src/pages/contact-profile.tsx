@@ -102,6 +102,11 @@ export default function ContactProfile() {
   // server's requireRole calls).
   const canEdit = userCanWrite(me);
   const canAdd = canAddRecords(me);
+  // `canEdit` covers follow-ups, prayers, notes and Bible study, whose server
+  // checks allow coordinators and workers too. Editing the contact record
+  // itself (details, stage, journey events) is class-leader work, and the
+  // server only accepts admins and class leaders — same rule as `canAdd`.
+  const canEditContact = canAddRecords(me);
   const promote = useMutation(api.contacts.promoteToMember);
   const [promoting, setPromoting] = useState(false);
 
@@ -179,7 +184,7 @@ export default function ContactProfile() {
               >
                 <Button variant="outline" size="sm"><MapPin className="mr-1 h-3.5 w-3.5" /> Directions</Button>
               </a>
-              {canEdit && (
+              {canEditContact && (
                 <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                   <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                 </Button>
@@ -266,7 +271,7 @@ export default function ContactProfile() {
             <TimelineTab
               contact={contact}
               journeyEvents={journeyEvents}
-              canEdit={!!canEdit}
+              canEdit={!!canEditContact}
             />
           )}
           {tab === "followups" && (

@@ -35,7 +35,7 @@ import {
   REACTION_FALLBACK,
   ROLES,
 } from "@/convex/constants";
-import { userHasRole, userIsAdmin } from "@/components/shared";
+import { canPublishPosts, userHasRole, userIsAdmin } from "@/components/shared";
 import { PollComposer } from "@/components/poll-composer";
 import { PollScheduleDialog } from "@/components/poll-schedule";
 
@@ -168,6 +168,9 @@ export default function Announcements() {
   // "test as", exactly like the server's hasRole).
   const isAdmin = userIsAdmin(me);
   const isCoordinator = userHasRole(me, ROLES.COORDINATOR);
+  // Publishing is leadership-only on the server (`posts.create`); members still
+  // read, react, comment and vote.
+  const canPublish = canPublishPosts(me);
   const removePost = useMutation(api.posts.remove);
 
   // A new search or author filter starts from the first page again.
@@ -185,14 +188,16 @@ export default function Announcements() {
         title="Announcements"
         code="ann"
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setPollComposerOpen(true)}>
-              <BarChart3 className="mr-1.5 h-4 w-4" /> New poll
-            </Button>
-            <Button onClick={openComposer}>
-              <Plus className="mr-1.5 h-4 w-4" /> New post
-            </Button>
-          </div>
+          canPublish ? (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setPollComposerOpen(true)}>
+                <BarChart3 className="mr-1.5 h-4 w-4" /> New poll
+              </Button>
+              <Button onClick={openComposer}>
+                <Plus className="mr-1.5 h-4 w-4" /> New post
+              </Button>
+            </div>
+          ) : null
         }
       />
 
@@ -229,9 +234,11 @@ export default function Announcements() {
           title="No posts yet"
           message="Post the first update for the team — a testimony, an announcement or an encouragement."
           action={
-            <Button onClick={openComposer}>
-              <Plus className="mr-1.5 h-4 w-4" /> New post
-            </Button>
+            canPublish ? (
+              <Button onClick={openComposer}>
+                <Plus className="mr-1.5 h-4 w-4" /> New post
+              </Button>
+            ) : null
           }
         />
       ) : (

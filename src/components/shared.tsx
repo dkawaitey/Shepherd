@@ -94,6 +94,21 @@ export function canAddRecords(user?: {
   return userIsAdmin(user) || userHasRole(user, ROLES.CLASS_LEADER);
 }
 
+/**
+ * Accounts that may publish an announcement or poll. Mirrors the server's
+ * `requireRole([coordinator, worker, leader])` in `posts.create` — a plain
+ * member (linked profile, no ministry position) can react, comment and vote,
+ * but not publish.
+ */
+export function canPublishPosts(user?: RoleBearingUser) {
+  return (
+    userIsAdmin(user) ||
+    userHasRole(user, ROLES.COORDINATOR) ||
+    userHasRole(user, ROLES.WORKER) ||
+    userHasRole(user, ROLES.LEADER)
+  );
+}
+
 export function StatusPill({
   status,
   className,

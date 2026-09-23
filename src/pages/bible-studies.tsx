@@ -24,12 +24,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BIBLE_LESSONS } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, fmtDate, formatError } from "@/components/shared";
+import {
+  EmptyState,
+  PageHeader,
+  StatusPill,
+  fmtDate,
+  formatError,
+  userCanWrite,
+} from "@/components/shared";
 import { cn } from "@/lib/utils";
 import { BookMarked } from "lucide-react";
 
 export default function BibleStudies() {
   const contacts = useQuery(api.contacts.list, {});
+  const me = useQuery(api.users.currentUser);
+  // Bible study records are kept by coordinators, workers and class leaders;
+  // a read-only leader or plain member can look, but not record progress.
+  const canRecord = userCanWrite(me);
   const [contactId, setContactId] = useState("");
   const bible = useQuery(api.discipleship.bibleStudiesForContact, contactId ? { contactId: contactId as any } : "skip");
   const [editing, setEditing] = useState<any | null>(null);
@@ -128,14 +139,16 @@ export default function BibleStudies() {
                   {b.scriptureUsed && (
                     <p className="mt-1 text-[10px] text-muted-foreground">📖 {b.scriptureUsed}</p>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2.5 w-full"
-                    onClick={() => setEditing({ lesson: b.lesson, name: b.name, row: b })}
-                  >
-                    {b.status === "completed" ? "View / edit record" : "Record progress"}
-                  </Button>
+                  {canRecord && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2.5 w-full"
+                      onClick={() => setEditing({ lesson: b.lesson, name: b.name, row: b })}
+                    >
+                      {b.status === "completed" ? "View / edit record" : "Record progress"}
+                    </Button>
+                  )}
                 </div>
               );
             })}

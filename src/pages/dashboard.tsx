@@ -16,7 +16,7 @@ import {
   FOLLOWUP_STATUS_COLORS,
   FollowupStatus,
 } from "@/convex/constants";
-import { StatusPill, fmtDate, fmtDateTime } from "@/components/shared";
+import { StatusPill, canPublishPosts, fmtDate, fmtDateTime } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
   TriangleAlert,
@@ -222,6 +222,8 @@ export default function Dashboard() {
   // Standalone poll composer, so a poll can be published without leaving here.
   const [pollOpen, setPollOpen] = useState(false);
   const me = useQuery(api.users.currentUser);
+  // Starting a poll needs the same role the server requires to publish one.
+  const canPublish = canPublishPosts(me);
   const stats = useQuery(api.dashboard.stats);
   // Only the latest few are shown here, so don't load the whole feed.
   const posts = useQuery(api.posts.list, { limit: 5 });
@@ -326,22 +328,28 @@ export default function Dashboard() {
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
             <p className="term-label">open polls</p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-[10px]"
-            onClick={() => setPollOpen(true)}
-          >
-            <Plus className="mr-1 h-3 w-3" /> New poll
-          </Button>
+          {canPublish && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px]"
+              onClick={() => setPollOpen(true)}
+            >
+              <Plus className="mr-1 h-3 w-3" /> New poll
+            </Button>
+          )}
         </div>
         {openPolls.length === 0 && pollResults.length === 0 ? (
           <p className="py-3 text-center text-[11px] text-muted-foreground">
-            No polls yet — start one and the whole team gets to answer.
+            {canPublish
+              ? "No polls yet — start one and the whole team gets to answer."
+              : "No polls have been started yet."}
           </p>
         ) : openPolls.length === 0 ? (
           <p className="pb-2 text-[11px] text-muted-foreground">
-            No polls are open right now — start one above.
+            {canPublish
+              ? "No polls are open right now — start one above."
+              : "No polls are open right now."}
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
