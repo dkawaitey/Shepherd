@@ -250,6 +250,11 @@ async function dispatchDigest(
       if (r.overdue.length) lines.push(`Overdue: ${r.overdue.length} follow-ups`);
       if (r.birthdays.length) lines.push(`Birthdays: ${r.birthdays.map((b) => b.contactName).join(", ")}`);
       if (r.lowAttendance.length) lines.push(`Low attendance: ${r.lowAttendance.length} members`);
+      // The combined analytics, so the SMS fallback carries the same picture.
+      lines.push(`Effective participation: ${r.attendance.effectiveRate}% (present & on time)`);
+      lines.push(`Punctuality: ${r.attendance.onTimeRate}% on time of ${r.attendance.timed} timed`);
+      if (r.attendance.drifting.length)
+        lines.push(`Drifting: ${r.attendance.drifting.map((d) => d.memberName).join(", ")}`);
       const body = `Shepherd — ${r.className} digest\n\n${lines.join("\n")}\n\nOpen Shepherd for details.`;
       const res = await sendSms(ctx, { to: r.phone, body, kind: "classDigest", userId: r.userId });
       if (res.ok) sent++;

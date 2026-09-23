@@ -545,3 +545,317 @@ export function lateLevel(
       ? "sometimes"
       : null;
 }
+
+// ================= Combined attendance + punctuality =================
+
+/** One month of punctuality: how many arrivals were timed, and how many were on time. */
+export type PunctualityTrendPoint = {
+  /** `YYYY-MM`, the bucket key. */
+  key: string;
+  /** Short month label for the axis (e.g. "Sep"). */
+  label: string;
+  /** Present arrivals we could time against a known session start. */
+  timed: number;
+  /** Of those, the ones that landed within the grace window. */
+  onTime: number;
+  /** Mean minutes after the session began across the timed arrivals. */
+  averageDelay: number;
+  /** `onTime / timed` as a whole percentage; 0 when nothing was timed. */
+  onTimeRate: number;
+};
+
+/**
+ * The last `months` calendar months of punctuality, oldest first.
+ *
+ * Mirrors `attendanceTrend`: the window is the last N calendar months and a
+ * month with no timed arrivals is kept as a gap, so a quiet month is never drawn
+ * as a collapse. Unlike the lifetime `punctualitySummary` snapshot this buckets
+ * the arrivals, which is the whole point — it shows lateness *trending*, so a
+ * slide can be caught while the member is still attending rather than after the
+ * absences start.
+ */
+export function punctualityTrend(
+  rows: TrendRow[],
+  starts: Map<string, number>,
+  configured: SessionStartTimes = {},
+  months = 6,
+  now: Date = new Date(),
+): PunctualityTrendPoint[] {
+  const byMonth = new Map<string, TrendRow[]>();
+  for (const row of rows) {
+    const key = (row.date || "").slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(key)) continue;
+    const list = byMonth.get(key) ?? [];
+    list.push(row);
+    byMonth.set(key, list);
+  }
+
+  const points: PunctualityTrendPoint[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = monthKey(d);
+    const summary = punctualitySummary(byMonth.get(key) ?? [], starts, configured);
+    points.push({
+      key,
+      label: d.toLocaleString("en", { month: "short" }),
+      timed: summary.timed,
+      onTime: summary.onTime,
+      averageDelay: summary.averageDelay,
+      onTimeRate:
+        summary.timed === 0
+          ? 0
+          : Math.round((summary.onTime / summary.timed) * 100),
+    });
+  }
+  return points;
+}
+
+/**
+ * Effective participation: the share of sessions a member *both* attended and
+ * arrived on time for.
+ *
+ * Raw attendance credits someone who turns up late every week exactly as much
+ * as someone who is there, ready, on time — so it can't rank a team by
+ * faithfulness. Effective participation can: it is `present and on time ÷
+ * sessions offered`, the single number the roster sorts and the digests report.
+ *
+ * Arrivals with no usable time (older records, or sessions with no start to
+ * compare against) still count as sessions *offered*, but not towards the
+ * numerator, and `timed` says how many arrivals could be judged — so the figure
+ * never claims more precision than the records support.
+ */
+export type ParticipationSummary = {
+  /** Sessions the member was expected at (every recorded session). */
+  sessions: number;
+  /** Sessions marked present. */
+  present: number;
+  /** Present arrivals that were timed and landed within the grace window. */
+  effective: number;
+  /** Present arrivals we could measure against a session start. */
+  timed: number;
+  /** `effective / sessions` as a whole percentage — the ranking number. */
+  rate: number;
+  /** `present / sessions`, the raw attendance rate, kept for comparison. */
+  attendanceRate: number;
+};
+
+export function effectiveParticipation(
+  rows: TrendRow[],
+  starts: Map<string, number>,
+  configured: SessionStartTimes = {},
+): ParticipationSummary {
+  const sessions = rows.length;
+  let present = 0;
+  let effective = 0;
+  let timed = 0;
+  for (const row of rows) {
+    if (row.status !== "present") continue;
+    present += 1;
+    const minute = markedMinute(row);
+    if (minute === null) continue;
+    const start = starts.get(sessionKey(row));
+    if (start === undefined) continue;
+    timed += 1;
+    if (Math.max(0, minute - start) <= PUNCTUAL_GRACE) effective += 1;
+  }
+  return {
+    sessions,
+    present,
+    effective,
+    timed,
+    rate: sessions === 0 ? 0 : Math.round((effective / sessions) * 100),
+    attendanceRate: sessions === 0 ? 0 : Math.round((present / sessions) * 100),
+  };
+}
+
+/** How serious a drift flag is. `watch` is a nudge, `atRisk` wants a follow-up. */
+export type DriftLevel = "none" | "watch" | "atRisk";
+
+export type DriftAssessment = {
+  level: DriftLevel;
+  /** Why the flag was raised, strongest first. */
+  reasons: string[];
+  /** A ready-to-use follow-up reason, prefilled into the follow-up dialog. */
+  suggestedReason: string;
+};
+
+/**
+ * The drifting / at-risk flag.
+ *
+ * Lateness is a *leading* indicator: a member who is still turning up but
+ * arriving later each week is roughly a month ahead of the absence that follows,
+ * and far easier to reach now. So a member is flagged when their attendance is
+ * falling **and** their lateness is rising (either the mean arrival is later
+ * than earlier months, or their lifetime verdict is "often late"). Attendance
+ * falling on its own is only a `watch` — sometimes a spell away is excused and
+ * the rate alone can't tell.
+ */
+export function driftRisk(input: {
+  /** The member's monthly attendance trend summary. */
+  attendance: TrendSummary;
+  /** The member's monthly punctuality, oldest first. */
+  punctuality: PunctualityTrendPoint[];
+  /** The member's lifetime punctuality verdict. */
+  verdict: PunctualitySummary["verdict"];
+}): DriftAssessment {
+  const { attendance, punctuality, verdict } = input;
+  const reasons: string[] = [];
+
+  const attendanceFalling = attendance.direction === "down";
+  if (attendanceFalling) {
+    reasons.push(`attendance down ${Math.abs(attendance.delta)} pts vs earlier months`);
+  }
+
+  // Lateness is "rising" when the newer half of the timed months averages a
+  // meaningfully later arrival than the older half. Comparing halves smooths a
+  // single late morning out; only the trend counts.
+  const timed = punctuality.filter((p) => p.timed > 0);
+  let delayDelta = 0;
+  let delayRising = false;
+  if (timed.length >= 2) {
+    const mid = Math.ceil(timed.length / 2);
+    const avg = (xs: PunctualityTrendPoint[]) =>
+      xs.reduce((n, p) => n + p.averageDelay, 0) / xs.length;
+    delayDelta = Math.round(avg(timed.slice(mid)) - avg(timed.slice(0, mid)));
+    if (delayDelta >= 5) delayRising = true;
+  }
+  const oftenLate = lateLevel(verdict) === "often";
+  if (delayRising) reasons.push(`arrivals ${delayDelta} min later than earlier months`);
+  else if (oftenLate) reasons.push("often late to sessions");
+
+  let level: DriftLevel = "none";
+  if (attendanceFalling && (delayRising || oftenLate)) level = "atRisk";
+  else if (attendanceFalling || delayRising || oftenLate) level = "watch";
+
+  const suggestedReason =
+    level === "none"
+      ? ""
+      : level === "atRisk"
+        ? "Attendance and punctuality are both slipping — a check-in is needed"
+        : attendanceFalling
+          ? "Attendance has been declining recently"
+          : "Arriving later than usual — a schedule check-in";
+
+  return { level, reasons, suggestedReason };
+}
+
+/** The four quadrants of the combined attendance × punctuality view. */
+export type QuadrantKey = "faithful" | "drifting" | "committed" | "disengaging";
+
+/** Attendance share at or above which a member counts as attending. */
+export const PARTICIPATION_HIGH = 60;
+/** On-time share at or above which a member counts as punctual. */
+export const PUNCTUALITY_HIGH = 60;
+
+/**
+ * What each quadrant means for ministry action, in one line.
+ *
+ * Shared by the analytics view and the digests so the same member reads the same
+ * way wherever a leader meets them.
+ */
+export const QUADRANT_META: Record<QuadrantKey, { label: string; guidance: string }> = {
+  faithful: {
+    label: "Faithful & punctual",
+    guidance: "Attends and arrives on time — disciple them and give responsibility.",
+  },
+  drifting: {
+    label: "Present but drifting",
+    guidance: "Attends but increasingly late — coach the schedule before it becomes absence.",
+  },
+  committed: {
+    label: "Committed, often absent",
+    guidance: "Punctual when present but missing sessions — a pastoral visit.",
+  },
+  disengaging: {
+    label: "Disengaging",
+    guidance: "Low attendance and late — priority outreach.",
+  },
+};
+
+/**
+ * Place a member in the combined quadrant, or `null` when nothing is timed.
+ *
+ * A member with no arrival times at all cannot be placed on the punctuality axis,
+ * and guessing would put them in the wrong half of the grid — so they are
+ * reported as unmeasured instead.
+ */
+export function classifyQuadrant(
+  attendanceRate: number,
+  onTimeRate: number | null,
+): QuadrantKey | null {
+  if (onTimeRate === null) return null;
+  const attending = attendanceRate >= PARTICIPATION_HIGH;
+  const punctual = onTimeRate >= PUNCTUALITY_HIGH;
+  if (attending) return punctual ? "faithful" : "drifting";
+  return punctual ? "committed" : "disengaging";
+}
+
+/**
+ * Count how a group splits across the quadrants, plus how many members could not
+ * be placed because nothing was timed — so a quadrant view always states how much
+ * of the group it describes.
+ */
+export function quadrantCounts(
+  entries: { attendanceRate: number; onTimeRate: number | null }[],
+): { counts: Record<QuadrantKey, number>; unmeasured: number } {
+  const counts: Record<QuadrantKey, number> = {
+    faithful: 0,
+    drifting: 0,
+    committed: 0,
+    disengaging: 0,
+  };
+  let unmeasured = 0;
+  for (const e of entries) {
+    const key = classifyQuadrant(e.attendanceRate, e.onTimeRate);
+    if (key === null) unmeasured += 1;
+    else counts[key] += 1;
+  }
+  return { counts, unmeasured };
+}
+
+/**
+ * Everything the roster, profile, analytics and digests need about one member's
+ * attendance at once.
+ *
+ * One call instead of four keeps every surface — and the backend that feeds the
+ * emails — reading from the same arithmetic, so a member can never look more
+ * punctual in the digest than on their profile.
+ */
+export type ParticipationInsight = {
+  participation: ParticipationSummary;
+  punctuality: PunctualitySummary;
+  punctualityTrend: PunctualityTrendPoint[];
+  attendanceTrend: TrendPoint[];
+  drift: DriftAssessment;
+  /** The combined quadrant, or `null` when nothing is timed. */
+  quadrant: QuadrantKey | null;
+};
+
+export function participationInsight(
+  rows: TrendRow[],
+  starts: Map<string, number>,
+  configured: SessionStartTimes = {},
+  months = 6,
+  now: Date = new Date(),
+): ParticipationInsight {
+  const participation = effectiveParticipation(rows, starts, configured);
+  const punctuality = punctualitySummary(rows, starts, configured);
+  const punctualityTrendPoints = punctualityTrend(rows, starts, configured, months, now);
+  const attendanceTrendPoints = attendanceTrend(rows, months, now);
+  const onTimeRate =
+    punctuality.timed === 0
+      ? null
+      : Math.round((punctuality.onTime / punctuality.timed) * 100);
+  return {
+    participation,
+    punctuality,
+    punctualityTrend: punctualityTrendPoints,
+    attendanceTrend: attendanceTrendPoints,
+    drift: driftRisk({
+      attendance: trendSummary(attendanceTrendPoints),
+      punctuality: punctualityTrendPoints,
+      verdict: punctuality.verdict,
+    }),
+    quadrant: classifyQuadrant(participation.attendanceRate, onTimeRate),
+  };
+}

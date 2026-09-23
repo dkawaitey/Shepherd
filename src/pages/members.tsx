@@ -59,12 +59,13 @@ import {
   userIsAdmin,
   ContactChannelActions,
 } from "@/components/shared";
-import { AttendanceTrendPanel } from "@/components/attendance-trend";
+import { AttendanceTrendPanel, DriftPill } from "@/components/attendance-trend";
 import {
   PUNCTUAL_GRACE,
   hhmmToMinutes,
   parseStartTimes,
   type ActivityPunctuality,
+  type ParticipationInsight,
   type PunctualitySummary,
 } from "@/lib/attendance-trend";
 
@@ -303,8 +304,25 @@ export default function Members() {
                 {m.classLeader && <span>Leader: {m.classLeader}</span>}
                 {m.ministryRoles && <span>{m.ministryRoles}</span>}
               </div>
-              <div className="mt-2.5 border-t pt-2 text-[10px] text-muted-foreground">
-                {m.dateJoined ? `Joined ${fmtDate(m.dateJoined)}` : "No join date"} · {m.attendanceCount} attendance records
+              <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 border-t pt-2 text-[10px] text-muted-foreground">
+                {m.insight && m.insight.participation.sessions > 0 ? (
+                  <>
+                    <span
+                      className="font-mono font-semibold tabular-nums"
+                      style={{ color: progressColor(m.insight.participation.rate) }}
+                      title={`Present and on time for ${m.insight.participation.effective} of ${m.insight.participation.sessions} sessions`}
+                    >
+                      {m.insight.participation.rate}%
+                    </span>
+                    <span>effective participation</span>
+                  </>
+                ) : (
+                  <span>
+                    {m.dateJoined ? `Joined ${fmtDate(m.dateJoined)}` : "No join date"} ·{" "}
+                    {m.attendanceCount} attendance records
+                  </span>
+                )}
+                {m.insight && <DriftPill drift={m.insight.drift} />}
               </div>
             </Link>
           ))}
@@ -788,7 +806,7 @@ export function MemberProfile() {
                 { label: "Youth Meetings", value: youthPct },
                 { label: "Church Services", value: churchPct },
                 { label: "Special Programs", value: specialPct },
-                { label: "Overall Participation", value: overall },
+                { label: "Effective participation", value: data.insight?.participation.rate ?? overall },
               ].map((s) => (
                 <div key={s.label} className="rounded-md border bg-card p-3">
                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</div>
@@ -871,6 +889,7 @@ export function MemberProfile() {
             rows={attendance}
             punctuality={data.punctuality}
             punctualityByActivity={data.punctualityByActivity}
+            insight={data.insight}
             isAdmin={isAdmin}
             canRecord={canRecord}
           />
@@ -896,6 +915,7 @@ function AttendanceTab({
   rows,
   punctuality,
   punctualityByActivity,
+  insight,
   isAdmin,
   canRecord,
 }: {
@@ -903,6 +923,8 @@ function AttendanceTab({
   rows: any[];
   punctuality?: PunctualitySummary;
   punctualityByActivity?: ActivityPunctuality[];
+  /** The combined reading, computed server-side so the profile matches the roster. */
+  insight?: ParticipationInsight | null;
   isAdmin: boolean;
   canRecord: boolean;
 }) {
@@ -1025,6 +1047,9 @@ function AttendanceTab({
         rows={rows}
         punctuality={punctuality}
         punctualityByActivity={punctualityByActivity}
+        punctualityTrendPoints={insight?.punctualityTrend}
+        drift={insight?.drift}
+        participation={insight?.participation}
       />
 
       {/* Record attendance */}

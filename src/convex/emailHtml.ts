@@ -120,6 +120,144 @@ export interface ClassRecipient {
   birthdays: { contactId: string; contactName: string; monthDay: string }[];
   lowAttendance: { memberId: string; memberName: string }[];
   newContacts: { contactId: string; contactName: string; location: string }[];
+  /** Combined attendance + punctuality reading for the class. */
+  attendance: DigestAttendance;
+}
+
+/** The four quadrants of the combined attendance × punctuality view. */
+export type DigestQuadrantKey = "faithful" | "drifting" | "committed" | "disengaging";
+
+/** One month of punctuality in a digest. */
+export interface DigestPunctualityPoint {
+  label: string;
+  onTimeRate: number;
+  averageDelay: number;
+  timed: number;
+}
+
+/** A member worth a check-in, flagged because their attendance is drifting. */
+export interface DigestDrifter {
+  memberId: string;
+  memberName: string;
+  level: "watch" | "atRisk";
+  reason: string;
+}
+
+/**
+ * The combined attendance + punctuality reading carried by both digests.
+ *
+ * Effective participation (present *and* on time), the monthly punctuality
+ * trend, the drifting members and the quadrant split — the four derived
+ * analytics, in one shape so the class and ministry digests describe the
+ * ministry the same way the app does.
+ */
+export interface DigestAttendance {
+  /** Present and on time as a share of sessions offered. */
+  effectiveRate: number;
+  /** Present at all as a share of sessions offered. */
+  attendanceRate: number;
+  /** Share of timed arrivals that were on time. */
+  onTimeRate: number;
+  /** Mean minutes after the session began. */
+  averageDelay: number;
+  /** Timed arrivals the figures are based on. */
+  timed: number;
+  punctualityTrend: DigestPunctualityPoint[];
+  quadrant: {
+    counts: Record<DigestQuadrantKey, number>;
+    unmeasured: number;
+    total: number;
+  };
+  drifting: DigestDrifter[];
+}
+
+const QUADRANT_LABELS: Record<DigestQuadrantKey, string> = {
+  faithful: "Faithful & punctual",
+  drifting: "Present but drifting",
+  committed: "Committed, often absent",
+  disengaging: "Disengaging",
+};
+
+const QUADRANT_GUIDANCE: Record<DigestQuadrantKey, string> = {
+  faithful: "disciple them and give responsibility",
+  drifting: "coach the schedule before it becomes absence",
+  committed: "punctual when present but missing sessions — a pastoral visit",
+  disengaging: "low attendance and late — priority outreach",
+};
+
+/** Act-first order, so the quadrant needing the most attention reads first. */
+const QUADRANT_ORDER: DigestQuadrantKey[] = [
+  "disengaging",
+  "committed",
+  "drifting",
+  "faithful",
+];
+
+/**
+ * Render the combined attendance + punctuality block.
+ *
+ * Shared by the class digest and the ministry digest so both describe a member
+ * the same way, and so an unmeasured group is stated as such rather than
+ * silently reported as all-clear.
+ */
+export function attendanceSections(
+  a: DigestAttendance,
+  scope: string,
+): { heading: string; body: string }[] {
+  const timedMonths = a.punctualityTrend.filter((p) => p.timed > 0);
+  const { counts, unmeasured, total } = a.quadrant;
+  const placed = total - unmeasured;
+
+  const sections: { heading: string; body: string }[] = [
+    {
+      heading: "Effective participation",
+      body:
+        `• Present and on time: ${a.effectiveRate}% of sessions (${scope})<br/>` +
+        `• Present at all (raw attendance): ${a.attendanceRate}%<br/>` +
+        `• Arrivals on time: ${a.onTimeRate}% of ${a.timed} timed · average arrival ${
+          a.timed === 0 ? "—" : a.averageDelay === 0 ? "first" : `+${a.averageDelay} min`
+        }`,
+    },
+    {
+      heading: "Punctuality trend",
+      body: timedMonths.length
+        ? timedMonths
+            .map(
+              (p) =>
+                `${p.label}: ${p.onTimeRate}% on time · avg ${
+                  p.averageDelay === 0 ? "first" : `+${p.averageDelay} min`
+                }`,
+            )
+            .join("<br/>")
+        : "No arrival times recorded yet — set each activity's start time in Settings and record the time members are marked to build this.",
+    },
+    {
+      heading: "Attendance × punctuality",
+      body:
+        placed === 0
+          ? "Nothing timed yet, so no member can be placed on the punctuality axis."
+          : QUADRANT_ORDER.map(
+              (k) =>
+                `• ${QUADRANT_LABELS[k]}: ${counts[k]} — ${QUADRANT_GUIDANCE[k]}`,
+            ).join("<br/>") +
+            (unmeasured > 0
+              ? `<br/>• Not enough arrival times to place: ${unmeasured} of ${total}`
+              : ""),
+    },
+    {
+      heading: "Drifting — lateness rising, attendance slipping",
+      body: a.drifting.length
+        ? a.drifting
+            .map(
+              (d) =>
+                `• ${d.memberName} — ${d.reason}${d.level === "atRisk" ? " · reach out" : ""}`,
+            )
+            .join("<br/>")
+        : "No one is drifting — attendance and punctuality are steady across the group.",
+    },
+  ];
+
+  return sections;
 }
 
 export function buildWorkerEmail(r: WorkerRecipient) {
@@ -190,6 +328,10 @@ export function buildClassEmail(r: ClassRecipient) {
   const { html, text } = emailShell(
     title,
     [
+      ...attendanceSections(
+        r.attendance,
+        `${r.className} Class members`,
+      ),
       {
         heading: "Upcoming follow-ups",
         body: r.upcoming.length

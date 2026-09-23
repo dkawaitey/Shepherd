@@ -29,6 +29,7 @@ import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone } from "./validate";
 import {
   parseStartTimes,
+  participationInsight,
   punctualityByType,
   punctualitySummary,
   punctualityVerdictCounts,
@@ -191,16 +192,37 @@ export const list = query({
 
     // Attendance summary per member, plus how recently their account used the
     // app (the member card flags long absences with a small dot).
-    const [attendance, activity] = await Promise.all([
+    const [attendance, activity, startTimeRow] = await Promise.all([
       ctx.db.query("attendance").collect(),
       memberActivity(ctx, members),
+      // The ministry's official start time per activity, so the card's
+      // participation and drift figures match the profile and the digests.
+      ctx.db
+        .query("settings")
+        .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
+        .first(),
     ]);
+    const startTimes = parseStartTimes(startTimeRow?.value);
+    const starts = sessionStarts(attendance, startTimes);
+    const rowsByMember = new Map<string, typeof attendance>();
+    for (const a of attendance) {
+      if (!a.memberId) continue;
+      const list = rowsByMember.get(a.memberId) ?? [];
+      list.push(a);
+      rowsByMember.set(a.memberId, list);
+    }
 
-    return members.map((m) => ({
-      ...m,
-      ...(activity.get(m._id) ?? NO_ACTIVITY),
-      attendanceCount: attendance.filter((a) => a.memberId === m._id).length,
-    }));
+    return members.map((m) => {
+      const mine = rowsByMember.get(m._id) ?? [];
+      return {
+        ...m,
+        ...(activity.get(m._id) ?? NO_ACTIVITY),
+        attendanceCount: mine.length,
+        // A combined reading so the roster ranks by effective participation and
+        // flags members who are drifting — the same numbers the profile shows.
+        insight: participationInsight(mine, starts, startTimes),
+      };
+    });
   },
 });
 
@@ -242,6 +264,14 @@ export const get = query({
       // The same reading per activity — early to the youth meeting, late to
       // Sunday service is a schedule problem, not a discipline one.
       punctualityByActivity: punctualityByType(
+        attendance,
+        sessionStarts(allAttendance, startTimes),
+        startTimes,
+      ),
+      // The combined reading — effective participation, the monthly punctuality
+      // trend, the drift flag and the quadrant — so the profile, roster,
+      // analytics and digest all quote the same arithmetic.
+      insight: participationInsight(
         attendance,
         sessionStarts(allAttendance, startTimes),
         startTimes,

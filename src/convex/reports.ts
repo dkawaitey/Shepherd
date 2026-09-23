@@ -7,6 +7,12 @@ import {
   STAGE_LABELS,
 } from "./constants";
 import { getCurrentUser, classScoped, canReadMinistry } from "./helpers";
+import {
+  parseStartTimes,
+  participationInsight,
+  quadrantCounts,
+  sessionStarts,
+} from "../lib/attendance-trend";
 
 const monthKey = (ts: number) => {
   const d = new Date(ts);
@@ -20,12 +26,19 @@ export const overview = query({
     if (!canReadMinistry(user)) return null;
     const scope = classScoped(user);
 
-    const [allContacts, allFollowups, allBibleStudies, allAttendance, allPrayers] = await Promise.all([
+    const [allContacts, allFollowups, allBibleStudies, allAttendance, allPrayers, allMembers, startTimeRow] = await Promise.all([
       ctx.db.query("contacts").collect(),
       ctx.db.query("followUps").collect(),
       ctx.db.query("bibleStudies").collect(),
       ctx.db.query("attendance").collect(),
       ctx.db.query("prayerRequests").collect(),
+      ctx.db.query("members").collect(),
+      // The ministry's official start time per activity, so the quadrant view is
+      // measured against the same baseline as the roster and the digests.
+      ctx.db
+        .query("settings")
+        .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
+        .first(),
     ]);
 
     const live = allContacts.filter((c) => !c.isDeleted && (!scope || c.klass === scope));
@@ -150,6 +163,39 @@ export const overview = query({
     const attendanceTotal = attendanceRows.length;
     const attendancePresent = attendanceRows.filter((a) => a.status === "present").length;
 
+    // Combined attendance × punctuality quadrant. Class leaders only ever see
+    // their own class (scope above), so this view is automatically scoped.
+    const scopedMembers = allMembers.filter(
+      (m) => !m.isDeleted && (!scope || m.klass === scope),
+    );
+    const startTimes = parseStartTimes(startTimeRow?.value);
+    const starts = sessionStarts(allAttendance, startTimes);
+    const memberRows = new Map<string, typeof allAttendance>();
+    for (const a of allAttendance) {
+      if (!a.memberId) continue;
+      const list = memberRows.get(a.memberId) ?? [];
+      list.push(a);
+      memberRows.set(a.memberId, list);
+    }
+    const quadrant = quadrantCounts(
+      scopedMembers.map((m) => {
+        const insight = participationInsight(
+          memberRows.get(m._id) ?? [],
+          starts,
+          startTimes,
+        );
+        return {
+          attendanceRate: insight.participation.attendanceRate,
+          onTimeRate:
+            insight.punctuality.timed === 0
+              ? null
+              : Math.round(
+                  (insight.punctuality.onTime / insight.punctuality.timed) * 100,
+                ),
+        };
+      }),
+    );
+
     return {
       counts: {
         reached: reached.length,
@@ -175,6 +221,11 @@ export const overview = query({
       workers,
       classDist,
       bsByLesson,
+      quadrant: {
+        counts: quadrant.counts,
+        unmeasured: quadrant.unmeasured,
+        total: scopedMembers.length,
+      },
     };
   },
 });

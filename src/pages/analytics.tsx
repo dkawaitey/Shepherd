@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/shared";
+import { ParticipationQuadrantCard } from "@/components/attendance-trend";
 import { cn } from "@/lib/utils";
 import {
   Award,
@@ -191,6 +192,14 @@ export default function Analytics() {
           )}
         </div>
       </div>
+
+      {/* Combined attendance × punctuality quadrant — the view that turns the
+          two into a decision: disciple, coach, visit, or go after. */}
+      <ParticipationQuadrantCard
+        counts={report.quadrant.counts}
+        unmeasured={report.quadrant.unmeasured}
+        total={report.quadrant.total}
+      />
 
       {/* Monthly conversion */}
       <div className="rounded-lg border bg-card p-4">

@@ -40,19 +40,22 @@ import {
 import {
   AttendanceWaveline,
   ClassPunctualityCard,
+  DriftPill,
   PUNCTUALITY_META,
   PunctualityBaselinePill,
   TeamPunctualityCard,
   trendDirectionMeta,
 } from "@/components/attendance-trend";
 import {
-  attendanceTrend,
   lateLevel,
   parseStartTimes,
+  participationInsight,
   punctualitySummary,
   punctualityVerdictCounts,
   sessionStarts,
   trendSummary,
+  type PunctualityTrendPoint,
+  type TrendPoint,
 } from "@/lib/attendance-trend";
 import { cn } from "@/lib/utils";
 import {
@@ -64,7 +67,22 @@ import {
   Download,
   FileText,
   Heart,
+  TrendingDown,
 } from "lucide-react";
+
+/**
+ * Re-shape a monthly punctuality reading so the attendance sparkline can draw it:
+ * the line's height is the on-time share of the arrivals that month, and a month
+ * with nothing timed stays a gap.
+ */
+const punctualityAsTrend = (points: PunctualityTrendPoint[]): TrendPoint[] =>
+  points.map((p) => ({
+    key: p.key,
+    label: p.label,
+    present: p.onTime,
+    total: p.timed,
+    percentage: p.onTimeRate,
+  }));
 
 export default function Attendance() {
   const [klass, setKlass] = useState("all");
@@ -138,17 +156,30 @@ export default function Attendance() {
   const memberTrends = (members ?? [])
     .map((m) => {
       const mine = rowsByMember.get(m._id) ?? [];
-      const points = attendanceTrend(mine, 6);
+      // One combined reading per member: attendance trend, punctuality snapshot
+      // and its month-by-month line, effective participation and the drift flag.
+      const insight = participationInsight(mine, starts, startTimes);
       return {
         member: m,
-        points,
-        summary: trendSummary(points),
-        punctuality: punctualitySummary(mine, starts, startTimes),
+        points: insight.attendanceTrend,
+        summary: trendSummary(insight.attendanceTrend),
+        punctuality: insight.punctuality,
+        punctualityTrend: insight.punctualityTrend,
+        participation: insight.participation,
+        drift: insight.drift,
         total: mine.length,
       };
     })
     .filter((t) => t.total > 0)
-    .sort((a, b) => a.summary.average - b.summary.average);
+    .sort((a, b) => a.participation.rate - b.participation.rate);
+
+  // Drifting members — attendance falling while lateness rises — act-first, so
+  // the earliest warning there is surfaces above the low-attendance list.
+  const drifting = memberTrends
+    .filter((t) => t.drift.level !== "none")
+    .sort((a, b) =>
+      a.drift.level === b.drift.level ? 0 : a.drift.level === "atRisk" ? -1 : 1,
+    );
 
   // The team's own punctuality, rolled up from every member's records. Computed
   // over all the rows at once rather than averaging the members' averages, so a
@@ -308,7 +339,7 @@ export default function Attendance() {
             </div>
           )}
           <div className="divide-y">
-            {memberTrends.map(({ member, points, summary, punctuality, total }) => {
+            {memberTrends.map(({ member, points, summary, punctuality, punctualityTrend, participation, drift, total }) => {
               const v = trendDirectionMeta(summary.direction);
               const Icon = v.icon;
               // Late members are flagged on the row: a loud tint for a habit,
@@ -329,7 +360,18 @@ export default function Attendance() {
                   >
                     {member.fullName}
                   </Link>
-                  <AttendanceWaveline points={points} direction={summary.direction} />
+                  <div className="flex flex-col items-end gap-0.5">
+                    <AttendanceWaveline points={points} direction={summary.direction} />
+                    {/* Punctuality, drawn directly under the attendance line —
+                        the leading signal below the lagging one. */}
+                    {punctualityTrend.some((p) => p.timed > 0) && (
+                      <AttendanceWaveline
+                        className="opacity-80"
+                        points={punctualityAsTrend(punctualityTrend)}
+                        direction={trendSummary(punctualityAsTrend(punctualityTrend)).direction}
+                      />
+                    )}
+                  </div>
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
@@ -353,12 +395,13 @@ export default function Attendance() {
                   <PunctualityBaselinePill
                     baseline={punctuality.timed > 0 ? punctuality.baseline : "none"}
                   />
+                  <DriftPill drift={drift} />
                   <span
                     className="w-10 text-right font-mono text-[11px] font-semibold tabular-nums"
-                    style={{ color: progressColor(summary.average) }}
-                    title="Average attendance rate"
+                    style={{ color: progressColor(participation.rate) }}
+                    title={`Effective participation — present and on time for ${participation.effective} of ${participation.sessions} sessions (raw attendance ${participation.attendanceRate}%)`}
                   >
-                    {summary.average}%
+                    {participation.rate}%
                   </span>
                   <span className="w-16 text-right text-[9px] text-muted-foreground">
                     {total} {total === 1 ? "record" : "records"}
@@ -366,6 +409,59 @@ export default function Attendance() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Drifting members — the leading warning. Attendance is falling while
+          arrivals get later; reachable now, before the absence starts. */}
+      {drifting.length > 0 && (
+        <div className="mt-6">
+          <div className="mb-3 flex items-center gap-2">
+            <TrendingDown className="h-4 w-4 text-status-red" />
+            <p className="term-label">drifting — lateness rising, attendance slipping</p>
+          </div>
+          <div className="space-y-2">
+            {drifting.map((t) => (
+              <div
+                key={t.member._id}
+                className={cn(
+                  "flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3",
+                  t.drift.level === "atRisk"
+                    ? "border-status-red/40 bg-status-red/5"
+                    : "border-status-amber/40 bg-status-amber/5",
+                )}
+              >
+                <Link
+                  to={`/members/${t.member._id}`}
+                  className="flex min-w-0 flex-1 items-center gap-3"
+                >
+                  <DriftPill drift={t.drift} className="shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold">{t.member.fullName}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {t.drift.reasons.join(" · ")}. Lateness leads absence — a check-in
+                      now is easier than catching the absence later.
+                    </div>
+                  </div>
+                </Link>
+                {canFollowUp && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setFollowupFor(t.member);
+                      // Prefill the reason the flag was raised, so the follow-up
+                      // records *why* in one click rather than from memory.
+                      setOutcome(t.drift.suggestedReason);
+                      setFollowupBy(me?.name || me?.email || "");
+                    }}
+                  >
+                    <Heart className="mr-1.5 h-3.5 w-3.5" /> Mark followed up
+                  </Button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

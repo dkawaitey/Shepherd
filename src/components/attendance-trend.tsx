@@ -18,8 +18,16 @@ import {
   attendanceStreak,
   attendanceTrend,
   trendSummary,
+  PARTICIPATION_HIGH,
+  PUNCTUALITY_HIGH,
+  QUADRANT_META,
   type ActivityPunctuality,
+  type DriftAssessment,
+  type DriftLevel,
+  type ParticipationSummary,
   type PunctualitySummary,
+  type PunctualityTrendPoint,
+  type QuadrantKey,
   type TrendPoint,
   type TrendRow,
   type TrendSummary,
@@ -472,11 +480,20 @@ export function AttendanceTrendPanel({
   rows,
   punctuality,
   punctualityByActivity,
+  punctualityTrendPoints,
+  drift,
+  participation,
 }: {
   rows: TrendRow[];
   punctuality?: PunctualitySummary | null;
   /** The same punctuality reading split per activity, strongest lateness first. */
   punctualityByActivity?: ActivityPunctuality[] | null;
+  /** Punctuality month by month, oldest first — the leading half of the picture. */
+  punctualityTrendPoints?: PunctualityTrendPoint[] | null;
+  /** The drift / at-risk assessment for this member. */
+  drift?: DriftAssessment | null;
+  /** Effective participation — present *and* on time over sessions offered. */
+  participation?: ParticipationSummary | null;
 }) {
   // Default to the last year, so a trend appears for attendance that was
   // already on file long before this panel existed.
@@ -552,6 +569,31 @@ export function AttendanceTrendPanel({
 
       <p className="mb-4 text-[10px] text-muted-foreground">{verdictDetail}</p>
 
+      {/* Drift banner — the one flag that turns the two charts below into an
+          action: attendance falling while arrivals get later. */}
+      {drift && drift.level !== "none" && (
+        <div
+          className={cn(
+            "mb-4 flex items-start gap-2 rounded-md border p-2.5 text-[11px]",
+            DRIFT_META[drift.level].cls,
+          )}
+        >
+          {(() => {
+            const Icon = DRIFT_META[drift.level].icon;
+            return <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />;
+          })()}
+          <div>
+            <p className="font-semibold">
+              {drift.level === "atRisk" ? "Drifting — worth a follow-up" : "Worth watching"}
+            </p>
+            <p className="mt-0.5 leading-5 opacity-90">
+              {drift.reasons.join(" · ")}. Lateness leads absence, so catching this
+              now is easier than catching the absence later.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Monthly bars — height is the attendance rate, the bar's base width
           grows with how many records that month actually has. */}
       <div className="flex items-end gap-2 overflow-x-auto pb-1">
@@ -595,9 +637,34 @@ export function AttendanceTrendPanel({
         })}
       </div>
 
+      {/* Punctuality month by month — the leading signal, drawn as a line so a
+          downward slide is visible while the member is still attending. */}
+      {punctualityTrendPoints && punctualityTrendPoints.some((p) => p.timed > 0) && (
+        <div className="mt-4 border-t pt-3">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3 w-3 text-muted-foreground" />
+              <p className="term-label">punctuality over time</p>
+            </div>
+            <span className="text-[9px] text-muted-foreground">
+              share of timed arrivals on time
+            </span>
+          </div>
+          <PunctualityTrendLine points={punctualityTrendPoints} />
+        </div>
+      )}
+
       {/* Summary stats */}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <TrendStat label="Average" value={`${summary.average}%`} />
+        <TrendStat
+          label="Effective"
+          value={`${participation ? participation.rate : summary.average}%`}
+          hint={
+            participation
+              ? `${participation.effective}/${participation.sessions} present & on time`
+              : "present & on time"
+          }
+        />
         <TrendStat
           label="Current streak"
           value={`${streak}`}
@@ -911,5 +978,266 @@ export function AttendanceWaveline({
         <circle cx={last.x} cy={last.y} r={2.4} style={{ fill: stroke }} />
       </svg>
     </span>
+  );
+}
+
+/**
+ * How a drift assessment reads, and where on the urgency scale it sits.
+ * `watch` is a nudge; `atRisk` is the one that earns a follow-up.
+ */
+export const DRIFT_META: Record<
+  DriftLevel,
+  { label: string; cls: string; icon: typeof TrendingDown; title: string }
+> = {
+  none: {
+    label: "Steady",
+    cls: "border-border bg-muted/40 text-muted-foreground",
+    icon: Minus,
+    title: "Attendance and punctuality are holding.",
+  },
+  watch: {
+    label: "Watch",
+    cls: "border-status-amber/40 bg-status-amber/10 text-status-amber",
+    icon: TrendingDown,
+    title: "One signal is slipping — worth a look.",
+  },
+  atRisk: {
+    label: "Drifting",
+    cls: "border-status-red/40 bg-status-red/10 text-status-red",
+    icon: TrendingDown,
+    title: "Attendance is falling and lateness rising — reach out now.",
+  },
+};
+
+/** Icon + colours for a combined-quadrant verdict, weakest last. */
+export const QUADRANT_TONE: Record<
+  QuadrantKey,
+  { cls: string; rail: string }
+> = {
+  faithful: { cls: "text-status-green", rail: "bg-status-green" },
+  committed: { cls: "text-status-amber", rail: "bg-status-amber" },
+  drifting: { cls: "text-status-amber", rail: "bg-status-amber" },
+  disengaging: { cls: "text-status-red", rail: "bg-status-red" },
+};
+
+/** The order the quadrants are presented in — act-first at the top. */
+export const QUADRANT_ORDER: QuadrantKey[] = [
+  "disengaging",
+  "committed",
+  "drifting",
+  "faithful",
+];
+
+/**
+ * A small pill naming how a member is drifting, so the roster can flag someone
+ * without a paragraph of text.
+ */
+export function DriftPill({
+  drift,
+  className,
+}: {
+  drift: DriftAssessment;
+  className?: string;
+}) {
+  if (drift.level === "none") return null;
+  const meta = DRIFT_META[drift.level];
+  const Icon = meta.icon;
+  return (
+    <span
+      title={drift.reasons.length ? `Drifting: ${drift.reasons.join(" · ")}` : meta.title}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+        meta.cls,
+        className,
+      )}
+    >
+      <Icon className="h-2.5 w-2.5" />
+      {meta.label}
+    </span>
+  );
+}
+
+/**
+ * A member's punctuality month by month, drawn as a line.
+ *
+ * The roster's attendance waveline answers "are they coming?"; this answers the
+ * leading question underneath it — "and are they coming *on time*?". Months with
+ * no timed arrivals are left as gaps, so a month nobody was timed for never
+ * reads as a collapse in punctuality.
+ */
+export function PunctualityTrendLine({
+  points,
+  className,
+}: {
+  points: PunctualityTrendPoint[];
+  className?: string;
+}) {
+  const known = points.filter((p) => p.timed > 0);
+  if (known.length < 1) return null;
+
+  const W = 320;
+  const H = 56;
+  const padX = 10;
+  const padY = 8;
+  const lastIdx = Math.max(1, points.length - 1);
+  const xOf = (i: number) => padX + (i / lastIdx) * (W - padX * 2);
+  const yOf = (rate: number) => H - padY - (rate / 100) * (H - padY * 2);
+
+  const segments: { x: number; y: number }[][] = [];
+  let run: { x: number; y: number }[] = [];
+  points.forEach((p, i) => {
+    if (p.timed === 0) {
+      if (run.length) segments.push(run);
+      run = [];
+      return;
+    }
+    run.push({ x: xOf(i), y: yOf(p.onTimeRate) });
+  });
+  if (run.length) segments.push(run);
+
+  const latest = known[known.length - 1]!;
+  const stroke =
+    latest.onTimeRate >= 80
+      ? "var(--status-green)"
+      : latest.onTimeRate >= 60
+        ? "var(--status-amber)"
+        : "var(--status-red)";
+
+  return (
+    <div className={cn("w-full", className)}>
+      <svg
+        width="100%"
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        aria-label="Punctuality over the recent months"
+      >
+        {[0, 50, 100].map((g) => (
+          <line
+            key={g}
+            x1={padX}
+            x2={W - padX}
+            y1={yOf(g)}
+            y2={yOf(g)}
+            strokeWidth={0.5}
+            className="stroke-border"
+            strokeDasharray={g === 0 ? undefined : "2 3"}
+          />
+        ))}
+        {segments.map((seg, i) =>
+          seg.length >= 2 ? (
+            <path
+              key={i}
+              d={smoothPath(seg)}
+              fill="none"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ stroke }}
+            />
+          ) : (
+            <circle key={i} cx={seg[0]!.x} cy={seg[0]!.y} r={3} style={{ fill: stroke }} />
+          ),
+        )}
+        {segments.map((seg) => (
+          <circle
+            key={seg[0]!.x}
+            cx={seg[seg.length - 1]!.x}
+            cy={seg[seg.length - 1]!.y}
+            r={3}
+            style={{ fill: stroke }}
+          />
+        ))}
+      </svg>
+      <div className="mt-1 flex justify-between gap-1">
+        {points.map((p) => (
+          <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center">
+            <span
+              className={cn(
+                "font-mono text-[9px] tabular-nums",
+                p.timed === 0 ? "text-muted-foreground/50" : "text-foreground/80",
+              )}
+              title={
+                p.timed === 0
+                  ? "No timed arrivals this month"
+                  : `${p.onTime} of ${p.timed} on time · average arrival +${p.averageDelay}m`
+              }
+            >
+              {p.timed === 0 ? "—" : `${p.onTimeRate}%`}
+            </span>
+            <span
+              className={cn(
+                "text-[9px]",
+                p.timed === 0 ? "text-muted-foreground/50" : "text-muted-foreground",
+              )}
+            >
+              {p.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The combined attendance × punctuality quadrant for a group.
+ *
+ * This is the one view that turns the two metrics into a decision: who to
+ * disciple, who to coach on schedule, who to visit, and who to go after. Members
+ * with nothing timed are stated as unmeasured rather than guessed at.
+ */
+export function ParticipationQuadrantCard({
+  counts,
+  unmeasured,
+  total,
+  className,
+}: {
+  counts: Record<QuadrantKey, number>;
+  unmeasured: number;
+  total: number;
+  className?: string;
+}) {
+  if (total === 0) return null;
+  return (
+    <div className={cn("rounded-lg border bg-card", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-primary" />
+          <p className="term-label">attendance × punctuality</p>
+        </div>
+        <span className="text-[10px] text-muted-foreground">
+          {unmeasured > 0
+            ? `${total - unmeasured} of ${total} placed · ${unmeasured} unmeasured`
+            : `all ${total} placed`}
+        </span>
+      </div>
+      <div className="divide-y">
+        {QUADRANT_ORDER.map((key) => {
+          const meta = QUADRANT_META[key];
+          const tone = QUADRANT_TONE[key];
+          const count = counts[key];
+          return (
+            <div key={key} className="flex items-start gap-3 px-4 py-2.5">
+              <span className={cn("mt-1 h-6 w-2 shrink-0 rounded-full", tone.rail)} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={cn("text-[12px] font-semibold", tone.cls)}>{meta.label}</span>
+                  <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {count}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{meta.guidance}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="border-t px-4 py-2 text-[9px] text-muted-foreground/70">
+        High attendance is ≥ {PARTICIPATION_HIGH}% of sessions; punctual is ≥{" "}
+        {PUNCTUALITY_HIGH}% of timed arrivals on time. Lateness leads absence, so a
+        move into "present but drifting" is the earliest warning there is.
+      </p>
+    </div>
   );
 }

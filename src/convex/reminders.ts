@@ -9,8 +9,22 @@ import {
   STAGE_ORDER,
 } from "./constants";
 import { getCurrentUser, userRoles } from "./helpers";
-import { fmtShortDate } from "./emailHtml";
-import type { WorkerRecipient, ClassRecipient, MinistryRecipient } from "./emailHtml";
+import { attendanceSections, fmtShortDate } from "./emailHtml";
+import type {
+  WorkerRecipient,
+  ClassRecipient,
+  MinistryRecipient,
+  DigestAttendance,
+} from "./emailHtml";
+import {
+  effectiveParticipation,
+  participationInsight,
+  parseStartTimes,
+  punctualitySummary,
+  punctualityTrend,
+  quadrantCounts,
+  sessionStarts,
+} from "../lib/attendance-trend";
 
 export interface Digest {
   enabled: boolean;
@@ -45,6 +59,86 @@ const tally = (n: number, total: number) =>
 /** Bullet list, or a fallback line when there is nothing to report. */
 const bullets = (lines: string[], empty: string) =>
   lines.length ? lines.map((l) => `• ${l}`).join("<br/>") : empty;
+
+/**
+ * Members' combined attendance + punctuality reading for a digest.
+ *
+ * Built from the same shared functions the app uses, so a member who is
+ * "drifting" in the digest is drifting on their profile too. Everything is
+ * derived from the already-collected attendance rows — no extra queries.
+ */
+function buildAttendanceDigest(
+  members: any[],
+  attendance: any[],
+  starts: Map<string, number>,
+  startTimes: Record<string, string>,
+): DigestAttendance {
+  const ids = new Set(members.map((m) => m._id));
+  const byMember = new Map<string, any[]>();
+  for (const a of attendance) {
+    if (!a.memberId || !ids.has(a.memberId)) continue;
+    const list = byMember.get(a.memberId) ?? [];
+    list.push(a);
+    byMember.set(a.memberId, list);
+  }
+  const allRows = [...byMember.values()].flat();
+  const participation = effectiveParticipation(allRows, starts, startTimes);
+  const punctuality = punctualitySummary(allRows, starts, startTimes);
+
+  const insights = members.map((m) =>
+    participationInsight(byMember.get(m._id) ?? [], starts, startTimes),
+  );
+  const quad = quadrantCounts(
+    insights.map((i) => ({
+      attendanceRate: i.participation.attendanceRate,
+      onTimeRate:
+        i.punctuality.timed === 0
+          ? null
+          : Math.round((i.punctuality.onTime / i.punctuality.timed) * 100),
+    })),
+  );
+
+  const drifting = members
+    .map((m, idx) => ({ m, insight: insights[idx]! }))
+    .filter((x) => x.insight.drift.level !== "none")
+    .sort((a, b) =>
+      a.insight.drift.level === b.insight.drift.level
+        ? 0
+        : a.insight.drift.level === "atRisk"
+          ? -1
+          : 1,
+    )
+    .slice(0, 8)
+    .map((x) => ({
+      memberId: String(x.m._id),
+      memberName: x.m.fullName as string,
+      level: x.insight.drift.level as "watch" | "atRisk",
+      reason: x.insight.drift.reasons[0] ?? x.insight.drift.suggestedReason,
+    }));
+
+  return {
+    effectiveRate: participation.rate,
+    attendanceRate: participation.attendanceRate,
+    onTimeRate:
+      punctuality.timed === 0
+        ? 0
+        : Math.round((punctuality.onTime / punctuality.timed) * 100),
+    averageDelay: punctuality.averageDelay,
+    timed: punctuality.timed,
+    punctualityTrend: punctualityTrend(allRows, starts, startTimes, 6).map((p) => ({
+      label: p.label,
+      onTimeRate: p.onTimeRate,
+      averageDelay: p.averageDelay,
+      timed: p.timed,
+    })),
+    quadrant: {
+      counts: quad.counts,
+      unmeasured: quad.unmeasured,
+      total: members.length,
+    },
+    drifting,
+  };
+}
 
 type ContactRow = { _id: string; fullName: string; dateOfBirth?: string };
 
@@ -92,6 +186,11 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
   const settingsMap: Record<string, string> = {};
   for (const s of settings) settingsMap[s.key] = s.value;
   const enabled = settingsMap.reminder_email_enabled !== "false";
+
+  // Session starts and configured activity times, shared by every attendance
+  // figure below so the class and ministry digests agree with the app.
+  const startTimes = parseStartTimes(settingsMap.attendance_start_times);
+  const starts = sessionStarts(attendance, startTimes);
 
   const now = new Date();
   const today = localDate(now);
@@ -226,6 +325,9 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
       birthdays,
       lowAttendance,
       newContacts,
+      // The four combined analytics for this class: effective participation, the
+      // monthly punctuality trend, the quadrant split and the drifting members.
+      attendance: buildAttendanceDigest(classMembers, attendance, starts, startTimes),
     };
   });
 
@@ -284,6 +386,15 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
       !attendance.some(
         (a) => a.subjectType === "member" && a.memberId === m._id && a.type === "youthMeeting" && a.status === "present" && a.date >= past28,
       ),
+  );
+
+  // Ministry-wide combined attendance + punctuality reading, built from every
+  // member's records so the shared section below describes the whole ministry.
+  const ministryAttendance = buildAttendanceDigest(
+    liveMembers,
+    attendance,
+    starts,
+    startTimes,
   );
 
   /** Sections that both administrators and coordinators may read. */
@@ -352,6 +463,9 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
         "No birthdays in the next 7 days.",
       ),
     },
+    // The four combined analytics, ministry-wide. Included for both roles: a
+    // coordinator acts on attendance and punctuality as much as an admin does.
+    ...attendanceSections(ministryAttendance, "ministry-wide members"),
   ];
 
   const ministryRecipients: MinistryRecipient[] = [];
