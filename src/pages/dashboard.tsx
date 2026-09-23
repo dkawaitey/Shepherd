@@ -16,7 +16,7 @@ import {
   FOLLOWUP_STATUS_COLORS,
   FollowupStatus,
 } from "@/convex/constants";
-import { StatusPill, canPublishPosts, fmtDate, fmtDateTime } from "@/components/shared";
+import { StatusPill, canPublishPosts, fmtDate, fmtDateTime, fmtTime } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
   TriangleAlert,
@@ -714,7 +714,7 @@ export default function Dashboard() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[12px] font-semibold">{f.contactName}</div>
                   <div className="text-[10px] text-muted-foreground">
-                    {FOLLOWUP_TYPE_LABELS[f.type]} · {fmtDate(f.date)}
+                    {FOLLOWUP_TYPE_LABELS[f.type]} · {fmtDate(f.date)}{f.time ? ` · ${fmtTime(f.time)}` : ""}
                   </div>
                 </div>
               </Link>

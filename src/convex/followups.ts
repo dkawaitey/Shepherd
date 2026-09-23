@@ -20,6 +20,9 @@ import {
 } from "./helpers";
 import { checkRateLimit } from "./rateLimit";
 
+/** Scheduled time of day, 24h "HH:MM". */
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 /** List follow-ups (optionally joined with contact name). Workers see their assigned contacts' follow-ups. */
 export const list = query({
   args: {
@@ -86,6 +89,7 @@ export const create = mutation({
     contactId: v.id("contacts"),
     type: v.string(),
     date: v.string(),
+    time: v.optional(v.string()),
     assignedWorker: v.optional(v.string()),
     notes: v.optional(v.string()),
     reminder: v.optional(v.boolean()),
@@ -97,11 +101,13 @@ export const create = mutation({
     if (!contact) throw new ConvexError("Contact not found");
     assertClassScope(user, contact.klass);
     if (!FOLLOWUP_TYPE_LABELS[args.type]) throw new ConvexError("Invalid follow-up type");
+    if (args.time && !TIME_RE.test(args.time)) throw new ConvexError("Invalid time");
 
     const id = await ctx.db.insert("followUps", {
       contactId: args.contactId,
       type: args.type as any,
       date: args.date,
+      time: args.time,
       assignedWorker: args.assignedWorker,
       notes: args.notes,
       reminder: args.reminder ?? false,
@@ -114,7 +120,7 @@ export const create = mutation({
       action: "followup.create",
       entityType: "followUps",
       entityId: id,
-      details: `${contact.fullName}: ${FOLLOWUP_TYPE_LABELS[args.type]} on ${args.date.slice(0, 10)}`,
+      details: `${contact.fullName}: ${FOLLOWUP_TYPE_LABELS[args.type]} on ${args.date.slice(0, 10)}${args.time ? ` at ${args.time}` : ""}`,
     });
 
     // Fire-and-forget Customer.io event (never blocks or breaks the mutation).
@@ -132,6 +138,7 @@ export const create = mutation({
         type: args.type,
         typeLabel: FOLLOWUP_TYPE_LABELS[args.type] ?? args.type,
         date: args.date.slice(0, 10),
+        time: args.time ?? "",
         assignedWorker: args.assignedWorker ?? "",
       },
     });
@@ -145,6 +152,7 @@ export const update = mutation({
     id: v.id("followUps"),
     type: v.optional(v.string()),
     date: v.optional(v.string()),
+    time: v.optional(v.string()),
     assignedWorker: v.optional(v.string()),
     notes: v.optional(v.string()),
     reminder: v.optional(v.boolean()),
@@ -161,6 +169,10 @@ export const update = mutation({
     const patch: Record<string, unknown> = {};
     if (args.type !== undefined) patch.type = args.type;
     if (args.date !== undefined) patch.date = args.date;
+    if (args.time !== undefined) {
+      if (args.time && !TIME_RE.test(args.time)) throw new ConvexError("Invalid time");
+      patch.time = args.time;
+    }
     if (args.assignedWorker !== undefined) patch.assignedWorker = args.assignedWorker;
     if (args.notes !== undefined) patch.notes = args.notes;
     if (args.reminder !== undefined) patch.reminder = args.reminder;

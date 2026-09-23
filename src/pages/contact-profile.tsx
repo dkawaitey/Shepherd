@@ -46,6 +46,7 @@ import {
   canAddRecords,
   fmtDate,
   fmtDateTime,
+  fmtTime,
   mapsLink,
   progressColor,
   formatError,
@@ -294,7 +295,9 @@ export default function ContactProfile() {
                           <Lock className="h-3 w-3" /> locked
                         </span>
                       )}
-                      <span className="ml-auto text-[11px] text-muted-foreground">{fmtDate(f.date)}</span>
+                      <span className="ml-auto text-[11px] text-muted-foreground">
+                        {fmtDate(f.date)}{f.time ? ` · ${fmtTime(f.time)}` : ""}
+                      </span>
                     </div>
                     {f.assignedWorker && (
                       <p className="mt-1 text-[11px] text-muted-foreground">Worker: {f.assignedWorker}</p>

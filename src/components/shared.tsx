@@ -252,6 +252,16 @@ export function fmtDate(iso?: string) {
   return d.toLocaleDateString("en", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/** Format a stored 24h "HH:MM" time as a friendly 12h time, e.g. 14:30 -> "2:30 PM". */
+export function fmtTime(time?: string) {
+  if (!time) return "—";
+  const [h, m] = time.split(":").map((n) => parseInt(n, 10));
+  if (Number.isNaN(h) || Number.isNaN(m)) return time;
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
+}
+
 export function fmtDateTime(iso?: string) {
   if (!iso) return "—";
   const d = new Date(iso);

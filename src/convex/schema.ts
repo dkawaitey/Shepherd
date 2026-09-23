@@ -148,6 +148,7 @@ const schema = defineSchema(
         v.literal(FOLLOWUP_TYPES.COUNSELLING),
       ),
       date: v.string(), // ISO date
+      time: v.optional(v.string()), // scheduled time of day, "HH:MM" (24h)
       assignedWorker: v.optional(v.string()),
       notes: v.optional(v.string()),
       reminder: v.optional(v.boolean()),

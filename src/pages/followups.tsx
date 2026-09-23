@@ -34,6 +34,7 @@ import {
   PageHeader,
   StatusPill,
   fmtDate,
+  fmtTime,
   formatError,
   userCanWrite,
 } from "@/components/shared";
@@ -110,6 +111,7 @@ export function StatusChangeDialog({
           <DialogTitle>Update follow-up status</DialogTitle>
           <DialogDescription>
             {followup.contactName} · {FOLLOWUP_TYPE_LABELS[followup.type]} · {fmtDate(followup.date)}
+            {followup.time ? ` · ${fmtTime(followup.time)}` : ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -219,6 +221,7 @@ export function ScheduleDialog({
     contactId: string;
     type: string;
     date: string;
+    time: string;
     assignedWorker: string;
     notes: string;
     reminder: boolean;
@@ -226,6 +229,7 @@ export function ScheduleDialog({
     contactId: presetContactId ?? "",
     type: FOLLOWUP_TYPES.HOME_VISIT,
     date: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+    time: "09:00",
     assignedWorker: "",
     notes: "",
     reminder: true,
@@ -239,6 +243,7 @@ export function ScheduleDialog({
         ...f,
         contactId: presetContactId ?? f.contactId,
         date: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+        time: f.time || "09:00",
       }));
       setError(null);
     }
@@ -256,6 +261,7 @@ export function ScheduleDialog({
       contactId: form.contactId as any,
       type: form.type,
       date: new Date(form.date).toISOString(),
+      time: form.time || undefined,
       assignedWorker: form.assignedWorker || undefined,
       notes: form.notes || undefined,
       reminder: form.reminder,
@@ -309,23 +315,27 @@ export function ScheduleDialog({
               </SelectContent>
             </Select>
           </div>
+          <div>
+            <Label htmlFor="fu-type">Type *</Label>
+            <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}>
+              <SelectTrigger id="fu-type" className="mt-1 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(FOLLOWUP_TYPE_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="fu-type">Type *</Label>
-              <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}>
-                <SelectTrigger id="fu-type" className="mt-1 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(FOLLOWUP_TYPE_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div>
               <Label htmlFor="fu-date">Date *</Label>
               <Input id="fu-date" type="date" className="mt-1" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+            </div>
+            <div>
+              <Label htmlFor="fu-time">Time</Label>
+              <Input id="fu-time" type="time" className="mt-1" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} />
             </div>
           </div>
           <div>
@@ -549,7 +559,7 @@ function FollowupRow({
         </div>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
           <span>{FOLLOWUP_TYPE_LABELS[f.type]}</span>
-          <span>📅 {fmtDate(f.date)}</span>
+          <span>📅 {fmtDate(f.date)}{f.time ? ` · ${fmtTime(f.time)}` : ""}</span>
           <span>Worker: {f.assignedWorker || "Unassigned"}</span>
           <span className="text-muted-foreground/70">{f.membershipId}</span>
         </div>
