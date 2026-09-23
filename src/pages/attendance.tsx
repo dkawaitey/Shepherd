@@ -33,9 +33,17 @@ import {
   downloadCsv,
   downloadPdf,
   formatError,
+  progressColor,
   userCanWrite,
 } from "@/components/shared";
 import {
+  AttendanceSparkline,
+  trendDirectionMeta,
+} from "@/components/attendance-trend";
+import { attendanceTrend, trendSummary } from "@/lib/attendance-trend";
+import { cn } from "@/lib/utils";
+import {
+  Activity,
   TriangleAlert,
   CircleCheck,
   ClipboardCheck,
@@ -96,6 +104,25 @@ export default function Attendance() {
     status: r.status,
     recordedBy: r.recordedBy ?? "",
   }));
+
+  // Time-trend analysis for every member, computed from the already-recorded
+  // history above — no extra query needed. Weakest average first, so members
+  // who need attention surface at the top.
+  const rowsByMember = new Map<string, typeof rows>();
+  for (const r of rows) {
+    if (!r.memberId) continue;
+    const list = rowsByMember.get(r.memberId) ?? [];
+    list.push(r);
+    rowsByMember.set(r.memberId, list);
+  }
+  const memberTrends = (members ?? [])
+    .map((m) => {
+      const mine = rowsByMember.get(m._id) ?? [];
+      const points = attendanceTrend(mine, 6);
+      return { member: m, points, summary: trendSummary(points), total: mine.length };
+    })
+    .filter((t) => t.total > 0)
+    .sort((a, b) => a.summary.average - b.summary.average);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -196,6 +223,59 @@ export default function Attendance() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Per-member time-trend analysis over the recorded history. */}
+      {memberTrends.length > 0 && (
+        <div className="mt-6 overflow-hidden rounded-lg border bg-card">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-primary" />
+              <p className="term-label">attendance trends by member</p>
+            </div>
+            <span className="text-[10px] text-muted-foreground">
+              last 6 months · weakest first
+            </span>
+          </div>
+          <div className="divide-y">
+            {memberTrends.map(({ member, points, summary, total }) => {
+              const v = trendDirectionMeta(summary.direction);
+              const Icon = v.icon;
+              return (
+                <div
+                  key={member._id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5"
+                >
+                  <Link
+                    to={`/members/${member._id}`}
+                    className="min-w-0 flex-1 truncate text-[12px] font-semibold hover:text-primary hover:underline"
+                  >
+                    {member.fullName}
+                  </Link>
+                  <AttendanceSparkline points={points} />
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+                      v.cls,
+                    )}
+                  >
+                    <Icon className="h-2.5 w-2.5" /> {v.label}
+                  </span>
+                  <span
+                    className="w-10 text-right font-mono text-[11px] font-semibold tabular-nums"
+                    style={{ color: progressColor(summary.average) }}
+                    title="Average attendance rate"
+                  >
+                    {summary.average}%
+                  </span>
+                  <span className="w-16 text-right text-[9px] text-muted-foreground">
+                    {total} {total === 1 ? "record" : "records"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

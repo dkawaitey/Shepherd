@@ -14,10 +14,44 @@ import {
   attendanceByType,
   attendanceStreak,
   attendanceTrend,
+  attendanceTrendAll,
   trendSummary,
+  type TrendGranularity,
   type TrendPoint,
   type TrendRow,
+  type TrendSummary,
 } from "@/lib/attendance-trend";
+
+/** The windows the panel can show. "all" walks the member's whole history. */
+type TrendRange = 6 | 12 | "all";
+
+const GRANULARITY_LABEL: Record<TrendGranularity, string> = {
+  month: "monthly",
+  quarter: "quarterly",
+  year: "yearly",
+};
+
+/** Icon, wording and colours for a trend direction — shared by the panel and
+ *  the per-member trends list so the same verdict always looks the same. */
+export function trendDirectionMeta(direction: TrendSummary["direction"]) {
+  return {
+    up: {
+      icon: TrendingUp,
+      label: "Improving",
+      cls: "border-status-green/40 bg-status-green/10 text-status-green",
+    },
+    down: {
+      icon: TrendingDown,
+      label: "Declining",
+      cls: "border-status-red/40 bg-status-red/10 text-status-red",
+    },
+    steady: {
+      icon: Minus,
+      label: "Steady",
+      cls: "border-border bg-muted/40 text-muted-foreground",
+    },
+  }[direction];
+}
 
 /**
  * A member's attendance over time, as a verdict plus a month-by-month chart.
@@ -29,9 +63,17 @@ import {
  * state rather than a flat line at zero.
  */
 export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
-  const [range, setRange] = useState<6 | 12>(6);
+  // Default to the member's full recorded history, so a trend appears for
+  // attendance that was already on file long before this panel existed.
+  const [range, setRange] = useState<TrendRange>("all");
 
-  const points = useMemo(() => attendanceTrend(rows, range), [rows, range]);
+  const { points, granularity } = useMemo(() => {
+    if (range === "all") return attendanceTrendAll(rows, 24);
+    return {
+      points: attendanceTrend(rows, range),
+      granularity: "month" as TrendGranularity,
+    };
+  }, [rows, range]);
   const summary = useMemo(() => trendSummary(points), [points]);
   const streak = useMemo(() => attendanceStreak(rows), [rows]);
   const byType = useMemo(() => attendanceByType(rows), [rows]);
@@ -51,26 +93,13 @@ export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
     );
   }
 
-  const verdict = {
-    up: {
-      icon: TrendingUp,
-      label: "Improving",
-      detail: `+${summary.delta} pts vs earlier months`,
-      cls: "border-status-green/40 bg-status-green/10 text-status-green",
-    },
-    down: {
-      icon: TrendingDown,
-      label: "Declining",
-      detail: `${summary.delta} pts vs earlier months`,
-      cls: "border-status-red/40 bg-status-red/10 text-status-red",
-    },
-    steady: {
-      icon: Minus,
-      label: "Steady",
-      detail: withRecords.length >= 2 ? "holding around the same rate" : "not enough history yet",
-      cls: "border-border bg-muted/40 text-muted-foreground",
-    },
-  }[summary.direction];
+  const verdict = trendDirectionMeta(summary.direction);
+  const verdictDetail =
+    summary.direction === "steady"
+      ? withRecords.length >= 2
+        ? "holding around the same rate"
+        : "not enough history yet"
+      : `${summary.direction === "up" ? "+" : ""}${summary.delta} pts vs earlier months`;
   const VerdictIcon = verdict.icon;
 
   return (
@@ -91,7 +120,7 @@ export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
             {verdict.label}
           </span>
           <div className="flex overflow-hidden rounded-md border">
-            {([6, 12] as const).map((r) => (
+            {([6, 12, "all"] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setRange(r)}
@@ -102,14 +131,17 @@ export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
                     : "text-muted-foreground hover:bg-muted",
                 )}
               >
-                {r}M
+                {r === "all" ? "All" : `${r}M`}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      <p className="mb-4 text-[10px] text-muted-foreground">{verdict.detail}</p>
+      <p className="mb-4 text-[10px] text-muted-foreground">
+        {verdictDetail}
+        {range === "all" && ` · ${GRANULARITY_LABEL[granularity]} view of the full record`}
+      </p>
 
       {/* Monthly bars — height is the attendance rate, the bar's base width
           grows with how many records that month actually has. */}
@@ -205,8 +237,11 @@ export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
       )}
 
       <p className="mt-3 text-[9px] text-muted-foreground/70">
-        Based on {rows.length} attendance {rows.length === 1 ? "record" : "records"}.
-        Taller bars mean a higher share of sessions attended that month.
+        Based on {rows.length} recorded attendance {rows.length === 1 ? "record" : "records"}
+        {withRecords.length === 0
+          ? "."
+          : ` spanning ${withRecords[0]!.label} – ${withRecords[withRecords.length - 1]!.label}.`}{" "}
+        Taller bars mean a higher share of sessions attended that {granularity}.
       </p>
     </div>
   );

@@ -84,6 +84,100 @@ export function attendanceTrend(
   return points;
 }
 
+/** Granularity the "whole history" trend auto-selects for readability. */
+export type TrendGranularity = "month" | "quarter" | "year";
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Month index of a date — one integer that orders months across years. */
+const monthIndex = (y: number, m: number) => y * 12 + m;
+
+/** Bucket index of a month index, at the given granularity. */
+const bucketIndex = (mi: number, g: TrendGranularity) =>
+  g === "month" ? mi : g === "quarter" ? Math.floor(mi / 3) : Math.floor(mi / 12);
+
+/** The first month of a bucket index, as a date. */
+const bucketDate = (bi: number, g: TrendGranularity) =>
+  g === "month"
+    ? new Date(Math.floor(bi / 12), bi % 12, 1)
+    : g === "quarter"
+      ? new Date(Math.floor(bi / 4), (bi % 4) * 3, 1)
+      : new Date(bi, 0, 1);
+
+/** Key + label for the bucket a date falls into. */
+function bucketOf(d: Date, g: TrendGranularity): { key: string; label: string } {
+  const y = d.getFullYear();
+  if (g === "year") return { key: `${y}`, label: `${y}` };
+  const q = Math.floor(d.getMonth() / 3) + 1;
+  if (g === "quarter") return { key: `${y}-Q${q}`, label: `Q${q} '${String(y).slice(2)}` };
+  return {
+    key: `${y}-${pad2(d.getMonth() + 1)}`,
+    label: d.toLocaleString("en", { month: "short" }),
+  };
+}
+
+/**
+ * A member's whole recorded attendance history, oldest first.
+ *
+ * "Already recorded" is the operative word: this walks back to the member's very
+ * first attendance record, so a trend is available the moment records exist —
+ * even if the newest of them is months or years old. To stay readable the
+ * granularity adapts: monthly while the history is short, quarterly once it
+ * spans more than `maxBuckets` months, yearly beyond that, so the chart never
+ * grows into an unreadable picket fence.
+ */
+export function attendanceTrendAll(
+  rows: TrendRow[],
+  maxBuckets = 24,
+  now: Date = new Date(),
+): { points: TrendPoint[]; granularity: TrendGranularity } {
+  const keys = rows
+    .map((r) => (r.date || "").slice(0, 7))
+    .filter((k) => /^\d{4}-\d{2}$/.test(k))
+    .sort();
+  if (keys.length === 0) {
+    return { points: attendanceTrend(rows, 6, now), granularity: "month" };
+  }
+
+  const [sy, sm] = keys[0]!.split("-").map(Number);
+  const startMi = monthIndex(sy!, sm! - 1);
+  const endMi = monthIndex(now.getFullYear(), now.getMonth());
+  const span = endMi - startMi + 1;
+
+  let granularity: TrendGranularity = "month";
+  if (span > maxBuckets) {
+    granularity = span / 3 <= maxBuckets ? "quarter" : "year";
+  }
+
+  const totals = new Map<string, { present: number; total: number }>();
+  for (const row of rows) {
+    const key = (row.date || "").slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(key)) continue;
+    const [y, m] = key.split("-").map(Number);
+    const k = bucketOf(new Date(y!, m! - 1, 1), granularity).key;
+    const bucket = totals.get(k) ?? { present: 0, total: 0 };
+    bucket.total += 1;
+    if (row.status === "present") bucket.present += 1;
+    totals.set(k, bucket);
+  }
+
+  const points: TrendPoint[] = [];
+  for (let bi = bucketIndex(startMi, granularity); bi <= bucketIndex(endMi, granularity); bi++) {
+    const { key, label } = bucketOf(bucketDate(bi, granularity), granularity);
+    const bucket = totals.get(key) ?? { present: 0, total: 0 };
+    points.push({
+      key,
+      label,
+      present: bucket.present,
+      total: bucket.total,
+      percentage:
+        bucket.total === 0 ? 0 : Math.round((bucket.present / bucket.total) * 100),
+    });
+  }
+
+  return { points: points.slice(-maxBuckets), granularity };
+}
+
 /**
  * Direction of travel across a trend.
  *
