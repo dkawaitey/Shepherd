@@ -507,3 +507,41 @@ export function punctualityByType(
     .filter((t) => t.timed > 0)
     .sort((a, b) => b.averageDelay - a.averageDelay || b.timed - a.timed);
 }
+
+/**
+ * How many members land in each punctuality verdict.
+ *
+ * Members with nothing timed are counted as `unknown` rather than dropped, so a
+ * team summary can say how much of the team it is actually describing instead of
+ * quietly reporting only the members who happen to have arrival times.
+ */
+export function punctualityVerdictCounts(
+  summaries: { verdict: PunctualitySummary["verdict"] }[],
+): Record<PunctualitySummary["verdict"], number> {
+  const counts: Record<PunctualitySummary["verdict"], number> = {
+    punctual: 0,
+    mostlyPunctual: 0,
+    sometimesLate: 0,
+    oftenLate: 0,
+    unknown: 0,
+  };
+  for (const s of summaries) counts[s.verdict] += 1;
+  return counts;
+}
+
+/**
+ * Whether a punctuality verdict should be flagged on the roster.
+ *
+ * Only the two late verdicts earn a highlight — "often late" louder than
+ * "sometimes late". Punctual and unmeasured members stay plain, so the eye goes
+ * straight to the members worth a conversation.
+ */
+export function lateLevel(
+  verdict: PunctualitySummary["verdict"],
+): "often" | "sometimes" | null {
+  return verdict === "oftenLate"
+    ? "often"
+    : verdict === "sometimesLate"
+      ? "sometimes"
+      : null;
+}

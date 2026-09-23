@@ -8,6 +8,7 @@ import {
   TrendingDown,
   TrendingUp,
   Trophy,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ATTENDANCE_TYPE_LABELS } from "@/convex/constants";
@@ -169,6 +170,159 @@ function describeDelay(minutes: number) {
 function punctualityTooltip(a: ActivityPunctuality): string {
   const label = ATTENDANCE_TYPE_LABELS[a.type] ?? a.type;
   return `${label}: ${a.onTime} on time, ${a.slightlyLate} a little late, ${a.late} late, ${a.veryLate} very late — ${a.timed} timed`;
+}
+
+/**
+ * The verdicts shown in the team card, strongest habit first, then unmeasured.
+ */
+const TEAM_VERDICT_ORDER: PunctualitySummary["verdict"][] = [
+  "punctual",
+  "mostlyPunctual",
+  "sometimesLate",
+  "oftenLate",
+  "unknown",
+];
+
+/**
+ * The whole team's punctuality in one card.
+ *
+ * The roster answers "who is late?"; this answers "how are we doing?" — the
+ * share of arrivals that landed on time, the average delay, and how the members
+ * themselves split across the verdicts. That distinction matters: the same
+ * average delay can mean two habitually late people or a whole ministry drifting
+ * in together, and only the member spread tells them apart.
+ *
+ * Members with nothing timed are counted, not hidden, so a figure like "12 late"
+ * can never be confused for "12 of 12" when the rest simply have no arrival
+ * times recorded yet.
+ */
+export function TeamPunctualityCard({
+  summary,
+  verdictCounts,
+  className,
+}: {
+  /** The team aggregate, computed over every member's records at once. */
+  summary: PunctualitySummary;
+  verdictCounts: Record<PunctualitySummary["verdict"], number>;
+  className?: string;
+}) {
+  const measured = summary.timed;
+  const onTimeRate = measured === 0 ? 0 : Math.round((summary.onTime / measured) * 100);
+  const flagged = verdictCounts.oftenLate + verdictCounts.sometimesLate;
+  const verdict = PUNCTUALITY_META[summary.verdict];
+
+  return (
+    <div className={cn("rounded-lg border bg-card p-4", className)}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Users className="h-4 w-4 text-primary" />
+          <p className="term-label">team punctuality</p>
+          {measured > 0 && <PunctualityBaselinePill baseline={summary.baseline} />}
+        </div>
+        {measured > 0 && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+              verdict.cls,
+            )}
+            title={`${onTimeRate}% of timed arrivals were on time`}
+          >
+            <Clock className="h-3 w-3" />
+            {verdict.label}
+          </span>
+        )}
+      </div>
+
+      {measured === 0 ? (
+        <p className="py-4 text-center text-[11px] text-muted-foreground">
+          No arrival times recorded yet — the team's punctuality appears here once
+          members are marked with the time they arrive.
+        </p>
+      ) : (
+        <>
+          {/* Where the team's arrivals land, band by band. */}
+          <div className="flex h-3 overflow-hidden rounded-sm bg-muted">
+            {PUNCTUALITY_BANDS.map((b) => {
+              const count = summary[b.key];
+              if (count === 0) return null;
+              return (
+                <div
+                  key={b.key}
+                  title={`${b.label}: ${count} arrival${count === 1 ? "" : "s"}`}
+                  style={{
+                    width: `${(count / measured) * 100}%`,
+                    backgroundColor: b.color,
+                  }}
+                />
+              );
+            })}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+            {PUNCTUALITY_BANDS.map((b) => (
+              <span key={b.key} className="inline-flex items-center gap-1">
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: b.color }}
+                />
+                {b.label}{" "}
+                <b className="font-mono tabular-nums text-foreground/80">
+                  {summary[b.key]}
+                </b>
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <TrendStat label="On time" value={`${onTimeRate}%`} hint="of timed arrivals" />
+            <TrendStat
+              label="Average arrival"
+              value={summary.averageDelay === 0 ? "first" : `+${summary.averageDelay}m`}
+              hint="after the session began"
+              icon={summary.averageDelay === 0 ? Flame : undefined}
+            />
+            <TrendStat
+              label="Arrivals timed"
+              value={`${measured}`}
+              hint="across the team"
+            />
+            <TrendStat
+              label="Members late"
+              value={`${flagged}`}
+              hint="often or sometimes"
+              icon={flagged > 0 ? TrendingDown : undefined}
+            />
+          </div>
+
+          {/* How the members themselves split — one or two people, or a habit
+              across the whole ministry. */}
+          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-dashed pt-3">
+            {TEAM_VERDICT_ORDER.map((k) => {
+              const count = verdictCounts[k];
+              if (count === 0) return null;
+              return (
+                <span
+                  key={k}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                    PUNCTUALITY_META[k].cls,
+                  )}
+                >
+                  {PUNCTUALITY_META[k].label}
+                  <b className="font-mono tabular-nums">{count}</b>
+                </span>
+              );
+            })}
+            {verdictCounts.unknown > 0 && (
+              <span className="self-center text-[9px] text-muted-foreground/70">
+                {verdictCounts.unknown} member{verdictCounts.unknown === 1 ? "" : "s"} still
+                unmeasured
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 /**

@@ -41,12 +41,15 @@ import {
   AttendanceWaveline,
   PUNCTUALITY_META,
   PunctualityBaselinePill,
+  TeamPunctualityCard,
   trendDirectionMeta,
 } from "@/components/attendance-trend";
 import {
   attendanceTrend,
+  lateLevel,
   parseStartTimes,
   punctualitySummary,
+  punctualityVerdictCounts,
   sessionStarts,
   trendSummary,
 } from "@/lib/attendance-trend";
@@ -144,6 +147,16 @@ export default function Attendance() {
     })
     .filter((t) => t.total > 0)
     .sort((a, b) => a.summary.average - b.summary.average);
+
+  // The team's own punctuality, rolled up from every member's records. Computed
+  // over all the rows at once rather than averaging the members' averages, so a
+  // member with twenty timed arrivals counts for more than one with two —
+  // exactly as the ministry's actual arrivals are distributed.
+  const teamPunctuality = punctualitySummary(rows, starts, startTimes);
+  const verdictCounts = punctualityVerdictCounts(memberTrends.map((t) => t.punctuality));
+  const lateMembers = memberTrends.filter(
+    (t) => lateLevel(t.punctuality.verdict) !== null,
+  ).length;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -251,6 +264,16 @@ export default function Attendance() {
         </div>
       )}
 
+      {/* Team punctuality — the roster below answers "who is late?", this
+          answers "how are we doing?". */}
+      {rows.length > 0 && (
+        <TeamPunctualityCard
+          className="mt-6"
+          summary={teamPunctuality}
+          verdictCounts={verdictCounts}
+        />
+      )}
+
       {/* Per-member time-trend analysis over the recorded history. */}
       {memberTrends.length > 0 && (
         <div className="mt-6 overflow-hidden rounded-lg border bg-card">
@@ -263,14 +286,36 @@ export default function Attendance() {
               last 6 months · rate &amp; punctuality · weakest first
             </span>
           </div>
+          {/* A quiet legend, so the tinted rows below read as a flag rather
+              than as an unexplained decoration. */}
+          {lateMembers > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/20 px-4 py-1.5 text-[9px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-status-red" /> often late
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-status-amber" /> sometimes late
+              </span>
+              <span className="text-muted-foreground/70">
+                {lateMembers} member{lateMembers === 1 ? "" : "s"} highlighted
+              </span>
+            </div>
+          )}
           <div className="divide-y">
             {memberTrends.map(({ member, points, summary, punctuality, total }) => {
               const v = trendDirectionMeta(summary.direction);
               const Icon = v.icon;
+              // Late members are flagged on the row: a loud tint for a habit,
+              // a soft one for an occasional slip. Plain membership stays plain.
+              const late = lateLevel(punctuality.verdict);
               return (
                 <div
                   key={member._id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5"
+                  className={cn(
+                    "flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 border-l-transparent px-4 py-2.5",
+                    late === "often" && "border-l-status-red/70 bg-status-red/5",
+                    late === "sometimes" && "border-l-status-amber/70 bg-status-amber/5",
+                  )}
                 >
                   <Link
                     to={`/members/${member._id}`}
@@ -293,7 +338,7 @@ export default function Attendance() {
                         "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
                         PUNCTUALITY_META[punctuality.verdict].cls,
                       )}
-                      title={`Average ${punctuality.averageDelay} min after the session began`}
+                      title={`Average ${punctuality.averageDelay} min after the session began · ${punctuality.timed} arrival${punctuality.timed === 1 ? "" : "s"} timed`}
                     >
                       <Clock className="h-2.5 w-2.5" />
                       {PUNCTUALITY_META[punctuality.verdict].label}
