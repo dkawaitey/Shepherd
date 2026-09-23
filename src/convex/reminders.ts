@@ -33,7 +33,7 @@ export interface Digest {
     classEmails: number;
     ministryEmails: number;
     skippedWorkers: number;
-    upcoming: number;
+    scheduled: number;
     overdue: number;
     birthdays: number;
     lowAttendance: number;
@@ -170,8 +170,9 @@ function birthdaysInWindow(
 
 /**
  * Compute who should be emailed today:
- *  - Follow-up workers: every pending follow-up due in the next 3 days or overdue.
- *  - Class leaders: their class's follow-ups, birthdays, low attendance and new contacts.
+ *  - Follow-up workers: every follow-up scheduled ahead, plus anything overdue.
+ *  - Class leaders: their class's scheduled and overdue follow-ups, birthdays,
+ *    low attendance and new contacts.
  */
 export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
   const [contacts, followUps, members, users, attendance, settings] = await Promise.all([
@@ -219,13 +220,21 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
   const contactById = new Map(liveContacts.map((c) => [c._id, c]));
 
   const pending = liveFollowups.filter((f) => f.status === "pending");
-  const upcoming = pending.filter((f) => f.date <= in3);
-  const overdue = pending.filter((f) => f.date < today);
+  // Every follow-up still scheduled ahead — not only the next few days. The
+  // digest is the team's schedule, so it shows the whole queue in date order;
+  // `next3` is kept only to say how much of it is imminent.
+  const scheduled = pending
+    .filter((f) => f.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const next3 = scheduled.filter((f) => f.date <= in3);
+  const overdue = pending
+    .filter((f) => f.date < today)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   // ---- Worker follow-up reminders ----
   const workerMap = new Map<string, WorkerRecipient>();
   const skippedNames = new Set<string>();
-  for (const f of [...upcoming, ...overdue]) {
+  for (const f of [...overdue, ...scheduled]) {
     const contact = contactById.get(f.contactId);
     if (!contact) continue;
     let worker = contact.assignedWorkerId ? userById.get(contact.assignedWorkerId) : undefined;
@@ -274,7 +283,7 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
     const classContactIds = new Set(classContacts.map((c) => c._id));
     const classMembers = liveMembers.filter((m) => m.klass === scope);
 
-    const classUpcoming = upcoming.filter((f) => classContactIds.has(f.contactId));
+    const classScheduled = scheduled.filter((f) => classContactIds.has(f.contactId));
     const classOverdue = overdue.filter((f) => classContactIds.has(f.contactId));
 
     // Birthdays in the next 7 days (contacts carry date of birth)
@@ -310,7 +319,7 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
       phone: userPhone(leader),
       name: leader.name ?? "Class Leader",
       className: scope,
-      upcoming: classUpcoming.map((f) => ({
+      scheduled: classScheduled.map((f) => ({
         contactId: f.contactId,
         contactName: contactById.get(f.contactId)?.fullName ?? "Unknown",
         typeLabel: FOLLOWUP_TYPE_LABELS[f.type] ?? f.type,
@@ -345,8 +354,6 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
         STAGE_ORDER.indexOf(stage as never),
     ).length;
 
-  const weekEnd = addDays(now, 7);
-  const upcomingThisWeek = pending.filter((f) => f.date >= today && f.date <= weekEnd);
   const newContactsThisWeek = liveContacts.filter((c) => localDate(new Date(c.createdAt)) >= past7);
   const completedRecent = liveFollowups.filter(
     (f) => f.status === FOLLOWUP_STATUS.COMPLETED && (f.completedDate ?? "") >= past28,
@@ -419,17 +426,16 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
     {
       heading: "Follow-up status",
       body:
-        `• Active (pending): ${pending.length}<br/>` +
+        `• Scheduled ahead: ${scheduled.length}${next3.length ? ` (${next3.length} due within 3 days)` : ""}<br/>` +
         `• Overdue: ${overdue.length}<br/>` +
-        `• Due in the next 7 days: ${upcomingThisWeek.length}<br/>` +
         `• Completed in the last 4 weeks: ${completedRecent}<br/>` +
-        `• Missed in the last 4 weeks: ${missedRecent} · Response rate: ${responseRate}%`,
+        `• Missed in the last 4 weeks: ${missedRecent}<br/>` +
+        `• Response rate: ${responseRate}%`,
     },
     {
-      heading: "Overdue follow-ups to act on",
+      heading: `Overdue follow-ups to act on (${overdue.length})`,
       body: bullets(
         overdue
-          .sort((a, b) => a.date.localeCompare(b.date))
           .slice(0, 8)
           .map(
             (f) =>
@@ -439,10 +445,25 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
       ),
     },
     {
+      heading: `Upcoming follow-ups (${scheduled.length})`,
+      body: scheduled.length
+        ? bullets(
+            scheduled
+              .slice(0, 8)
+              .map(
+                (f) =>
+                  `${contactById.get(f.contactId)?.fullName ?? "Unknown"} — ${FOLLOWUP_TYPE_LABELS[f.type] ?? f.type} — due ${fmtShortDate(f.date)}${f.assignedWorker ? ` (${f.assignedWorker})` : " · no worker"}`,
+              ),
+            "",
+          ) +
+          (scheduled.length > 8 ? `<br/>…and ${scheduled.length - 8} more scheduled.` : "")
+        : "Nothing scheduled ahead — the follow-up queue is empty.",
+    },
+    {
       heading: "Follow-up workers",
       body: bullets(
-        workerLoad.map((w) => `${w.name} — ${w.open} open in the next 3 days, ${w.overdue} overdue`),
-        "No worker has anything due in the next 3 days.",
+        workerLoad.map((w) => `${w.name} — ${w.open} scheduled, ${w.overdue} overdue`),
+        "No follow-up worker has anything open right now.",
       ),
     },
     {
@@ -531,7 +552,7 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
       classEmails: classRecipients.length,
       ministryEmails: ministryRecipients.length,
       skippedWorkers: skippedNames.size,
-      upcoming: upcoming.length,
+      scheduled: scheduled.length,
       overdue: overdue.length,
       birthdays: classRecipients.reduce((n, r) => n + r.birthdays.length, 0),
       lowAttendance: classRecipients.reduce((n, r) => n + r.lowAttendance.length, 0),

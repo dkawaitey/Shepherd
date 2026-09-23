@@ -785,7 +785,7 @@ function EmailRemindersSection() {
             { label: "worker emails", value: c?.workerEmails ?? 0 },
             { label: "class digests", value: c?.classEmails ?? 0 },
             { label: "ministry digests", value: c?.ministryEmails ?? 0 },
-            { label: "upcoming follow-ups", value: c?.upcoming ?? 0 },
+            { label: "scheduled follow-ups", value: c?.scheduled ?? 0 },
             { label: "overdue", value: c?.overdue ?? 0 },
             { label: "birthdays this week", value: c?.birthdays ?? 0 },
             { label: "low attendance", value: c?.lowAttendance ?? 0 },

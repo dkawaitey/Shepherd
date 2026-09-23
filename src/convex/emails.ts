@@ -246,7 +246,7 @@ async function dispatchDigest(
       else failed.push(r.email);
     } else if (r.phone && smsKey) {
       const lines: string[] = [];
-      if (r.upcoming.length) lines.push(`Upcoming: ${r.upcoming.length} follow-ups`);
+      if (r.scheduled.length) lines.push(`Scheduled ahead: ${r.scheduled.length} follow-ups`);
       if (r.overdue.length) lines.push(`Overdue: ${r.overdue.length} follow-ups`);
       if (r.birthdays.length) lines.push(`Birthdays: ${r.birthdays.map((b) => b.contactName).join(", ")}`);
       if (r.lowAttendance.length) lines.push(`Low attendance: ${r.lowAttendance.length} members`);
