@@ -58,6 +58,10 @@ import {
   userIsAdmin,
   ContactChannelActions,
 } from "@/components/shared";
+import {
+  AttendanceSparkline,
+  AttendanceTrendPanel,
+} from "@/components/attendance-trend";
 
 /** Derive a 2-letter area code from the area name (same rule as contacts). */
 const deriveShortcut = (area: string) =>
@@ -293,8 +297,11 @@ export default function Members() {
                 {m.classLeader && <span>Leader: {m.classLeader}</span>}
                 {m.ministryRoles && <span>{m.ministryRoles}</span>}
               </div>
-              <div className="mt-2.5 border-t pt-2 text-[10px] text-muted-foreground">
-                {m.dateJoined ? `Joined ${fmtDate(m.dateJoined)}` : "No join date"} · {m.attendanceCount} attendance records
+              <div className="mt-2.5 flex items-center justify-between gap-2 border-t pt-2 text-[10px] text-muted-foreground">
+                <span>
+                  {m.dateJoined ? `Joined ${fmtDate(m.dateJoined)}` : "No join date"} · {m.attendanceCount} attendance records
+                </span>
+                <AttendanceSparkline points={m.attendanceTrend ?? []} />
               </div>
             </Link>
           ))}
@@ -974,6 +981,9 @@ function AttendanceTab({
           </div>
         </div>
       )}
+
+      {/* Time-trend analysis for this member's attendance. */}
+      <AttendanceTrendPanel rows={rows} />
 
       {/* Record attendance */}
       {canRecord && (

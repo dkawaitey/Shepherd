@@ -1,0 +1,273 @@
+import { useMemo, useState } from "react";
+import {
+  Activity,
+  Flame,
+  Minus,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ATTENDANCE_TYPE_LABELS } from "@/convex/constants";
+import { progressColor } from "@/components/shared";
+import {
+  attendanceByType,
+  attendanceStreak,
+  attendanceTrend,
+  trendSummary,
+  type TrendPoint,
+  type TrendRow,
+} from "@/lib/attendance-trend";
+
+/**
+ * A member's attendance over time, as a verdict plus a month-by-month chart.
+ *
+ * The point of the panel is to answer "is this member's attendance improving or
+ * slipping, and when did it change?" — which the raw history table and the
+ * single overall percentage on the profile tab cannot. Records with no time
+ * trend (a brand-new member, or one with nothing recorded) get an honest empty
+ * state rather than a flat line at zero.
+ */
+export function AttendanceTrendPanel({ rows }: { rows: TrendRow[] }) {
+  const [range, setRange] = useState<6 | 12>(6);
+
+  const points = useMemo(() => attendanceTrend(rows, range), [rows, range]);
+  const summary = useMemo(() => trendSummary(points), [points]);
+  const streak = useMemo(() => attendanceStreak(rows), [rows]);
+  const byType = useMemo(() => attendanceByType(rows), [rows]);
+  const withRecords = points.filter((p) => p.total > 0);
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg border bg-card p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          <p className="term-label">attendance trend</p>
+        </div>
+        <p className="py-6 text-center text-[11px] text-muted-foreground">
+          No attendance recorded yet — a trend appears once this member has a few records.
+        </p>
+      </div>
+    );
+  }
+
+  const verdict = {
+    up: {
+      icon: TrendingUp,
+      label: "Improving",
+      detail: `+${summary.delta} pts vs earlier months`,
+      cls: "border-status-green/40 bg-status-green/10 text-status-green",
+    },
+    down: {
+      icon: TrendingDown,
+      label: "Declining",
+      detail: `${summary.delta} pts vs earlier months`,
+      cls: "border-status-red/40 bg-status-red/10 text-status-red",
+    },
+    steady: {
+      icon: Minus,
+      label: "Steady",
+      detail: withRecords.length >= 2 ? "holding around the same rate" : "not enough history yet",
+      cls: "border-border bg-muted/40 text-muted-foreground",
+    },
+  }[summary.direction];
+  const VerdictIcon = verdict.icon;
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-primary" />
+          <p className="term-label">attendance trend</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+              verdict.cls,
+            )}
+          >
+            <VerdictIcon className="h-3 w-3" />
+            {verdict.label}
+          </span>
+          <div className="flex overflow-hidden rounded-md border">
+            {([6, 12] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={cn(
+                  "px-2 py-0.5 text-[10px] font-medium transition-colors",
+                  range === r
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {r}M
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <p className="mb-4 text-[10px] text-muted-foreground">{verdict.detail}</p>
+
+      {/* Monthly bars — height is the attendance rate, the bar's base width
+          grows with how many records that month actually has. */}
+      <div className="flex items-end gap-2 overflow-x-auto pb-1">
+        {points.map((p) => {
+          const color = p.total === 0 ? undefined : progressColor(p.percentage);
+          return (
+            <div
+              key={p.key}
+              className="flex min-w-0 flex-1 flex-col items-center gap-1"
+              title={`${p.label}: ${p.percentage}% (${p.present}/${p.total} present)`}
+            >
+              <span className="font-mono text-[9px] tabular-nums text-muted-foreground">
+                {p.total === 0 ? "—" : `${p.percentage}%`}
+              </span>
+              <div className="flex h-24 w-full items-end justify-center rounded bg-muted/40">
+                {p.total > 0 ? (
+                  <div
+                    className="w-3/5 rounded-t-sm transition-all"
+                    style={{
+                      height: `${Math.max(4, p.percentage)}%`,
+                      backgroundColor: color,
+                    }}
+                  />
+                ) : (
+                  <div className="h-px w-3/5 bg-border" />
+                )}
+              </div>
+              <span
+                className={cn(
+                  "text-[9px]",
+                  p.total === 0 ? "text-muted-foreground/50" : "text-muted-foreground",
+                )}
+              >
+                {p.label}
+              </span>
+              <span className="font-mono text-[8px] tabular-nums text-muted-foreground/60">
+                {p.present}/{p.total}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Summary stats */}
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <TrendStat label="Average" value={`${summary.average}%`} />
+        <TrendStat
+          label="Current streak"
+          value={`${streak}`}
+          hint={streak === 1 ? "present in a row" : "presents in a row"}
+          icon={streak >= 3 ? Flame : undefined}
+        />
+        <TrendStat
+          label="Best month"
+          value={summary.best ? `${summary.best.percentage}%` : "—"}
+          hint={summary.best?.label}
+          icon={summary.best ? Trophy : undefined}
+        />
+        <TrendStat
+          label="Weakest month"
+          value={summary.worst ? `${summary.worst.percentage}%` : "—"}
+          hint={summary.worst?.label}
+        />
+      </div>
+
+      {/* Per-activity breakdown, so a dip can be traced to a particular service. */}
+      {byType.length > 0 && (
+        <div className="mt-4 border-t pt-3">
+          <p className="term-label mb-2">by activity</p>
+          <div className="space-y-1.5">
+            {byType.map((t) => (
+              <div key={t.type} className="flex items-center gap-2">
+                <span className="w-28 shrink-0 truncate text-[10px] text-muted-foreground">
+                  {ATTENDANCE_TYPE_LABELS[t.type] ?? t.type}
+                </span>
+                <div className="h-2 flex-1 overflow-hidden rounded-sm bg-muted">
+                  <div
+                    className="h-full rounded-sm"
+                    style={{
+                      width: `${Math.max(2, t.percentage)}%`,
+                      backgroundColor: progressColor(t.percentage),
+                    }}
+                  />
+                </div>
+                <span className="w-16 shrink-0 text-right font-mono text-[9px] tabular-nums text-muted-foreground">
+                  {t.present}/{t.total} · {t.percentage}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-3 text-[9px] text-muted-foreground/70">
+        Based on {rows.length} attendance {rows.length === 1 ? "record" : "records"}.
+        Taller bars mean a higher share of sessions attended that month.
+      </p>
+    </div>
+  );
+}
+
+function TrendStat({
+  label,
+  value,
+  hint,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon?: typeof Flame;
+}) {
+  return (
+    <div className="rounded-md border bg-muted/30 px-2.5 py-2">
+      <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+        {Icon && <Icon className="h-2.5 w-2.5" />}
+        {label}
+      </div>
+      <div className="mt-0.5 font-mono text-lg font-bold tabular-nums">{value}</div>
+      {hint && <div className="text-[9px] text-muted-foreground/70">{hint}</div>}
+    </div>
+  );
+}
+
+/**
+ * A tiny attendance sparkline for a member card — six months, no axis, no
+ * labels. It only needs to say "this member is trending up / down" at a glance;
+ * the member profile carries the full analysis.
+ */
+export function AttendanceSparkline({
+  points,
+  className,
+}: {
+  points: TrendPoint[];
+  className?: string;
+}) {
+  const hasData = points.some((p) => p.total > 0);
+  if (!hasData) return null;
+  return (
+    <span
+      className={cn("inline-flex items-end gap-0.5", className)}
+      title={points
+        .filter((p) => p.total > 0)
+        .map((p) => `${p.label} ${p.percentage}%`)
+        .join(" · ")}
+      aria-label="Attendance trend over the last six months"
+    >
+      {points.map((p) => (
+        <span
+          key={p.key}
+          className="w-1 rounded-sm"
+          style={{
+            height: `${Math.max(2, (p.total === 0 ? 0 : p.percentage) / 100) * 14}px`,
+            backgroundColor: p.total === 0 ? "var(--border)" : progressColor(p.percentage),
+          }}
+        />
+      ))}
+    </span>
+  );
+}

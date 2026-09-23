@@ -27,6 +27,7 @@ import {
 import { Doc } from "./_generated/dataModel";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone } from "./validate";
+import { attendanceTrend } from "../lib/attendance-trend";
 
 /** Validate + normalize a member's position / class-leader flag (admin-only
  *  values). Prevents contradictory combinations, e.g. Read-only Leader + Class
@@ -189,11 +190,27 @@ export const list = query({
       memberActivity(ctx, members),
     ]);
 
-    return members.map((m) => ({
-      ...m,
-      ...(activity.get(m._id) ?? NO_ACTIVITY),
-      attendanceCount: attendance.filter((a) => a.memberId === m._id).length,
-    }));
+    // Group once, then reuse for both the count and the six-month trend the
+    // member card draws, instead of re-scanning all attendance per member.
+    const rowsByMember = new Map<string, typeof attendance>();
+    for (const row of attendance) {
+      if (!row.memberId) continue;
+      const list = rowsByMember.get(row.memberId) ?? [];
+      list.push(row);
+      rowsByMember.set(row.memberId, list);
+    }
+
+    return members.map((m) => {
+      const rows = rowsByMember.get(m._id) ?? [];
+      return {
+        ...m,
+        ...(activity.get(m._id) ?? NO_ACTIVITY),
+        attendanceCount: rows.length,
+        // Time-trend analysis: last six months of attendance (see the shared
+        // attendanceTrend helper, used by both this list and the profile chart).
+        attendanceTrend: attendanceTrend(rows, 6),
+      };
+    });
   },
 });
 
