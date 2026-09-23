@@ -950,7 +950,9 @@ function AttendanceTab({
         programName: program.trim() || undefined,
         status: status as any,
         time: time || undefined,
-        remarks: remarks.trim() || undefined,
+        // Always send a value (even empty) so clearing the remarks field in an
+        // edit actually persists, instead of leaving the old text behind.
+        remarks: remarks.trim(),
         recordedBy: recordedBy.trim() || me?.name || me?.email || undefined,
       });
       toast.success("Attendance record updated");

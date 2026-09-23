@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -40,7 +40,23 @@ import {
 } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
-import { CalendarPlus, ExternalLink, Lock, Search, Trash2 } from "lucide-react";
+import {
+  AlarmClock,
+  AlertTriangle,
+  CalendarClock,
+  CalendarPlus,
+  CheckCircle2,
+  ClipboardCheck,
+  ExternalLink,
+  Hash,
+  Lock,
+  Search,
+  type LucideIcon,
+  Tag,
+  Trash2,
+  UserRound,
+  XCircle,
+} from "lucide-react";
 
 // ============ Status change modal (required fields; nothing saved until submit) ============
 export function StatusChangeDialog({
@@ -400,7 +416,12 @@ export default function Followups() {
   const grouped = useMemo(() => {
     const pending = (followups ?? []).filter((f) => f.status === FOLLOWUP_STATUS.PENDING);
     const done = (followups ?? []).filter((f) => f.status !== FOLLOWUP_STATUS.PENDING);
-    return { pending, done };
+    // A scheduled visit whose day has already passed is the one thing a worker
+    // must not miss, so it is counted here and told apart from "just upcoming".
+    const today = todayKey();
+    const overdue = pending.filter((f) => dayKey(f.date) < today).length;
+    const dueToday = pending.filter((f) => dayKey(f.date) === today).length;
+    return { pending, done, overdue, dueToday };
   }, [followups]);
 
   return (
@@ -453,11 +474,37 @@ export default function Followups() {
       {/* Legend */}
       <div className="mb-4 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
         <span className="term-label">status legend</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#fbbf24]" /> Pending</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#86efac]" /> Completed</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#f87171]" /> Missed</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#9ca3af]" /> Cancelled</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-status-amber" /> Pending</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-status-green" /> Completed</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-status-red" /> Missed</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-status-grey" /> Cancelled</span>
       </div>
+
+      {/* At-a-glance summary of the schedule. */}
+      {followups !== undefined && followups.length > 0 && (
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <SummaryStat
+            icon={CalendarClock}
+            label="Scheduled"
+            value={grouped.pending.length}
+            hint={grouped.dueToday > 0 ? `${grouped.dueToday} due today` : "awaiting visit"}
+          />
+          <SummaryStat
+            icon={AlarmClock}
+            label="Overdue"
+            value={grouped.overdue}
+            tone={grouped.overdue > 0 ? "red" : "muted"}
+            hint={grouped.overdue > 0 ? "needs attention" : "all on track"}
+          />
+          <SummaryStat
+            icon={CheckCircle2}
+            label="Completed"
+            value={(followups ?? []).filter((f) => f.status === FOLLOWUP_STATUS.COMPLETED).length}
+            tone="green"
+            hint="journey advanced"
+          />
+        </div>
+      )}
 
       {followups === undefined ? (
         <div className="space-y-2">
@@ -478,23 +525,52 @@ export default function Followups() {
           }
         />
       ) : (
-        <div className="space-y-3">
-          {grouped.pending.map((f) => (
-            <FollowupRow
-              key={f._id}
-              f={f}
-              onStatus={canWork ? () => setChanging(f) : undefined}
-              onDelete={canWork ? () => setConfirmDelete(f) : undefined}
-            />
-          ))}
-          {grouped.done.map((f) => (
-            <FollowupRow
-              key={f._id}
-              f={f}
-              onStatus={canWork ? () => setChanging(f) : undefined}
-              onDelete={canWork ? () => setConfirmDelete(f) : undefined}
-            />
-          ))}
+        <div className="space-y-4">
+          {grouped.overdue > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-status-red/40 bg-status-red/10 px-3 py-2 text-[11px] font-medium text-status-red">
+              <AlarmClock className="h-4 w-4 shrink-0" />
+              {grouped.overdue} scheduled follow-up{grouped.overdue === 1 ? "" : "s"} slipped past
+              {grouped.overdue === 1 ? " its" : " their"} date — time to reach out.
+            </div>
+          )}
+
+          {grouped.pending.length > 0 && (
+            <div className="space-y-2.5">
+              <SectionHeading>
+                scheduled
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                  {grouped.pending.length}
+                </span>
+              </SectionHeading>
+              {grouped.pending.map((f) => (
+                <FollowupRow
+                  key={f._id}
+                  f={f}
+                  onStatus={canWork ? () => setChanging(f) : undefined}
+                  onDelete={canWork ? () => setConfirmDelete(f) : undefined}
+                />
+              ))}
+            </div>
+          )}
+
+          {grouped.done.length > 0 && (
+            <div className="space-y-2.5">
+              <SectionHeading>
+                closed
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                  {grouped.done.length}
+                </span>
+              </SectionHeading>
+              {grouped.done.map((f) => (
+                <FollowupRow
+                  key={f._id}
+                  f={f}
+                  onStatus={canWork ? () => setChanging(f) : undefined}
+                  onDelete={canWork ? () => setConfirmDelete(f) : undefined}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -531,6 +607,104 @@ export default function Followups() {
   );
 }
 
+// ---------- Date helpers for the schedule ----------
+
+/** Today as a local YYYY-MM-DD key (avoids the UTC day-shift of toISOString). */
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function dayKey(iso: string) {
+  return (iso || "").slice(0, 10);
+}
+
+/** Whole days from `from` to `to` (positive = in the future). */
+function daysBetween(from: string, to: string) {
+  const a = new Date(`${from}T00:00:00`).getTime();
+  const b = new Date(`${to}T00:00:00`).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * How a pending follow-up reads against today. An overdue visit is stated in
+ * days and tinted red so a slipped appointment can't hide in a long list; the
+ * upcoming days get a softer cue, and anything further out stays plain.
+ */
+function dueMeta(f: { status: string; date: string }) {
+  if (f.status !== FOLLOWUP_STATUS.PENDING) return null;
+  const diff = daysBetween(todayKey(), dayKey(f.date));
+  if (diff < 0) {
+    const n = Math.abs(diff);
+    return {
+      label: n === 1 ? "Overdue by 1 day" : `Overdue by ${n} days`,
+      cls: "border-status-red/40 bg-status-red/10 text-status-red",
+    };
+  }
+  if (diff === 0)
+    return { label: "Due today", cls: "border-status-amber/40 bg-status-amber/10 text-status-amber" };
+  if (diff === 1)
+    return { label: "Due tomorrow", cls: "border-status-amber/30 bg-status-amber/5 text-status-amber" };
+  if (diff <= 7)
+    return { label: `Due in ${diff} days`, cls: "border-border bg-muted/50 text-muted-foreground" };
+  return null;
+}
+
+/** A single figure in the schedule summary strip. */
+function SummaryStat({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  tone = "default",
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  hint: string;
+  tone?: "default" | "red" | "green" | "muted";
+}) {
+  const toneCls =
+    tone === "red"
+      ? "text-status-red"
+      : tone === "green"
+        ? "text-status-green"
+        : tone === "muted"
+          ? "text-muted-foreground"
+          : "text-foreground";
+  return (
+    <div className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-3">
+      <Icon className={cn("h-5 w-5 shrink-0", toneCls)} />
+      <div className="min-w-0">
+        <div
+          className={cn(
+            "font-mono text-lg font-semibold leading-none tabular-nums",
+            toneCls,
+          )}
+        >
+          {value}
+        </div>
+        <div className="mt-1 truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+          {label} · {hint}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A quiet rule + label that separates "scheduled" from "closed". */
+function SectionHeading({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 pt-0.5">
+      <span className="term-label">{children}</span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
 function FollowupRow({
   f,
   onStatus,
@@ -540,8 +714,34 @@ function FollowupRow({
   onStatus?: () => void;
   onDelete?: () => void;
 }) {
+  const due = dueMeta(f);
+  // A 4px status rail down the left edge, so the list scans by colour before
+  // it is read: amber waiting, green done, red missed, grey cancelled.
+  const rail =
+    f.status === FOLLOWUP_STATUS.PENDING
+      ? "border-l-status-amber/70"
+      : f.status === FOLLOWUP_STATUS.COMPLETED
+        ? "border-l-status-green/60"
+        : f.status === FOLLOWUP_STATUS.MISSED
+          ? "border-l-status-red/60"
+          : "border-l-status-grey/50";
+  const outcome: string | null = f.outcome ?? f.reasonMissed ?? f.reasonCancelled ?? null;
+  const outcomeLabel = f.outcome
+    ? "Outcome"
+    : f.reasonMissed
+      ? "Reason missed"
+      : f.reasonCancelled
+        ? "Reason cancelled"
+        : "";
+  const OutcomeIcon = f.outcome ? CheckCircle2 : f.reasonMissed ? AlertTriangle : XCircle;
+
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center">
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-xl border border-l-4 bg-card p-4 transition-shadow hover:shadow-sm sm:flex-row sm:items-start",
+        rail,
+      )}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <Link
@@ -551,37 +751,81 @@ function FollowupRow({
             {f.contactName}
           </Link>
           <StatusPill status={f.status} />
+          {due && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                due.cls,
+              )}
+            >
+              <AlarmClock className="h-3 w-3" /> {due.label}
+            </span>
+          )}
           {f.locked && (
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground" title="Status locked">
+            <span
+              className="flex items-center gap-1 text-[10px] text-muted-foreground"
+              title="Status locked"
+            >
               <Lock className="h-3 w-3" /> locked
             </span>
           )}
         </div>
-        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          <span>{FOLLOWUP_TYPE_LABELS[f.type]}</span>
-          <span>📅 {fmtDate(f.date)}{f.time ? ` · ${fmtTime(f.time)}` : ""}</span>
-          <span>Worker: {f.assignedWorker || "Unassigned"}</span>
-          <span className="text-muted-foreground/70">{f.membershipId}</span>
+
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <Tag className="h-3 w-3" /> {FOLLOWUP_TYPE_LABELS[f.type] ?? f.type}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <CalendarClock className="h-3 w-3" /> {fmtDate(f.date)}
+            {f.time ? ` · ${fmtTime(f.time)}` : ""}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <UserRound className="h-3 w-3" /> {f.assignedWorker || "Unassigned"}
+          </span>
+          {f.membershipId && (
+            <span className="inline-flex items-center gap-1 text-muted-foreground/70">
+              <Hash className="h-3 w-3" /> {f.membershipId}
+            </span>
+          )}
         </div>
-        {f.notes && <p className="mt-1 truncate text-[11px] text-muted-foreground">“{f.notes}”</p>}
-        {(f.outcome || f.reasonMissed || f.reasonCancelled) && (
-          <p className="mt-1 rounded bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground">
-            <span className="font-semibold text-foreground">
-              {f.outcome ? "Outcome" : f.reasonMissed ? "Missed:" : "Cancelled:"}
-            </span>{" "}
-            {f.outcome ?? f.reasonMissed ?? f.reasonCancelled}
+
+        {f.notes && (
+          <p className="mt-2 rounded-md border border-dashed bg-muted/30 px-2 py-1 text-[11px] italic text-muted-foreground">
+            “{f.notes}”
+          </p>
+        )}
+
+        {outcome && (
+          <p
+            className={cn(
+              "mt-2 flex items-start gap-1.5 rounded-md px-2 py-1.5 text-[11px]",
+              f.outcome
+                ? "bg-status-green/10 text-status-green"
+                : f.reasonMissed
+                  ? "bg-status-red/10 text-status-red"
+                  : "bg-muted/60 text-muted-foreground",
+            )}
+          >
+            <OutcomeIcon className="mt-px h-3.5 w-3.5 shrink-0" />
+            <span>
+              <span className="font-semibold">{outcomeLabel}: </span>
+              {outcome}
+            </span>
           </p>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {f.status === FOLLOWUP_STATUS.PENDING && onStatus && (
+          <Button size="sm" onClick={onStatus}>
+            <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Update status
+          </Button>
+        )}
         <Link to={`/contacts/${f.contactId}`} title="Open contact profile">
-          <Button variant="outline" size="icon">
-            <ExternalLink className="h-3.5 w-3.5" />
+          <Button variant="outline" size="sm">
+            <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open
           </Button>
         </Link>
-        {f.status === FOLLOWUP_STATUS.PENDING && onStatus && (
-          <Button size="sm" onClick={onStatus}>Update status</Button>
-        )}
         {onDelete && (
           <Button
             variant="ghost"
