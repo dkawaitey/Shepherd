@@ -25,6 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ATTENDANCE_TYPES,
+  ATTENDANCE_TYPE_LABELS,
   CLASS_OPTIONS,
   POSITION_LABELS,
   ROLE_LABELS,
@@ -33,11 +35,13 @@ import {
   Role,
   effectivePosition,
 } from "@/convex/constants";
+import { parseStartTimes } from "@/lib/attendance-trend";
 import { PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles, formatError } from "@/components/shared";
 import { cn } from "@/lib/utils";
 
 import {
   Bell,
+  Clock,
   Download,
   FileText,
   MailCheck,
@@ -624,6 +628,74 @@ function MinistryTab() {
         </div>
       </div>
 
+      <SessionStartTimesCard />
+    </div>
+  );
+}
+
+/**
+ * The ministry's official start time for each attendance activity.
+ *
+ * Different activities begin at different times, so this is what punctuality is
+ * measured against. A blank field means that activity falls back to its first
+ * recorded arrival of the session.
+ */
+function SessionStartTimesCard() {
+  const settings = useQuery(api.settings.get);
+  const setSetting = useMutation(api.settings.set);
+  const saved = parseStartTimes(settings?.attendance_start_times);
+  const [times, setTimes] = useState<Record<string, string>>({});
+
+  const types = Object.values(ATTENDANCE_TYPES);
+  const valueFor = (type: string) => times[type] ?? saved[type] ?? "";
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <Clock className="h-4 w-4 text-primary" />
+        <p className="term-label">// session start times</p>
+      </div>
+      <p className="mb-3 text-[11px] leading-4 text-muted-foreground">
+        When each activity normally begins. Punctuality is measured against these
+        times; leave a field blank and that activity falls back to its first
+        recorded arrival.
+      </p>
+      <div className="space-y-2">
+        {types.map((type) => (
+          <div key={type} className="flex items-center justify-between gap-3">
+            <Label htmlFor={`st-${type}`} className="text-xs">
+              {ATTENDANCE_TYPE_LABELS[type] ?? type}
+            </Label>
+            <Input
+              id={`st-${type}`}
+              type="time"
+              className="w-32"
+              value={valueFor(type)}
+              onChange={(e) => setTimes((t) => ({ ...t, [type]: e.target.value }))}
+            />
+          </div>
+        ))}
+      </div>
+      <Button
+        className="mt-3"
+        onClick={async () => {
+          const payload: Record<string, string> = { ...saved };
+          for (const type of types) {
+            const v = times[type];
+            if (v === undefined) continue;
+            if (v) payload[type] = v;
+            else delete payload[type];
+          }
+          await setSetting({
+            key: "attendance_start_times",
+            value: JSON.stringify(payload),
+          });
+          setTimes({});
+          toast.success("Session start times saved");
+        }}
+      >
+        Save start times
+      </Button>
     </div>
   );
 }

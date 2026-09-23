@@ -271,6 +271,42 @@ export function attendanceByType(
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+/** Minutes past midnight for an "HH:MM" string, or null when malformed. */
+export function hhmmToMinutes(value: string | null | undefined): number | null {
+  if (!value || !HHMM.test(value)) return null;
+  const [h, m] = value.split(":").map(Number);
+  return h! * 60 + m!;
+}
+
+/**
+ * A ministry's official start time per activity, keyed by attendance type
+ * (`youthMeeting` → `"09:00"`). Activities start at different times, so the
+ * baseline each arrival is judged against has to come from the activity, not
+ * from whoever happened to arrive first.
+ */
+export type SessionStartTimes = Record<string, string>;
+
+/**
+ * Read the stored `attendance_start_times` setting into a typed map.
+ *
+ * The setting is a JSON object; anything malformed or not a valid "HH:MM" is
+ * dropped rather than thrown, so a bad value can never break the trend view.
+ */
+export function parseStartTimes(json: string | null | undefined): SessionStartTimes {
+  if (!json) return {};
+  try {
+    const raw: unknown = JSON.parse(json);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: SessionStartTimes = {};
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof value === "string" && HHMM.test(value)) out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Minutes past midnight when a record was marked.
  *
@@ -280,10 +316,8 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
  * for that fallback so the Convex backend and the browser agree on the value.
  */
 export function markedMinute(row: TrendRow): number | null {
-  if (row.time && HHMM.test(row.time)) {
-    const [h, m] = row.time.split(":").map(Number);
-    return h! * 60 + m!;
-  }
+  const explicit = hhmmToMinutes(row.time);
+  if (explicit !== null) return explicit;
   if (typeof row.createdAt === "number" && row.createdAt > 0) {
     const d = new Date(row.createdAt);
     return d.getUTCHours() * 60 + d.getUTCMinutes();
@@ -296,21 +330,34 @@ const sessionKey = (row: TrendRow) =>
   `${(row.date || "").slice(0, 10)}|${row.type ?? ""}|${(row.programName ?? "").trim()}`;
 
 /**
- * When each session actually began, as minutes past midnight.
+ * When each session began, as minutes past midnight.
  *
- * A session begins with its first recorded arrival — the earliest present mark
- * for that date/activity/program. Using the session's own data means punctuality
- * needs no configured start time, and stays correct when a meeting is moved.
+ * A configured start time for the activity (Ministry Settings → session start
+ * times) is the session's official beginning and wins outright — so a Sunday
+ * service at 08:30 and a youth meeting at 09:00 are each measured against their
+ * own start, and someone arriving early isn't mistaken for the baseline.
+ *
+ * With no configured time the session falls back to its first recorded arrival:
+ * the earliest present mark for that date/activity/program. That keeps
+ * punctuality meaningful before any times are set, and after a session is moved.
  */
-export function sessionStarts(rows: TrendRow[]): Map<string, number> {
+export function sessionStarts(
+  rows: TrendRow[],
+  configured: SessionStartTimes = {},
+): Map<string, number> {
   const starts = new Map<string, number>();
   for (const row of rows) {
+    const key = sessionKey(row);
+    const official = row.type ? hhmmToMinutes(configured[row.type]) : null;
+    if (official !== null) {
+      starts.set(key, official);
+      continue;
+    }
+    if (starts.has(key)) continue;
     if (row.status !== "present") continue;
     const minute = markedMinute(row);
     if (minute === null) continue;
-    const key = sessionKey(row);
-    const current = starts.get(key);
-    if (current === undefined || minute < current) starts.set(key, minute);
+    starts.set(key, minute);
   }
   return starts;
 }
@@ -341,6 +388,11 @@ export type PunctualitySummary = {
   /** The latest arrival observed, in minutes after that session began. */
   worstDelay: number;
   verdict: "punctual" | "mostlyPunctual" | "sometimesLate" | "oftenLate" | "unknown";
+  /**
+   * What the delays were measured against: the ministry's configured start
+   * times, the sessions' first arrivals, both, or neither (nothing timed yet).
+   */
+  baseline: "configured" | "inferred" | "mixed" | "none";
 };
 
 const bandFor = (delay: number): PunctualityBand =>
@@ -360,6 +412,7 @@ const bandFor = (delay: number): PunctualityBand =>
 export function punctualitySummary(
   rows: TrendRow[],
   starts: Map<string, number>,
+  configured: SessionStartTimes = {},
 ): PunctualitySummary {
   const counts: Record<PunctualityBand, number> = {
     onTime: 0,
@@ -370,6 +423,8 @@ export function punctualitySummary(
   let timed = 0;
   let delayTotal = 0;
   let worstDelay = 0;
+  let fromConfigured = 0;
+  let fromInferred = 0;
 
   for (const row of rows) {
     if (row.status !== "present") continue;
@@ -382,6 +437,8 @@ export function punctualitySummary(
     timed += 1;
     delayTotal += delay;
     if (delay > worstDelay) worstDelay = delay;
+    if (row.type && hhmmToMinutes(configured[row.type]) !== null) fromConfigured += 1;
+    else fromInferred += 1;
   }
 
   const averageDelay = timed === 0 ? 0 : Math.round(delayTotal / timed);
@@ -399,5 +456,14 @@ export function punctualitySummary(
             : "sometimesLate";
   }
 
-  return { timed, ...counts, averageDelay, worstDelay, verdict };
+  const baseline: PunctualitySummary["baseline"] =
+    timed === 0
+      ? "none"
+      : fromConfigured && fromInferred
+        ? "mixed"
+        : fromConfigured
+          ? "configured"
+          : "inferred";
+
+  return { timed, ...counts, averageDelay, worstDelay, verdict, baseline };
 }

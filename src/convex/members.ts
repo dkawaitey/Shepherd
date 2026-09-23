@@ -27,7 +27,7 @@ import {
 import { Doc } from "./_generated/dataModel";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone } from "./validate";
-import { punctualitySummary, sessionStarts } from "../lib/attendance-trend";
+import { parseStartTimes, punctualitySummary, sessionStarts } from "../lib/attendance-trend";
 
 /** Validate + normalize a member's position / class-leader flag (admin-only
  *  values). Prevents contradictory combinations, e.g. Read-only Leader + Class
@@ -207,21 +207,32 @@ export const get = query({
     const member = await ctx.db.get(args.id);
     if (!member || member.isDeleted) return null;
     if (!withinClassScope(user, member.klass)) return null;
-    const [attendance, prayers, notes, activity, allAttendance] = await Promise.all([
+    const [attendance, prayers, notes, activity, allAttendance, startTimeRow] = await Promise.all([
       ctx.db.query("attendance").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("prayerRequests").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("notes").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       memberActivity(ctx, [member]),
       // Every attendance record, so this member's arrivals can be judged against
-      // when each session actually began (its first recorded arrival).
+      // when each session actually began (its configured start, or its first arrival).
       ctx.db.query("attendance").collect(),
+      // The ministry's official start time per activity, set in Ministry Settings.
+      ctx.db
+        .query("settings")
+        .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
+        .first(),
     ]);
+    const startTimes = parseStartTimes(startTimeRow?.value);
     return {
       // The profile header carries the same last-seen dot as the member card.
       member: { ...member, ...(activity.get(member._id) ?? NO_ACTIVITY) },
       attendance: attendance.sort((a, b) => b.date.localeCompare(a.date)),
-      // Punctuality: each arrival measured against that session's first arrival.
-      punctuality: punctualitySummary(attendance, sessionStarts(allAttendance)),
+      // Punctuality: each arrival measured against its session's official start
+      // time when one is configured, and against the first arrival otherwise.
+      punctuality: punctualitySummary(
+        attendance,
+        sessionStarts(allAttendance, startTimes),
+        startTimes,
+      ),
       // Confidential prayers and private notes are filtered per viewer.
       prayers: prayers
         .filter((p) => canSeeConfidentialPrayer(user, p))

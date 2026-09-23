@@ -74,6 +74,19 @@ export const PUNCTUALITY_META: Record<
   unknown: { label: "Not enough times", cls: "border-border bg-muted/40 text-muted-foreground" },
 };
 
+/** Where the punctuality baseline came from, so a reader can trust the number. */
+export const PUNCTUALITY_BASELINE_NOTE: Record<
+  PunctualitySummary["baseline"],
+  string
+> = {
+  configured: "Measured against the start time set for each activity.",
+  inferred:
+    "No start times set yet — measured against each session's first arrival.",
+  mixed:
+    "Measured against set start times where they exist, and first arrivals otherwise.",
+  none: "",
+};
+
 /** The punctuality bands, weakest last, with the colour each is drawn in. */
 const PUNCTUALITY_BANDS = [
   { key: "onTime", label: "On time", color: "#86efac" },
@@ -342,7 +355,8 @@ export function AttendanceTrendPanel({
                 {punctuality.worstDelay > 0
                   ? ` · latest was ${punctuality.worstDelay} min after the session began`
                   : ""}
-                .
+                .{" "}
+                {PUNCTUALITY_BASELINE_NOTE[punctuality.baseline]}
               </p>
             </>
           )}

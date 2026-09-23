@@ -44,6 +44,7 @@ import {
 } from "@/components/attendance-trend";
 import {
   attendanceTrend,
+  parseStartTimes,
   punctualitySummary,
   sessionStarts,
   trendSummary,
@@ -68,6 +69,7 @@ export default function Attendance() {
   });
   const history = useQuery(api.discipleship.listAttendance, {});
   const lowAttendance = useQuery(api.members.lowAttendance, {});
+  const settings = useQuery(api.settings.get);
   const me = useQuery(api.users.currentUser);
   const markFollowup = useMutation(api.members.markAttendanceFollowup);
 
@@ -123,9 +125,10 @@ export default function Attendance() {
     list.push(r);
     rowsByMember.set(r.memberId, list);
   }
-  // When each session actually began, from the earliest present mark across all
-  // members — the baseline each arrival is judged against.
-  const starts = sessionStarts(rows);
+  // When each session actually began: the ministry's configured start time for
+  // the activity, or the earliest present mark across all members as a fallback.
+  const startTimes = parseStartTimes(settings?.attendance_start_times);
+  const starts = sessionStarts(rows, startTimes);
   const memberTrends = (members ?? [])
     .map((m) => {
       const mine = rowsByMember.get(m._id) ?? [];
@@ -134,7 +137,7 @@ export default function Attendance() {
         member: m,
         points,
         summary: trendSummary(points),
-        punctuality: punctualitySummary(mine, starts),
+        punctuality: punctualitySummary(mine, starts, startTimes),
         total: mine.length,
       };
     })
