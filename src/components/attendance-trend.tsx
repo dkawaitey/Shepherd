@@ -17,24 +17,17 @@ import {
   attendanceByType,
   attendanceStreak,
   attendanceTrend,
-  attendanceTrendAll,
   trendSummary,
   type ActivityPunctuality,
   type PunctualitySummary,
-  type TrendGranularity,
   type TrendPoint,
   type TrendRow,
   type TrendSummary,
 } from "@/lib/attendance-trend";
 
-/** The windows the panel can show. "all" walks the member's whole history. */
-type TrendRange = 6 | 12 | "all";
-
-const GRANULARITY_LABEL: Record<TrendGranularity, string> = {
-  month: "monthly",
-  quarter: "quarterly",
-  year: "yearly",
-};
+/** The windows the panel can show — capped at a year, so a reading always
+ *  describes recent form rather than a lifetime's records. */
+type TrendRange = 6 | 12;
 
 /** Icon, wording and colours for a trend direction — shared by the panel and
  *  the per-member trends list so the same verdict always looks the same. */
@@ -325,6 +318,147 @@ export function TeamPunctualityCard({
   );
 }
 
+/** One class' punctuality reading, as returned by `members.classPunctuality`. */
+export type ClassPunctualityRow = {
+  klass: string;
+  /** Members in the class. */
+  members: number;
+  /** Attendance records considered for the class. */
+  records: number;
+  /** Share of the class' records marked present. */
+  rate: number;
+  /** The class' arrivals measured against each session's start. */
+  summary: PunctualitySummary;
+  /** How the class' own members split across the verdicts. */
+  verdictCounts: Record<PunctualitySummary["verdict"], number>;
+};
+
+/**
+ * Punctuality per class, weakest first.
+ *
+ * The roster answers "who is late?" and the team card answers "how are we
+ * doing?". This is the third question a leader asks — "which class is
+ * drifting?" — so a lateness habit can be traced to a group and not only to an
+ * individual. Every class with members is shown, unmeasured ones included: a
+ * class nobody has timed is itself worth knowing, and hiding it would make the
+ * table read as if it were fine.
+ */
+export function ClassPunctualityCard({
+  rows,
+  className,
+}: {
+  rows: ClassPunctualityRow[];
+  className?: string;
+}) {
+  if (rows.length === 0) return null;
+  const measuredClasses = rows.filter((r) => r.summary.timed > 0).length;
+  const totalTimed = rows.reduce((n, r) => n + r.summary.timed, 0);
+
+  return (
+    <div className={cn("rounded-lg border bg-card", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          <p className="term-label">class punctuality</p>
+        </div>
+        <span className="text-[10px] text-muted-foreground">
+          {totalTimed === 0
+            ? "no arrival times recorded yet"
+            : `${measuredClasses} of ${rows.length} classes measured · weakest first`}
+        </span>
+      </div>
+
+      <div className="divide-y">
+        {rows.map((row) => {
+          const { klass, members, records, rate, summary, verdictCounts } = row;
+          const onTimeRate =
+            summary.timed === 0
+              ? 0
+              : Math.round((summary.onTime / summary.timed) * 100);
+          const flagged = verdictCounts.oftenLate + verdictCounts.sometimesLate;
+          const verdict = PUNCTUALITY_META[summary.verdict];
+          return (
+            <div
+              key={klass}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5"
+            >
+              <div className="w-28 shrink-0">
+                <div className="text-[12px] font-semibold">{klass} Class</div>
+                <div className="text-[9px] text-muted-foreground">
+                  {members} member{members === 1 ? "" : "s"} · {records} record
+                  {records === 1 ? "" : "s"} · {rate}% present
+                </div>
+              </div>
+
+              {summary.timed === 0 ? (
+                <span className="flex-1 text-[10px] text-muted-foreground">
+                  No arrival times to compare yet — record the time members are
+                  marked to build this.
+                </span>
+              ) : (
+                <div
+                  className="flex h-3 min-w-24 flex-1 overflow-hidden rounded-sm bg-muted"
+                  title={`${onTimeRate}% of ${summary.timed} timed arrivals were on time`}
+                >
+                  {PUNCTUALITY_BANDS.map((b) => {
+                    const count = summary[b.key];
+                    if (count === 0) return null;
+                    return (
+                      <div
+                        key={b.key}
+                        title={`${b.label}: ${count}`}
+                        style={{
+                          width: `${(count / summary.timed) * 100}%`,
+                          backgroundColor: b.color,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+
+              {summary.timed > 0 && (
+                <>
+                  <span className="w-10 shrink-0 text-right font-mono text-[11px] font-semibold tabular-nums">
+                    {onTimeRate}%
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+                      verdict.cls,
+                    )}
+                    title={`Average ${summary.averageDelay} min after the session began · ${summary.timed} arrivals timed`}
+                  >
+                    <Clock className="h-2.5 w-2.5" />
+                    {verdict.label}
+                  </span>
+                  <span className="w-20 shrink-0 text-right font-mono text-[9px] tabular-nums text-muted-foreground">
+                    {summary.averageDelay === 0 ? "first" : `+${summary.averageDelay}m`} ·{" "}
+                    {summary.timed}
+                  </span>
+                  <span
+                    className="w-20 shrink-0 text-right text-[9px] text-muted-foreground"
+                    title="Members often or sometimes late"
+                  >
+                    {flagged > 0 ? `${flagged} late` : "none late"}
+                  </span>
+                  <PunctualityBaselinePill baseline={summary.baseline} />
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="border-t px-4 py-2 text-[9px] text-muted-foreground/70">
+        Each class is measured over its own members' arrivals, against the same
+        session start times as the team reading above — so a class at the top of this
+        list is the one to look at first.
+      </p>
+    </div>
+  );
+}
+
 /**
  * A member's attendance over time, as a verdict plus a month-by-month chart.
  *
@@ -344,17 +478,11 @@ export function AttendanceTrendPanel({
   /** The same punctuality reading split per activity, strongest lateness first. */
   punctualityByActivity?: ActivityPunctuality[] | null;
 }) {
-  // Default to the member's full recorded history, so a trend appears for
-  // attendance that was already on file long before this panel existed.
-  const [range, setRange] = useState<TrendRange>("all");
+  // Default to the last year, so a trend appears for attendance that was
+  // already on file long before this panel existed.
+  const [range, setRange] = useState<TrendRange>(12);
 
-  const { points, granularity } = useMemo(() => {
-    if (range === "all") return attendanceTrendAll(rows, 24);
-    return {
-      points: attendanceTrend(rows, range),
-      granularity: "month" as TrendGranularity,
-    };
-  }, [rows, range]);
+  const points = useMemo(() => attendanceTrend(rows, range), [rows, range]);
   const summary = useMemo(() => trendSummary(points), [points]);
   const streak = useMemo(() => attendanceStreak(rows), [rows]);
   const byType = useMemo(() => attendanceByType(rows), [rows]);
@@ -404,7 +532,7 @@ export function AttendanceTrendPanel({
             {verdict.label}
           </span>
           <div className="flex overflow-hidden rounded-md border">
-            {([6, 12, "all"] as const).map((r) => (
+            {([6, 12] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setRange(r)}
@@ -415,17 +543,14 @@ export function AttendanceTrendPanel({
                     : "text-muted-foreground hover:bg-muted",
                 )}
               >
-                {r === "all" ? "All" : `${r}M`}
+                {`${r}M`}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      <p className="mb-4 text-[10px] text-muted-foreground">
-        {verdictDetail}
-        {range === "all" && ` · ${GRANULARITY_LABEL[granularity]} view of the full record`}
-      </p>
+      <p className="mb-4 text-[10px] text-muted-foreground">{verdictDetail}</p>
 
       {/* Monthly bars — height is the attendance rate, the bar's base width
           grows with how many records that month actually has. */}
@@ -642,7 +767,7 @@ export function AttendanceTrendPanel({
         {withRecords.length === 0
           ? "."
           : ` spanning ${withRecords[0]!.label} – ${withRecords[withRecords.length - 1]!.label}.`}{" "}
-        Taller bars mean a higher share of sessions attended that {granularity}.
+        Taller bars mean a higher share of sessions attended that month.
       </p>
     </div>
   );

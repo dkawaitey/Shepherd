@@ -31,6 +31,7 @@ import {
   parseStartTimes,
   punctualityByType,
   punctualitySummary,
+  punctualityVerdictCounts,
   sessionStarts,
 } from "../lib/attendance-trend";
 
@@ -610,6 +611,72 @@ export const classStats = query({
         trend: months,
       };
     }).filter(Boolean);
+  },
+});
+
+/**
+ * Punctuality per class — the roster answers "who is late?", the team card
+ * answers "how are we doing?", and this answers "which class is drifting?".
+ *
+ * Each class is measured over its own members' arrivals, judged against the same
+ * session start times the member and team readings use (the configured activity
+ * time, or that session's first arrival), so the three can never disagree.
+ * Classes with nothing timed are returned too: an unmeasured class is a fact a
+ * leader needs, not something to hide.
+ */
+export const classPunctuality = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!canReadMinistry(user)) return [];
+    const scope = classScoped(user);
+    const klassNames = scope ? [scope] : CLASS_OPTIONS;
+    const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
+    const attendance = await ctx.db.query("attendance").collect();
+    const memberRows = attendance.filter((a) => a.subjectType === "member");
+    const startTimeRow = await ctx.db
+      .query("settings")
+      .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
+      .first();
+    const startTimes = parseStartTimes(startTimeRow?.value);
+    // Session begins come from the whole ministry's arrivals (contacts and
+    // members alike), so a class is judged against when the session really began.
+    const starts = sessionStarts(attendance, startTimes);
+
+    return klassNames
+      .map((klassName) => {
+        const classMembers = members.filter((m) => m.klass === klassName);
+        const ids = new Set(classMembers.map((m) => m._id));
+        const rows = memberRows.filter((r) => r.memberId && ids.has(r.memberId));
+        const present = rows.filter((r) => r.status === "present").length;
+        return {
+          klass: klassName,
+          members: classMembers.length,
+          records: rows.length,
+          rate: rows.length === 0 ? 0 : Math.round((present / rows.length) * 100),
+          summary: punctualitySummary(rows, starts, startTimes),
+          verdictCounts: punctualityVerdictCounts(
+            classMembers.map((m) =>
+              punctualitySummary(
+                rows.filter((r) => r.memberId === m._id),
+                starts,
+                startTimes,
+              ),
+            ),
+          ),
+        };
+      })
+      .filter((r) => r.members > 0)
+      .sort((a, b) => {
+        // Measured classes first, weakest punctuality on top. A class with no
+        // arrival times can't be ranked, so it sits at the bottom.
+        const aTimed = a.summary.timed > 0;
+        const bTimed = b.summary.timed > 0;
+        if (aTimed !== bTimed) return aTimed ? -1 : 1;
+        const aRate = aTimed ? a.summary.onTime / a.summary.timed : 0;
+        const bRate = bTimed ? b.summary.onTime / b.summary.timed : 0;
+        return aRate - bRate || a.klass.localeCompare(b.klass);
+      });
   },
 });
 

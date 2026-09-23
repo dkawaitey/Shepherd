@@ -27,6 +27,16 @@ const normalizeTime = (time?: string) => {
   return t;
 };
 
+/**
+ * An attendance record's day, `YYYY-MM-DD`.
+ *
+ * Older recordings stored a full ISO timestamp, so a record's day has to be
+ * read off its first ten characters. Normalizing on write (and comparing on the
+ * day rather than the raw string) keeps a session's identity stable — saving the
+ * same session again edits the same record instead of leaving a duplicate behind.
+ */
+const normalizeDay = (date: string) => (date || "").slice(0, 10);
+
 // ================= Bible Studies =================
 
 /** Get (or lazily default) bible studies for a contact — one row per lesson 1-8. */
@@ -185,11 +195,12 @@ export const recordAttendance = mutation({
       subjectType: args.subjectType,
       contactId: args.contactId,
       memberId: args.memberId,
-      date: args.date,
+      date: normalizeDay(args.date),
       type: args.type as any,
       programName: args.programName,
       status: args.status,
       time: normalizeTime(args.time),
+      remarks: args.remarks?.trim() || undefined,
       recordedBy: user.name,
       createdAt: Date.now(),
     });
@@ -227,26 +238,31 @@ export const setAttendance = mutation({
       const contact = await ctx.db.get(args.contactId);
       assertClassScope(user, contact?.klass);
     }
-    // A record is uniquely identified by the person + date + activity + program
+    // A record is uniquely identified by the person + day + activity + program
     // session. Re-saving the same session edits it in place, while a different
     // program/session name creates a separate record — so two attendance
     // records can exist on the same day (e.g. Morning and Evening sessions).
+    // Matching on the *day* rather than the raw stored string means an edit can
+    // never leave the old row behind (or fork a duplicate) just because the
+    // record was originally saved as a full timestamp.
+    const day = normalizeDay(args.date);
     const programName = args.programName?.trim() || undefined;
-    const existing = await ctx.db
+    const candidates = await ctx.db
       .query("attendance")
       .filter((q) =>
         q.and(
           args.contactId ? q.eq(q.field("contactId"), args.contactId!) : q.eq(q.field("contactId"), undefined),
           args.memberId ? q.eq(q.field("memberId"), args.memberId!) : q.eq(q.field("memberId"), undefined),
-          q.eq(q.field("date"), args.date),
           q.eq(q.field("type"), args.type),
           q.eq(q.field("programName"), programName ?? undefined),
         ),
       )
-      .first();
+      .collect();
+    const existing = candidates.find((r) => (r.date || "").slice(0, 10) === day);
     const recordedBy = args.recordedBy?.trim() || user.name;
     if (existing) {
       await ctx.db.patch(existing._id, {
+        date: day,
         status: args.status,
         programName,
         // Keep the original mark time when no new one is supplied, so a status
@@ -261,7 +277,7 @@ export const setAttendance = mutation({
       subjectType: args.subjectType,
       contactId: args.contactId,
       memberId: args.memberId,
-      date: args.date,
+      date: day,
       type: args.type as any,
       programName,
       status: args.status,
@@ -335,7 +351,7 @@ export const updateAttendance = mutation({
     const row = await ctx.db.get(args.id);
     if (!row) throw new ConvexError("Attendance record not found");
     const patch: Record<string, unknown> = {};
-    if (args.date !== undefined) patch.date = args.date;
+    if (args.date !== undefined) patch.date = normalizeDay(args.date);
     if (args.type !== undefined) patch.type = args.type;
     if (args.programName !== undefined) patch.programName = args.programName?.trim() || undefined;
     if (args.status !== undefined) patch.status = args.status;

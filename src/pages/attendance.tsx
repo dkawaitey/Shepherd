@@ -39,6 +39,7 @@ import {
 } from "@/components/shared";
 import {
   AttendanceWaveline,
+  ClassPunctualityCard,
   PUNCTUALITY_META,
   PunctualityBaselinePill,
   TeamPunctualityCard,
@@ -72,6 +73,7 @@ export default function Attendance() {
     klass: klass === "all" ? undefined : klass,
   });
   const history = useQuery(api.discipleship.listAttendance, {});
+  const classPunctuality = useQuery(api.members.classPunctuality, {});
   const lowAttendance = useQuery(api.members.lowAttendance, {});
   const settings = useQuery(api.settings.get);
   const me = useQuery(api.users.currentUser);
@@ -273,6 +275,10 @@ export default function Attendance() {
           verdictCounts={verdictCounts}
         />
       )}
+
+      {/* Class punctuality — the same reading split by class, so a lateness
+          habit can be traced to a group and not only to a person. */}
+      <ClassPunctualityCard rows={classPunctuality ?? []} className="mt-6" />
 
       {/* Per-member time-trend analysis over the recorded history. */}
       {memberTrends.length > 0 && (
