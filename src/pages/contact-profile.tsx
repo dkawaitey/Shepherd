@@ -53,6 +53,7 @@ import {
   userCanWrite,
   userIsAdmin,
   ContactChannelActions,
+  Mark,
 } from "@/components/shared";
 import { StatusChangeDialog, ScheduleDialog } from "./followups";
 import { ContactFormDialog } from "./contacts";
@@ -240,7 +241,7 @@ export default function ContactProfile() {
             <span className="term-label">journey</span>
             {lastEvents.map((ev) => (
               <span key={ev._id} className="flex items-center gap-1 rounded-full border bg-accent/50 px-2 py-0.5">
-                <span className="text-status-green">✓</span> {ev.label}
+                <Mark glyph="done" /> {ev.label}
                 <span className="text-muted-foreground/60">{fmtDate(ev.date)}</span>
               </span>
             ))}
@@ -428,11 +429,38 @@ function OverviewTab({ contact }: { contact: any }) {
               <Row label="Bible verses shared" value={contact.bibleVersesShared} />
             </div>
             <div className="col-span-2 flex gap-4 text-[12px] text-muted-foreground">
-              <span className={cn(contact.prayerOffered && "text-status-green")}>
-                {contact.prayerOffered ? "✓ Prayer offered" : "○ Prayer not offered"}
+              <span
+                className={cn(
+                  "flex items-center gap-1",
+                  contact.prayerOffered && "text-status-green",
+                )}
+              >
+                {contact.prayerOffered ? (
+                  <>
+                    <Mark glyph="done" /> Prayer offered
+                  </>
+                ) : (
+                  <>
+                    <Mark glyph="todo" className="text-muted-foreground/60" /> Prayer not
+                    offered
+                  </>
+                )}
               </span>
-              <span className={cn(contact.gospelShared && "text-status-green")}>
-                {contact.gospelShared ? "✓ Gospel shared" : "○ Gospel not shared"}
+              <span
+                className={cn(
+                  "flex items-center gap-1",
+                  contact.gospelShared && "text-status-green",
+                )}
+              >
+                {contact.gospelShared ? (
+                  <>
+                    <Mark glyph="done" /> Gospel shared
+                  </>
+                ) : (
+                  <>
+                    <Mark glyph="todo" className="text-muted-foreground/60" /> Gospel not shared
+                  </>
+                )}
               </span>
             </div>
           </div>
@@ -498,8 +526,14 @@ function TimelineTab({
                 </div>
                 <div className="min-w-0 flex-1 pt-0.5">
                   <div className="flex items-center gap-2">
-                    <span className={cn("text-[13px] font-semibold", !reached && "text-muted-foreground")}>
-                      {reached ? "✓ " : ""}{STAGE_LABELS[s]}
+                    <span
+                      className={cn(
+                        "flex items-center gap-1 text-[13px] font-semibold",
+                        !reached && "text-muted-foreground",
+                      )}
+                    >
+                      {reached && <Mark glyph="done" />}
+                      {STAGE_LABELS[s]}
                     </span>
                     {event && (
                       <span className="text-[10px] text-muted-foreground">{fmtDate(event.date)}</span>
@@ -643,7 +677,11 @@ function BibleStudiesTab({
                         ? "border-[#f59e0b]/40 bg-[#2e2408] text-[#fbbf24]"
                         : "border-border bg-muted text-muted-foreground",
                   )}>
-                    {status === "completed" ? "✓" : i + 1}
+                    {status === "completed" ? (
+                      <Mark glyph="done" className="h-3 w-3" />
+                    ) : (
+                      i + 1
+                    )}
                   </span>
                   <div>
                     <div className="text-[13px] font-semibold">{lesson}</div>

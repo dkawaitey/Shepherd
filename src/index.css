@@ -197,10 +197,17 @@
 }
 
 @layer utilities {
-  /* Terminal prompt styling */
+  /* Terminal prompt styling: chevron drawn as an SVG icon, not a font glyph */
   .term-prompt::before {
-    content: "❯ ";
-    color: var(--primary);
+    content: "";
+    display: inline-block;
+    width: 0.55em;
+    height: 0.55em;
+    margin-right: 0.45em;
+    vertical-align: -0.02em;
+    background-color: var(--primary);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18l6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18l6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
   }
   .term-label {
     @apply text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground;

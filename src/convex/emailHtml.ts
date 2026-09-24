@@ -329,7 +329,7 @@ export function buildWorkerEmail(r: WorkerRecipient) {
           : "Nothing overdue — all caught up.",
       },
     ],
-    "Open Shepherd → Follow-ups to record outcomes and update the discipleship timeline.",
+    "Open Shepherd and go to Follow-ups to record outcomes and update the discipleship timeline.",
   );
   return { subject: title, html, text };
 }

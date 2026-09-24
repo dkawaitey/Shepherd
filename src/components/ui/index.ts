@@ -131,8 +131,8 @@ export { Toaster } from "./sonner"; // ~8KB - Toast notifications
 
 /**
  * 1. Import only what you need:
- *    ✅ import { Button, Input } from "@/components/ui";
- *    ❌ import * as UI from "@/components/ui";
+ *    Do:  import { Button, Input } from "@/components/ui";
+ *    Not: import * as UI from "@/components/ui";
  *
  * 2. Lazy load heavy components:
  *    const Chart = lazy(() => import("@/components/ui").then(m => ({ default: m.Chart })));

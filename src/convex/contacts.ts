@@ -623,7 +623,7 @@ export const promoteToMember = mutation({
       action: "contact.promote",
       entityType: "contacts",
       entityId: args.id,
-      details: `${contact.fullName} → member ${membershipId}`,
+      details: `${contact.fullName} — linked to member ${membershipId}`,
     });
     return { _id: memberId, membershipId };
   },

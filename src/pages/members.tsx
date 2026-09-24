@@ -78,6 +78,7 @@ import {
   ClipboardList,
   Clock,
   Crown,
+  ArrowRight,
   Download,
   FileText,
   Heart,
@@ -171,13 +172,14 @@ export default function Members() {
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-bold">{cs.klass} Class</span>
               <button
-                className="text-[10px] text-primary hover:underline"
+                className="group inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
                 onClick={() => {
                   setKlass(cs.klass);
                   setStatus("all");
                 }}
               >
-                view →
+                view
+                <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
               </button>
             </div>
             <div className="mt-2 grid grid-cols-3 gap-1 text-center">

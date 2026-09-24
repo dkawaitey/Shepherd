@@ -17,7 +17,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { formatError } from "@/components/shared";
-import { ArrowRight, Loader2, Mail } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Mail } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
@@ -240,9 +240,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               <div className="border-t px-6 py-3 text-center text-[11px] text-muted-foreground">
                 <Link
                   to="/"
-                  className="underline-offset-2 hover:text-foreground hover:underline"
+                  className="group inline-flex items-center gap-1 underline-offset-2 hover:text-foreground hover:underline"
                 >
-                  ← back to home
+                  <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
+                  back to home
                 </Link>
               </div>
             </Card>

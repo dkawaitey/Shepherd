@@ -9,7 +9,18 @@ import {
   Stage,
 } from "@/convex/constants";
 import { ReactNode } from "react";
-import { ChevronDown, Inbox, MessageCircle, MessageSquareText, Phone } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  Inbox,
+  MessageCircle,
+  MessageSquareText,
+  Pencil,
+  Phone,
+  X,
+} from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,6 +30,44 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+/**
+ * A compact inline status mark, drawn as an icon so that no symbol in the app
+ * depends on a system glyph font: a tick (done), a cross (missed), a hollow
+ * circle (not yet) or a pen (recorded by hand rather than by the journey).
+ *
+ * The size is overridable through `className` — the colour follows the status
+ * tokens unless a caller has a reason to override it.
+ */
+export function Mark({
+  glyph,
+  className,
+}: {
+  glyph: "done" | "miss" | "todo" | "manual";
+  className?: string;
+}) {
+  const Icon =
+    glyph === "done"
+      ? Check
+      : glyph === "miss"
+        ? X
+        : glyph === "manual"
+          ? Pencil
+          : Circle;
+  return (
+    <Icon
+      aria-hidden
+      className={cn(
+        "inline h-3 w-3 shrink-0 align-[-2px]",
+        glyph === "done" && "text-status-green",
+        glyph === "miss" && "text-status-red",
+        glyph === "todo" && "text-muted-foreground/60",
+        glyph === "manual" && "text-[#fbbf24]",
+        className,
+      )}
+    />
+  );
+}
 
 /**
  * The account fields every client-side role check needs. Accounts may hold
@@ -215,7 +264,7 @@ export function PageHeader({
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-primary">❯</span>
+          <ChevronRight className="h-5 w-5 shrink-0 text-primary" />
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h1>
           {code && (
             <span className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline">

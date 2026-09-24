@@ -8,9 +8,9 @@ import {
   STAGE_ORDER,
   STAGE_LABELS,
 } from "@/convex/constants";
-import { PageHeader, fmtDate } from "@/components/shared";
+import { Mark, PageHeader, fmtDate } from "@/components/shared";
 import { cn } from "@/lib/utils";
-import { BookMarked, Sparkle } from "lucide-react";
+import { ArrowRight, BookMarked, Sparkle } from "lucide-react";
 
 export default function Discipleship() {
   const contacts = useQuery(api.contacts.list, {});
@@ -50,8 +50,9 @@ export default function Discipleship() {
               <div className="mt-1 font-mono text-2xl font-bold tabular-nums text-primary">
                 {s.count}
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground group-hover:text-primary">
-                view people →
+              <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground group-hover:text-primary">
+                view people
+                <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
               </div>
             </Link>
           ))}
@@ -108,7 +109,11 @@ export default function Discipleship() {
                         : "border-[#f59e0b]/40 bg-[#2e2408] text-[#fbbf24]",
                     )}
                   >
-                    {ev.source === "auto" ? "✓" : "✎"}
+                    {ev.source === "auto" ? (
+                      <Mark glyph="done" className="h-3 w-3" />
+                    ) : (
+                      <Mark glyph="manual" className="h-3 w-3" />
+                    )}
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-[12px] font-semibold">

@@ -25,12 +25,8 @@ import {
   fmtDateTime,
   formatError,
 } from "@/components/shared";
-import {
-  REACTIONS,
-  REACTION_BY_KIND,
-  REACTION_FALLBACK,
-  ROLES,
-} from "@/convex/constants";
+import { ROLES } from "@/convex/constants";
+import { REACTION_PALETTE, reactionMeta } from "@/lib/reactions";
 import { canPublishPosts, userHasRole, userIsAdmin } from "@/components/shared";
 import { PollComposer } from "@/components/poll-composer";
 import { PollScheduleDialog } from "@/components/poll-schedule";
@@ -275,14 +271,10 @@ function timeAgo(ts: number) {
   return fmtDateTime(new Date(ts).toISOString());
 }
 
-function reactionMeta(kind: string) {
-  return REACTION_BY_KIND[kind] ?? { ...REACTION_FALLBACK, kind };
-}
-
 /**
- * Every emoji that has been chosen, with its live count — the pill beside the
- * react button. The reader's own reaction is included here, so the button
- * itself only has to show which emoji they picked.
+ * Every reaction that has been chosen, with its live count — the pill beside
+ * the react button. The reader's own reaction is included here, so the button
+ * itself only has to show which one they picked.
  */
 function ReactionSummary({ kinds }: { kinds: Record<string, number> }) {
   const entries = Object.entries(kinds ?? {})
@@ -291,20 +283,31 @@ function ReactionSummary({ kinds }: { kinds: Record<string, number> }) {
   if (entries.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {entries.map(([kind, count]) => (
-        <span
-          key={kind}
-          title={`${count} ${reactionMeta(kind).label}`}
-          className="flex items-center gap-1 rounded-full border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] leading-none"
-        >
-          <span className="text-[11px]">{reactionMeta(kind).emoji}</span>
-          <span className="font-semibold tabular-nums text-foreground/80">
-            {count}
+      {entries.map(([kind, count]) => {
+        const meta = reactionMeta(kind);
+        const MetaIcon = meta.Icon;
+        return (
+          <span
+            key={kind}
+            title={`${count} ${meta.label}`}
+            className="flex items-center gap-1 rounded-full border border-border/70 bg-muted/50 px-1.5 py-0.5 text-[10px] leading-none"
+          >
+            <MetaIcon className={cn("h-3 w-3", meta.className)} />
+            <span className="font-semibold tabular-nums text-foreground/80">
+              {count}
+            </span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </div>
   );
+}
+
+/** One reactor's icon, resolved from the reaction they left. */
+function ReactorIcon({ kind }: { kind: string }) {
+  const meta = reactionMeta(kind);
+  const MetaIcon = meta.Icon;
+  return <MetaIcon className={cn("h-3 w-3", meta.className)} />;
 }
 
 /**
@@ -330,6 +333,7 @@ function ReactionPicker({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const current = mine ? reactionMeta(mine) : null;
+  const CurrentIcon = current?.Icon;
 
   const choose = async (kind: string) => {
     setBusy(true);
@@ -357,10 +361,12 @@ function ReactionPicker({
             busy && "opacity-60",
           )}
         >
-          {/* This reader's own emoji only — no description, no count. The
-              live breakdown beside the pill shows every emoji and its count. */}
-          {current ? (
-            <span className={compact ? "text-[12px]" : "text-sm"}>{current.emoji}</span>
+          {/* This reader's own reaction only — no description, no count. The
+              live breakdown beside the pill shows every one and its count. */}
+          {CurrentIcon ? (
+            <CurrentIcon
+              className={cn(compact ? "h-3.5 w-3.5" : "h-4 w-4", current?.className)}
+            />
           ) : (
             <>
               <Heart className="h-3 w-3" />
@@ -371,18 +377,18 @@ function ReactionPicker({
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-auto p-1.5">
         <div className="flex items-center gap-0.5">
-          {REACTIONS.map((r) => (
+          {REACTION_PALETTE.map((r) => (
             <button
               key={r.kind}
               type="button"
               title={mine === r.kind ? `${r.label} (tap to remove)` : r.label}
               onClick={() => choose(r.kind)}
               className={cn(
-                "rounded-md px-2 py-1 text-base leading-none transition-colors hover:bg-accent",
+                "rounded-md px-2 py-1.5 leading-none transition-colors hover:bg-accent",
                 mine === r.kind && "bg-accent",
               )}
             >
-              {r.emoji}
+              <r.Icon className={cn("h-4 w-4", r.className)} />
             </button>
           ))}
         </div>
@@ -1127,7 +1133,10 @@ function EngagementDetailsDialog({
                       <div key={i} className="flex items-center justify-between px-2.5 py-1.5">
                         <span className="truncate text-[11px]">{r.name}</span>
                         <span className="flex shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
-                          {reactionMeta(r.kind).emoji} {reactionMeta(r.kind).label}
+                          <span className="flex items-center gap-1">
+                            <ReactorIcon kind={r.kind} />
+                            {reactionMeta(r.kind).label}
+                          </span>
                           <span className="text-muted-foreground/70">{timeAgo(r.at)}</span>
                         </span>
                       </div>

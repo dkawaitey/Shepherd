@@ -157,7 +157,7 @@ export const dailyPushNotifications = internalMutation({
           dedupeKey: `birthday:${c._id}:day-before`,
           deliverAt: Date.now(),
           payload: {
-            title: "Birthday Tomorrow 🎂",
+            title: "Birthday tomorrow",
             body: `${c.fullName}'s birthday is tomorrow!`,
             url: `/contacts/${c._id}`,
           },

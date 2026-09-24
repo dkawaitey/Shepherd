@@ -37,9 +37,12 @@ import {
   BarChart3,
   Clock,
   CheckCircle2,
+  ChevronRight,
   Plus,
   Trophy,
   Lock,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import { Link } from "react-router";
 import { PollComposer } from "@/components/poll-composer";
@@ -110,7 +113,7 @@ function FollowupCalendar({ events }: { events: any[] }) {
               setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))
             }
           >
-            ←
+            <ArrowLeft className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="outline"
@@ -128,7 +131,7 @@ function FollowupCalendar({ events }: { events: any[] }) {
               setCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }))
             }
           >
-            →
+            <ArrowRight className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
@@ -286,7 +289,7 @@ export default function Dashboard() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-primary">❯</span>
+          <ChevronRight className="h-5 w-5 shrink-0 text-primary" />
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
             Serve Your Creator Now, {firstName}
           </h1>
@@ -310,8 +313,9 @@ export default function Dashboard() {
               <div className="mt-2 font-mono text-3xl font-bold tabular-nums" style={{ color: c.accent }}>
                 {stats.cards[c.key as keyof typeof stats.cards]}
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground group-hover:text-primary">
-                open →
+              <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground group-hover:text-primary">
+                open
+                <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
               </div>
             </button>
           );
@@ -392,8 +396,9 @@ export default function Dashboard() {
                       </span>
                     )}
                   </span>
-                  <span className="text-[9px] text-muted-foreground/70">
-                    {p.author} · open →
+                  <span className="inline-flex items-center gap-1 text-[9px] text-muted-foreground/70">
+                    {p.author} · open
+                    <ArrowRight className="h-2.5 w-2.5" />
                   </span>
                 </Link>
               );
@@ -462,12 +467,13 @@ export default function Dashboard() {
                     })}
                   </span>
 
-                  <span className="text-[9px] text-muted-foreground/70">
+                  <span className="inline-flex items-center gap-1 text-[9px] text-muted-foreground/70">
                     {p.autoClosed ? "closed automatically" : "closed by a leader"}
                     {p.closedAt !== undefined
                       ? ` · ${fmtDate(new Date(p.closedAt).toISOString())}`
                       : ""}{" "}
-                    · open →
+                    · open
+                    <ArrowRight className="h-2.5 w-2.5" />
                   </span>
                 </Link>
               ))}
@@ -627,8 +633,9 @@ export default function Dashboard() {
       <div className="rounded-lg border bg-card p-4">
         <div className="mb-3 flex items-center justify-between">
           <p className="term-label">latest updates</p>
-          <Link to="/announcements" className="text-[10px] text-primary hover:underline">
-            all posts →
+          <Link to="/announcements" className="group inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
+            all posts
+            <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
         {(posts ?? []).length === 0 ? (
@@ -643,7 +650,7 @@ export default function Dashboard() {
                 to="/announcements"
                 className="flex items-start gap-2.5 rounded-md border border-transparent p-2 transition-colors hover:border-primary/40 hover:bg-muted/40"
               >
-                <span className="mt-0.5 text-[10px] font-bold text-primary">❯</span>
+                <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                 <span className="min-w-0">
                   <span className="block truncate text-[12px] font-semibold">
                     {/* A standalone poll has no title — show its question. */}
@@ -656,9 +663,9 @@ export default function Dashboard() {
                 {(p.viewCount > 0 || p.reactionCount > 0 || p.commentCount > 0) && (
                   <span className="ml-auto flex shrink-0 items-center gap-2 self-center text-[9px] tabular-nums text-muted-foreground">
                     {p.viewCount > 0 && (
-                      // Lucide icon, not an emoji: iOS renders 👁 in the emoji
-                      // font, which looked nothing like the icon used on the
-                      // Announcements page.
+                      // Lucide icon, not an emoji: iOS renders the eye glyph in
+                      // its emoji font, which looked nothing like the icon used
+                      // on the Announcements page.
                       <span
                         className="flex items-center gap-1"
                         title={`${p.viewCount} ${p.viewCount === 1 ? "view" : "views"}`}

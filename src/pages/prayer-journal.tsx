@@ -25,13 +25,14 @@ import {
 import { PRAYER_STATUS } from "@/convex/constants";
 import {
   EmptyState,
+  Mark,
   PageHeader,
   StatusPill,
   fmtDateTime,
   userCanWrite,
 } from "@/components/shared";
 import { cn } from "@/lib/utils";
-import { Heart, Search } from "lucide-react";
+import { ArrowRight, ChevronRight, Heart, Search } from "lucide-react";
 
 export default function PrayerJournal() {
   const [status, setStatus] = useState("all");
@@ -75,7 +76,17 @@ export default function PrayerJournal() {
               {c.value}
             </div>
             <div className="text-[10px] text-muted-foreground" style={{ color: c.color }}>
-              {status === c.label.toLowerCase() ? "✓ filtering" : "filter →"}
+              {status === c.label.toLowerCase() ? (
+                <span className="inline-flex items-center gap-1">
+                  <Mark glyph="done" className="h-2.5 w-2.5" />
+                  filtering
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  filter
+                  <ChevronRight className="h-2.5 w-2.5" />
+                </span>
+              )}
             </div>
           </button>
         ))}
@@ -129,13 +140,15 @@ export default function PrayerJournal() {
               <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2.5">
                 <Link
                   to={`/contacts/${p.contactId}`}
-                  className="text-[11px] font-semibold text-primary hover:underline"
+                  className="group inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
                 >
-                  {p.contactName} →
+                  {p.contactName}
+                  <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
                 </Link>
                 {p.answer && (
-                  <span className="rounded bg-[#15291c]/80 px-2 py-0.5 text-[10px] text-[#86efac]">
-                    ✓ {p.answer}
+                  <span className="inline-flex items-center gap-1 rounded bg-[#15291c]/80 px-2 py-0.5 text-[10px] text-[#86efac]">
+                    <Mark glyph="done" className="h-2.5 w-2.5" />
+                    {p.answer}
                   </span>
                 )}
                 {canEdit && p.status === PRAYER_STATUS.ACTIVE && (

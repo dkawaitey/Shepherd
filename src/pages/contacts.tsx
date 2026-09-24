@@ -35,7 +35,7 @@ import {
   MINISTRIES,
   STAGE_LABELS,
 } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, ContactChannelActions, StagePill, downloadCsv, downloadPdf, canAddRecords, formatError } from "@/components/shared";
+import { EmptyState, PageHeader, StatusPill, ContactChannelActions, StagePill, Mark, downloadCsv, downloadPdf, canAddRecords, formatError } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import {
@@ -110,7 +110,7 @@ function ContactCard({
         )}
         {events.slice(0, 2).map((label) => (
           <div key={label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="text-status-green">✓</span>
+            <Mark glyph="done" className="h-3.5 w-3.5" />
             <span className="truncate">{label}</span>
           </div>
         ))}

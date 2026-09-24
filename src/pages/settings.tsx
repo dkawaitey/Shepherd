@@ -36,10 +36,11 @@ import {
   effectivePosition,
 } from "@/convex/constants";
 import { parseStartTimes } from "@/lib/attendance-trend";
-import { PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles, formatError } from "@/components/shared";
+import { Mark, PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles, formatError } from "@/components/shared";
 import { cn } from "@/lib/utils";
 
 import {
+  ArrowRight,
   Bell,
   Clock,
   Download,
@@ -553,7 +554,12 @@ function ProfileTab() {
           >
             Save profile
           </Button>
-          {saved && <p className="text-[11px] text-status-green">✓ Saved</p>}
+          {saved && (
+            <p className="flex items-center gap-1 text-[11px] text-status-green">
+              <Mark glyph="done" />
+              Saved
+            </p>
+          )}
         </div>
       </div>
 
@@ -853,7 +859,10 @@ function EmailRemindersSection() {
                 <div key={l._id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11px]">
                   <span className="truncate">
                     {l.subject}
-                    <span className="text-muted-foreground"> → {l.to}</span>
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <ArrowRight className="h-2.5 w-2.5" />
+                      {l.to}
+                    </span>
                   </span>
                   <span
                     className={cn(
@@ -911,9 +920,10 @@ function NotificationsTab() {
             href={window.location.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-3 inline-block rounded-md bg-amber-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-amber-700"
+            className="group mt-3 inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-amber-700"
           >
-            Open in new tab →
+            Open in new tab
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </a>
         </div>
       )}
@@ -1022,8 +1032,14 @@ function NotificationsTab() {
               <div className="grid grid-cols-2 gap-1.5">
                 <div>
                   <span className="text-muted-foreground">VAPID keys: </span>
-                  <span className={diag.vapidConfigured ? "text-status-green font-semibold" : "text-destructive font-semibold"}>
-                    {diag.vapidConfigured ? "✓ Configured" : "✗ Missing"}
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 font-semibold",
+                      diag.vapidConfigured ? "text-status-green" : "text-destructive",
+                    )}
+                  >
+                    <Mark glyph={diag.vapidConfigured ? "done" : "miss"} />
+                    {diag.vapidConfigured ? "Configured" : "Missing"}
                   </span>
                 </div>
                 <div>
@@ -1066,8 +1082,14 @@ function NotificationsTab() {
                         <span className="truncate text-[9px] text-muted-foreground">
                           {l.endpoint === "config" ? "Config check" : `${l.endpoint.slice(0, 40)}…`}
                         </span>
-                        <span className={cn("shrink-0 font-semibold", l.success ? "text-status-green" : "text-destructive")}>
-                          {l.success ? "✓ sent" : `✗ ${l.error?.slice(0, 60) ?? "failed"}`}
+                        <span
+                          className={cn(
+                            "flex shrink-0 items-center gap-1 font-semibold",
+                            l.success ? "text-status-green" : "text-destructive",
+                          )}
+                        >
+                          <Mark glyph={l.success ? "done" : "miss"} />
+                          {l.success ? "sent" : (l.error?.slice(0, 60) ?? "failed")}
                         </span>
                       </div>
                     ))}
@@ -1081,7 +1103,11 @@ function NotificationsTab() {
                   <div className="divide-y rounded border bg-background">
                     {diag.recentJobs.map((j, i) => (
                       <div key={i} className="flex items-center justify-between gap-2 px-2 py-1">
-                        <span className="text-[9px] text-muted-foreground">{j.kind} → {j.recipients} recipient{j.recipients === 1 ? "" : "s"}</span>
+                        <span className="inline-flex items-center gap-1 text-[9px] text-muted-foreground">
+                          {j.kind}
+                          <ArrowRight className="h-2.5 w-2.5" />
+                          {j.recipients} recipient{j.recipients === 1 ? "" : "s"}
+                        </span>
                         <span className={cn("shrink-0 text-[9px] font-semibold", j.status === "delivered" ? "text-status-green" : j.status === "cancelled" ? "text-muted-foreground" : "text-status-amber")}>
                           {j.status}
                         </span>
@@ -1097,7 +1123,11 @@ function NotificationsTab() {
                   <div className="divide-y rounded border bg-background">
                     {diag.postNotificationJobs.map((j, i) => (
                       <div key={i} className="flex items-center justify-between gap-2 px-2 py-1">
-                        <span className="text-[9px] text-muted-foreground">{j.kind} → {j.recipients} recipient{j.recipients === 1 ? "" : "s"}</span>
+                        <span className="inline-flex items-center gap-1 text-[9px] text-muted-foreground">
+                          {j.kind}
+                          <ArrowRight className="h-2.5 w-2.5" />
+                          {j.recipients} recipient{j.recipients === 1 ? "" : "s"}
+                        </span>
                         <span className={cn("shrink-0 text-[9px] font-semibold", j.status === "delivered" ? "text-status-green" : j.status === "cancelled" ? "text-muted-foreground" : "text-status-amber")}>
                           {j.status}
                         </span>

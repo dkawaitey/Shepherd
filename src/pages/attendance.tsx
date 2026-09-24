@@ -31,6 +31,7 @@ import {
   StatusPill,
   fmtDate,
   fmtTime,
+  Mark,
   downloadCsv,
   downloadPdf,
   formatError,
@@ -496,7 +497,7 @@ export default function Attendance() {
           <div className="h-20 animate-pulse rounded-lg border bg-card" />
         ) : lowAttendance.length === 0 ? (
           <p className="rounded-lg border border-dashed bg-card py-6 text-center text-[11px] text-muted-foreground">
-            Everyone has attended recently. 🌿
+            Everyone has attended recently.
           </p>
         ) : (
           <div className="space-y-2">
@@ -562,8 +563,9 @@ export default function Attendance() {
                   </p>
                 </div>
                 <div className="shrink-0 text-right text-[10px] text-muted-foreground">
-                  <div className="text-status-green">
-                    ✓ {m.attendanceFollowup?.date ? fmtDate(m.attendanceFollowup.date) : ""}
+                  <div className="flex items-center justify-end gap-1 text-status-green">
+                    <Mark glyph="done" />
+                    {m.attendanceFollowup?.date ? fmtDate(m.attendanceFollowup.date) : ""}
                   </div>
                   {m.attendanceFollowup?.by && <div>by {m.attendanceFollowup.by}</div>}
                 </div>

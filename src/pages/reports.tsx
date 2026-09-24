@@ -9,6 +9,7 @@ import { BIBLE_LESSONS } from "@/convex/constants";
 import { PageHeader, downloadCsv, downloadPdf } from "@/components/shared";
 import { cn } from "@/lib/utils";
 import {
+  ArrowDown,
   Award,
   Baby,
   Download,
@@ -62,7 +63,7 @@ export default function Reports() {
     if (!report) return;
     downloadPdf("shepherd-report.pdf", [
       {
-        heading: `Ministry Report — ${from} → ${to}`,
+        heading: `Ministry Report — ${from} to ${to}`,
         rows: [
           { metric: "People reached", count: report.counts.reached },
           { metric: "Accepted Christ", count: report.counts.accepted },
@@ -118,7 +119,7 @@ export default function Reports() {
           <Input id="r-to" type="date" className="mt-1" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
         <span className="pb-2 text-[11px] text-muted-foreground">
-          Report window: {from} → {to}
+          Report window: {from} to {to}
         </span>
       </div>
 
@@ -289,7 +290,7 @@ export default function Reports() {
               {report.funnel.map((f, i) => (
                 <div key={f.stage} className="flex items-center gap-3">
                   <span className="w-44 shrink-0 text-[11px] text-muted-foreground">
-                    {i > 0 && <span className="mr-1 text-primary">↓</span>}
+                    {i > 0 && <ArrowDown className="mr-1 inline h-3 w-3 text-primary" />}
                     {f.label}
                   </span>
                   <div className="h-4 flex-1 overflow-hidden rounded-sm bg-muted">

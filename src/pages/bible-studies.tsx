@@ -25,6 +25,7 @@ import {
 import { BIBLE_LESSONS } from "@/convex/constants";
 import {
   EmptyState,
+  Mark,
   PageHeader,
   StatusPill,
   fmtDate,
@@ -115,7 +116,11 @@ export default function BibleStudies() {
                               : "border-border bg-muted text-muted-foreground",
                         )}
                       >
-                        {b.status === "completed" ? "✓" : b.lesson}
+                        {b.status === "completed" ? (
+                          <Mark glyph="done" className="h-3 w-3" />
+                        ) : (
+                          b.lesson
+                        )}
                       </span>
                       <div>
                         <div className="text-[13px] font-semibold">{b.name}</div>
@@ -136,7 +141,10 @@ export default function BibleStudies() {
                     </p>
                   )}
                   {b.scriptureUsed && (
-                    <p className="mt-1 text-[10px] text-muted-foreground">📖 {b.scriptureUsed}</p>
+                    <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <BookMarked className="h-3 w-3 shrink-0" />
+                      {b.scriptureUsed}
+                    </p>
                   )}
                   {canRecord && (
                     <Button
