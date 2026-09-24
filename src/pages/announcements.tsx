@@ -5,8 +5,6 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   Popover,
@@ -38,20 +34,20 @@ import {
 import { canPublishPosts, userHasRole, userIsAdmin } from "@/components/shared";
 import { PollComposer } from "@/components/poll-composer";
 import { PollScheduleDialog } from "@/components/poll-schedule";
+import { PostComposerDialog } from "@/components/post-composer";
+import { PostThread } from "@/components/post-thread";
+import { VoiceNotePlayer } from "@/components/voice-note";
 
 import {
   Check,
   FileIcon,
   MessageSquare,
-  Paperclip,
   Pin,
   Plus,
   Search,
-  Send,
   Trash2,
   X,
   UserRound,
-  Music,
   AlertCircle,
   Eye,
   Megaphone,
@@ -68,55 +64,9 @@ import {
   Users,
 } from "lucide-react";
 
-// ── Client-side media helpers ──────────────────────────────────────
-const ALLOWED_MIME = new Set([
-  "image/jpeg", "image/png", "image/webp", "image/avif",
-  "video/mp4", "video/webm",
-  "audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm",
-  "application/pdf",
-]);
-const MAX_SIZES: Record<string, number> = { image: 8 * 1024 * 1024, video: 18 * 1024 * 1024, audio: 12 * 1024 * 1024, file: 10 * 1024 * 1024 };
-const MAX_MEDIA = 5;
 /** How many posts the feed loads at a time — "Load older posts" grows it. */
 const FEED_PAGE_SIZE = 20;
 const MAX_FEED_POSTS = 100;
-const MAX_IMAGE_DIM = 1920;
-const THUMB_SIZE = 320;
-
-function classifyMime(m: string): "image" | "video" | "audio" | "file" {
-  if (m.startsWith("image/")) return "image";
-  if (m.startsWith("video/")) return "video";
-  if (m.startsWith("audio/")) return "audio";
-  return "file";
-}
-function formatBytes(b: number) { return b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`; }
-
-async function optimizeImage(file: File): Promise<{ blob: Blob; width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image(); const url = URL.createObjectURL(file);
-    img.onload = () => { URL.revokeObjectURL(url); let w = img.naturalWidth, h = img.naturalHeight;
-      if (w > MAX_IMAGE_DIM || h > MAX_IMAGE_DIM) { const s = MAX_IMAGE_DIM / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
-      const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      c.toBlob((b) => b ? resolve({ blob: b, width: w, height: h }) : reject(new Error("Compress failed")), "image/jpeg", 0.82);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Load failed")); };
-    img.src = url;
-  });
-}
-
-async function generateThumbnail(file: File): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image(); const url = URL.createObjectURL(file);
-    img.onload = () => { URL.revokeObjectURL(url); let w = img.naturalWidth, h = img.naturalHeight;
-      if (w > THUMB_SIZE || h > THUMB_SIZE) { const s = THUMB_SIZE / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
-      const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      c.toBlob((b) => b ? resolve(b) : reject(new Error("Thumb failed")), "image/jpeg", 0.75);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Thumb load failed")); };
-    img.src = url;
-  });
-}
-
 /** Shape we send when uploading: every metadata field is set here. */
 type MediaItem = { storageId: string; type: string; name: string; mimeType: string; size: number; width?: number; height?: number; thumbnailStorageId?: string; status: string; uploadedAt: number; };
 
@@ -205,7 +155,7 @@ export default function Announcements() {
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search posts by title, content or tag..."
+            placeholder="Search posts"
             className="pl-8"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -274,7 +224,7 @@ export default function Announcements() {
         </div>
       )}
 
-      <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <PostComposerDialog open={createOpen} onOpenChange={setCreateOpen} />
       <PollComposer
         open={pollComposerOpen}
         onOpenChange={setPollComposerOpen}
@@ -1082,7 +1032,7 @@ function PostCard({
         </div>
       </div>
 
-      {isOpen && <CommentThread postId={post._id} />}
+      {isOpen && <PostThread postId={post._id} />}
 
       <EngagementDetailsDialog
         postId={post._id}
@@ -1310,7 +1260,13 @@ function EngagementDetailsDialog({
   );
 }
 
-function PostMediaItem({ media, postId }: { media: { storageId: string; type: string; name: string }; postId: string }) {
+function PostMediaItem({
+  media,
+  postId,
+}: {
+  media: { storageId: string; type: string; name: string; duration?: number };
+  postId: string;
+}) {
   const url = useQuery(api.posts.getMediaUrl, { storageId: media.storageId, postId: postId as any });
 
   if (!url) {
@@ -1345,10 +1301,13 @@ function PostMediaItem({ media, postId }: { media: { storageId: string; type: st
 
   if (media.type === "audio") {
     return (
-      <div className="flex items-center gap-3 rounded-md border bg-muted px-3 py-2.5">
-        <audio src={url as string} controls className="h-8 max-w-xs" />
-        <span className="truncate text-[10px] text-muted-foreground">{media.name}</span>
-      </div>
+      <VoiceNotePlayer
+        storageId={media.storageId}
+        postId={postId}
+        durationHintMs={media.duration ? media.duration * 1000 : undefined}
+        name={media.name}
+        className="w-full max-w-md"
+      />
     );
   }
 
@@ -1366,595 +1325,4 @@ function PostMediaItem({ media, postId }: { media: { storageId: string; type: st
   );
 }
 
-type ThreadComment = {
-  _id: string;
-  parentId?: string;
-  author?: string;
-  authorId?: string;
-  body: string;
-  createdAt: number;
-};
-
-type CommentReactionTally = {
-  count: number;
-  byKind: Record<string, number>;
-  mine: string | null;
-};
-
-type CommentReactionMap = Record<string, CommentReactionTally>;
-
-/** One comment or reply, with its own reply input and nested replies below it. */
-function CommentNode({
-  comment,
-  depth,
-  childrenOf,
-  postId,
-  me,
-  isAdmin,
-  reactions,
-  addComment,
-  removeComment,
-}: {
-  comment: ThreadComment;
-  depth: number;
-  childrenOf: Map<string | undefined, ThreadComment[]>;
-  postId: string;
-  me: { _id?: string } | null | undefined;
-  isAdmin: boolean;
-  reactions: CommentReactionMap;
-  addComment: (args: { postId: any; parentId?: any; body: string }) => Promise<unknown>;
-  removeComment: (args: { id: any }) => Promise<unknown>;
-}) {
-  const [replying, setReplying] = useState(false);
-  const [replyBody, setReplyBody] = useState("");
-  const [busy, setBusy] = useState(false);
-  const canDelete = isAdmin || comment.authorId === me?._id;
-  const replies = childrenOf.get(comment._id) ?? [];
-  const tally = reactions?.[comment._id];
-
-  return (
-    <div id={`comment-${comment._id}`} className="scroll-mt-24">
-      <div className="flex items-start gap-2.5">
-        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-card">
-          <UserRound className="h-3 w-3 text-muted-foreground" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[11px] font-semibold">{comment.author ?? "Member"}</span>
-            <span className="text-[9px] text-muted-foreground">
-              {fmtDateTime(new Date(comment.createdAt).toISOString())}
-            </span>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <button
-                className="text-[9px] font-medium text-muted-foreground hover:text-primary"
-                onClick={() => {
-                  setReplying((v) => !v);
-                  setReplyBody("");
-                }}
-              >
-                {replying ? "cancel" : "Reply"}
-              </button>
-              {canDelete && (
-                <button
-                  className="text-[9px] text-muted-foreground hover:text-destructive"
-                  onClick={async () => {
-                    await removeComment({ id: comment._id });
-                    toast.success("Comment removed");
-                  }}
-                >
-                  remove
-                </button>
-              )}
-            </div>
-          </div>
-          <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-5 text-foreground/85">
-            {comment.body}
-          </p>
-
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <ReactionPicker
-              postId={postId}
-              targetType="comment"
-              targetId={comment._id}
-              mine={tally?.mine ?? null}
-              count={tally?.count ?? 0}
-              compact
-            />
-            {tally && <ReactionSummary kinds={tally.byKind} />}
-          </div>
-
-          {replying && (
-            <form
-              className="mt-2 flex items-center gap-2"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!replyBody.trim()) return;
-                setBusy(true);
-                try {
-                  await addComment({
-                    postId,
-                    parentId: comment._id,
-                    body: replyBody.trim(),
-                  });
-                  setReplyBody("");
-                  setReplying(false);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <Input
-                autoFocus
-                placeholder={`Reply to ${comment.author ?? "this comment"}...`}
-                className="flex-1"
-                value={replyBody}
-                onChange={(e) => setReplyBody(e.target.value)}
-              />
-              <Button type="submit" size="sm" disabled={busy || !replyBody.trim()}>
-                <Send className="mr-1 h-3.5 w-3.5" /> Reply
-              </Button>
-            </form>
-          )}
-        </div>
-      </div>
-
-      {replies.length > 0 && (
-        <div
-          className={
-            depth < 3
-              ? "ml-6 mt-2.5 space-y-3 border-l-2 border-border/60 pl-3"
-              : "mt-2.5 space-y-3"
-          }
-        >
-          {replies.map((r) => (
-            <CommentNode
-              key={r._id}
-              comment={r}
-              depth={depth + 1}
-              childrenOf={childrenOf}
-              postId={postId}
-              me={me}
-              isAdmin={isAdmin}
-              reactions={reactions}
-              addComment={addComment}
-              removeComment={removeComment}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CommentThread({ postId }: { postId: string }) {
-  const post = useQuery(api.posts.get, { id: postId as any });
-  const addComment = useMutation(api.posts.addComment);
-  const removeComment = useMutation(api.posts.removeComment);
-  const me = useQuery(api.users.currentUser);
-  // Administrators may hold several roles, so check the whole set.
-  const isAdmin = userIsAdmin(me);
-  const [body, setBody] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const comments: ThreadComment[] = (post?.comments ?? []) as ThreadComment[];
-  const commentReactions: CommentReactionMap =
-    (post?.commentReactions as CommentReactionMap | undefined) ?? {};
-  const childrenOf = new Map<string | undefined, ThreadComment[]>();
-  for (const c of comments) {
-    const key = c.parentId ?? undefined;
-    childrenOf.set(key, [...(childrenOf.get(key) ?? []), c]);
-  }
-  const roots = childrenOf.get(undefined) ?? [];
-  const replies = comments.length - roots.length;
-
-  return (
-    <div className="border-t bg-muted/30 px-4 py-4 sm:px-5">
-      <div className="space-y-3">
-        {roots.length === 0 ? (
-          <p className="py-1 text-center text-[11px] text-muted-foreground">
-            No comments yet — be the first to respond.
-          </p>
-        ) : (
-          roots.map((c) => (
-            <CommentNode
-              key={c._id}
-              comment={c}
-              depth={0}
-              childrenOf={childrenOf}
-              postId={postId}
-              me={me}
-              isAdmin={isAdmin}
-              reactions={commentReactions}
-              addComment={addComment}
-              removeComment={removeComment}
-            />
-          ))
-        )}
-      </div>
-
-      <form
-        className="mt-3 flex items-center gap-2"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (!body.trim()) return;
-          setBusy(true);
-          try {
-            await addComment({ postId: postId as any, body: body.trim() });
-            setBody("");
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <Input
-          placeholder="Write a comment..."
-          className="flex-1"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-        />
-        <Button type="submit" size="sm" disabled={busy || !body.trim()}>
-          <Send className="mr-1 h-3.5 w-3.5" /> Send
-        </Button>
-      </form>
-    </div>
-  );
-}
-
-type PendingFile = {
-  file: File;
-  preview?: string;
-};
-
-function CreatePostDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const create = useMutation(api.posts.create);
-  const generateUploadUrl = useMutation(api.posts.generateUploadUrl);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [tags, setTags] = useState("");
-  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // Poll attached to the post being written (optional).
-  const [pollOpen, setPollOpen] = useState(false);
-  const [pollQuestion, setPollQuestion] = useState("");
-  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
-  const [pollMultiple, setPollMultiple] = useState(false);
-
-  const reset = () => {
-    setTitle("");
-    setBody("");
-    setTags("");
-    setPendingFiles([]);
-    setPollOpen(false);
-    setPollQuestion("");
-    setPollOptions(["", ""]);
-    setPollMultiple(false);
-    setError(null);
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    const newPending: PendingFile[] = files.map((f) => ({
-      file: f,
-      preview: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
-    }));
-    setPendingFiles((prev) => [...prev, ...newPending].slice(0, 5));
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const removeFile = (index: number) => {
-    setPendingFiles((prev) => {
-      const removed = prev[index];
-      if (removed?.preview) URL.revokeObjectURL(removed.preview);
-      return prev.filter((_, i) => i !== index);
-    });
-  };
-
-  const detectType = (file: File): string => {
-    if (file.type.startsWith("image/")) return "image";
-    if (file.type.startsWith("video/")) return "video";
-    if (file.type.startsWith("audio/")) return "audio";
-    return "file";
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{pollOpen ? "New poll" : "New post"}</DialogTitle>
-          <DialogDescription>
-            {pollOpen
-              ? "Polls are standalone — a title and content are optional. Add them if you want to give the poll some context."
-              : "Share an update with the team. Posts appear on the dashboard and in the announcements feed."}
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="space-y-3"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            // A post needs a title and content; a standalone poll needs neither.
-            if (!pollOpen && (!title.trim() || !body.trim())) {
-              setError("Title and content are required");
-              return;
-            }
-            // Mirrors the server's poll rules so the composer fails early.
-            const pollChoices = pollOptions.map((o) => o.trim()).filter(Boolean);
-            if (pollOpen) {
-              if (!pollQuestion.trim()) {
-                setError("Give the poll a question, or turn the poll off");
-                return;
-              }
-              if (pollChoices.length < 2) {
-                setError("A poll needs at least two options");
-                return;
-              }
-            }
-            setBusy(true);
-            setError(null);
-            try {
-              // Upload media files with validation + optimization
-              const uploadedMedia: MediaItem[] = [];
-              for (const pf of pendingFiles) {
-                let fileToUpload = pf.file;
-                let width: number | undefined;
-                let height: number | undefined;
-                let thumbStorageId: string | undefined;
-                const category = detectType(pf.file);
-
-                // Client-side image optimization + thumbnail
-                if (category === "image" && pf.file.type.startsWith("image/")) {
-                  try {
-                    const optimized = await optimizeImage(pf.file);
-                    fileToUpload = new File([optimized.blob], pf.file.name, { type: "image/jpeg" });
-                    width = optimized.width;
-                    height = optimized.height;
-                    const thumbBlob = await generateThumbnail(pf.file);
-                    const thumbFile = new File([thumbBlob], `thumb_${pf.file.name}`, { type: "image/jpeg" });
-                    const thumbUrl = await generateUploadUrl();
-                    const thumbRes = await fetch(thumbUrl, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: thumbFile });
-                    const thumbData = await thumbRes.json();
-                    thumbStorageId = thumbData.storageId;
-                  } catch { /* proceed with original file */ }
-                }
-
-                const url = await generateUploadUrl();
-                const res = await fetch(url, {
-                  method: "POST",
-                  headers: { "Content-Type": fileToUpload.type },
-                  body: fileToUpload,
-                });
-                const { storageId } = await res.json();
-                uploadedMedia.push({
-                  storageId,
-                  type: category,
-                  name: pf.file.name,
-                  mimeType: fileToUpload.type,
-                  size: fileToUpload.size,
-                  width,
-                  height,
-                  thumbnailStorageId: thumbStorageId,
-                  status: "ready",
-                  uploadedAt: Date.now(),
-                });
-              }
-
-              await create({
-                title: title.trim() || undefined,
-                body: body.trim() || undefined,
-                tags: tags
-                  .split(/[,\s]+/)
-                  .map((t) => t.trim().replace(/^#/, ""))
-                  .filter(Boolean)
-                  .slice(0, 5) || undefined,
-                media: uploadedMedia.length > 0 ? uploadedMedia : undefined,
-                poll: pollOpen
-                  ? {
-                      question: pollQuestion.trim(),
-                      allowMultiple: pollMultiple,
-                      options: pollChoices,
-                    }
-                  : undefined,
-              });
-              toast.success(pollOpen ? "Poll published" : "Post published");
-              reset();
-              onOpenChange(false);
-            } catch (err: any) {
-              setError(formatError(err, "Failed to post"));
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <div>
-            <Label htmlFor="ap-title">
-              Title {pollOpen ? "(optional)" : "*"}
-            </Label>
-            <Input
-              id="ap-title"
-              className="mt-1"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Saturday outreach: 12 new contacts"
-              autoFocus
-            />
-          </div>
-          <div>
-            <Label htmlFor="ap-body">
-              Content {pollOpen ? "(optional)" : "*"}
-            </Label>
-            <Textarea
-              id="ap-body"
-              rows={5}
-              className="mt-1"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="What would you like the team to know?"
-            />
-          </div>
-          <div>
-            <Label>Media (optional, max 5)</Label>
-            <div className="mt-1 flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={pendingFiles.length >= 5}
-              >
-                <Paperclip className="mr-1.5 h-3.5 w-3.5" /> Add files
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <span className="text-[10px] text-muted-foreground">
-                Images, videos, audio, or documents
-              </span>
-            </div>
-            {pendingFiles.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {pendingFiles.map((pf, i) => (
-                  <div key={i} className="group relative">
-                    {pf.preview ? (
-                      <img
-                        src={pf.preview}
-                        alt={pf.file.name}
-                        className="h-16 w-16 rounded-md border object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-16 w-16 flex-col items-center justify-center rounded-md border bg-muted p-1">
-                        <FileIcon className="h-5 w-5 text-muted-foreground" />
-                        <span className="mt-0.5 max-w-full truncate text-[8px] text-muted-foreground">
-                          {pf.file.name}
-                        </span>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeFile(i)}
-                      className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-white opacity-0 transition-opacity group-hover:opacity-100"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="rounded-lg border border-dashed p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
-                <Label htmlFor="ap-poll" className="text-[12px]">
-                  Add a poll
-                </Label>
-              </div>
-              <Switch
-                id="ap-poll"
-                checked={pollOpen}
-                onCheckedChange={(v: boolean) => setPollOpen(v)}
-              />
-            </div>
-
-            {pollOpen && (
-              <div className="mt-3 space-y-2">
-                <Input
-                  className="h-8 text-[12px]"
-                  value={pollQuestion}
-                  onChange={(e) => setPollQuestion(e.target.value)}
-                  placeholder="Which day suits you for the outreach?"
-                />
-                <div className="space-y-1.5">
-                  {pollOptions.map((option, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <Input
-                        className="h-8 text-[12px]"
-                        value={option}
-                        onChange={(e) =>
-                          setPollOptions((prev) =>
-                            prev.map((o, j) => (j === i ? e.target.value : o)),
-                          )
-                        }
-                        placeholder={`Option ${i + 1}`}
-                      />
-                      {pollOptions.length > 2 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
-                          onClick={() =>
-                            setPollOptions((prev) =>
-                              prev.filter((_, j) => j !== i),
-                            )
-                          }
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {pollOptions.length < 8 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px]"
-                    onClick={() => setPollOptions((prev) => [...prev, ""])}
-                  >
-                    <Plus className="mr-1 h-3 w-3" /> Add option
-                  </Button>
-                )}
-                <div className="flex items-center gap-2 pt-1">
-                  <Switch
-                    id="ap-poll-multi"
-                    checked={pollMultiple}
-                    onCheckedChange={(v: boolean) => setPollMultiple(v)}
-                  />
-                  <Label
-                    htmlFor="ap-poll-multi"
-                    className="text-[11px] font-normal text-muted-foreground"
-                  >
-                    Let people choose more than one answer
-                  </Label>
-                </div>
-              </div>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="ap-tags">Tags (comma separated)</Label>
-            <Input
-              id="ap-tags"
-              className="mt-1"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="outreach, prayer, testimony"
-            />
-          </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => { reset(); onOpenChange(false); }}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {busy ? "Publishing..." : "Publish"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 

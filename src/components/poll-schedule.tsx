@@ -134,7 +134,7 @@ export function PollScheduleFields({
       <div className="flex items-center gap-2">
         <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
         <Label htmlFor={`${idPrefix}-closes`} className="text-[12px]">
-          Close automatically (optional)
+          Closes
         </Label>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -179,10 +179,6 @@ export function PollScheduleFields({
         value={value.closesAtLocal}
         onChange={(e) => setDeadline(e.target.value)}
       />
-      <p className="mt-1.5 text-[10px] text-muted-foreground">
-        Answers stop being accepted at this time. Leave it empty to close the
-        poll yourself whenever you are ready.
-      </p>
 
       {/* Reminder push — only meaningful with a deadline. */}
       {value.closesAtLocal && (
@@ -191,7 +187,7 @@ export function PollScheduleFields({
             <div className="flex items-center gap-2">
               <Bell className="h-3.5 w-3.5 text-muted-foreground" />
               <Label htmlFor={`${idPrefix}-remind`} className="text-[12px]">
-                Remind everyone before it closes
+                Closing reminder
               </Label>
             </div>
             <Switch
@@ -226,10 +222,6 @@ export function PollScheduleFields({
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-[10px] text-muted-foreground">
-                A device notification goes out to everyone at that time, so
-                nobody misses the deadline.
-              </p>
             </>
           )}
         </div>

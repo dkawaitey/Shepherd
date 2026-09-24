@@ -582,8 +582,7 @@ export default function Attendance() {
           <DialogHeader>
             <DialogTitle>Mark followed up</DialogTitle>
             <DialogDescription>
-              Record the outcome of the follow-up with {followupFor?.fullName ?? "this member"}.
-              The low-attendance alert will be cleared.
+              Clears the low-attendance alert for {followupFor?.fullName ?? "this member"}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

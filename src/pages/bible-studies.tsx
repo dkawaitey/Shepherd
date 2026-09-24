@@ -11,7 +11,6 @@ import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -232,9 +231,6 @@ function BibleStudyDialog({
           <DialogTitle>
             <BookMarked className="mr-1.5 inline h-4 w-4" /> Lesson {editing.lesson}: {editing.name}
           </DialogTitle>
-          <DialogDescription>
-            The completion record is tied to this contact's discipleship file.
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>

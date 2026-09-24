@@ -14,7 +14,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -79,10 +78,6 @@ export function TestAsDialog({
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="h-4 w-4 text-primary" /> Test as another role
           </DialogTitle>
-          <DialogDescription>
-            Administrators can preview the app exactly as another role sees it —
-            including what that role cannot do. Everything is enforced server-side.
-          </DialogDescription>
         </DialogHeader>
 
         {active ? (

@@ -584,7 +584,7 @@ export default function Followups() {
             <DialogTitle>Delete follow-up?</DialogTitle>
             <DialogDescription>
               {confirmDelete?.contactName} · {FOLLOWUP_TYPE_LABELS[confirmDelete?.type]} ·{" "}
-              {confirmDelete && fmtDate(confirmDelete.date)}. This removes the scheduled follow-up.
+              {confirmDelete && fmtDate(confirmDelete.date)}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

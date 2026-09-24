@@ -11,6 +11,32 @@ import {
   STAGES,
 } from "./constants";
 
+/**
+ * One uploaded attachment (image, video, voice note or document).
+ *
+ * Shared by posts and comments so a voice note has the same shape wherever it
+ * is attached, and the same metadata is validated server-side.
+ */
+export const mediaValidator = v.object({
+  storageId: v.string(),
+  type: v.string(), // "image" | "video" | "audio" | "file"
+  name: v.string(),
+  // The metadata below is required for every *new* upload (see the argument
+  // validators and validateMediaItem in posts.ts), but it is optional here so
+  // files uploaded under the earlier minimal media shape —
+  // `{ storageId, type, name }` — still validate. Schema validation covers
+  // existing documents, so declaring these as required would reject older rows
+  // on any deployment that has them.
+  mimeType: v.optional(v.string()),
+  size: v.optional(v.number()), // bytes
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  duration: v.optional(v.number()), // seconds (audio/video)
+  thumbnailStorageId: v.optional(v.string()),
+  status: v.optional(v.string()), // "pending" | "uploading" | "processing" | "ready" | "failed"
+  uploadedAt: v.optional(v.number()),
+});
+
 export const roleValidator = v.union(
   v.literal("admin"),
   v.literal("coordinator"),
@@ -329,25 +355,7 @@ const schema = defineSchema(
       title: v.string(),
       body: v.string(),
       tags: v.optional(v.array(v.string())),
-      media: v.optional(v.array(v.object({
-        storageId: v.string(),
-        type: v.string(), // "image" | "video" | "audio" | "file"
-        name: v.string(),
-        // The metadata below is required for every *new* upload (see the
-        // argument validators and validateMediaItem in posts.ts), but it is
-        // optional here so files uploaded under the earlier minimal media
-        // shape — `{ storageId, type, name }` — still validate. Schema
-        // validation covers existing documents, so declaring these as
-        // required would reject older rows on any deployment that has them.
-        mimeType: v.optional(v.string()),
-        size: v.optional(v.number()), // bytes
-        width: v.optional(v.number()),
-        height: v.optional(v.number()),
-        duration: v.optional(v.number()), // seconds (audio/video)
-        thumbnailStorageId: v.optional(v.string()),
-        status: v.optional(v.string()), // "pending" | "uploading" | "processing" | "ready" | "failed"
-        uploadedAt: v.optional(v.number()),
-      }))),
+      media: v.optional(v.array(mediaValidator)),
       isPinned: v.optional(v.boolean()),
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),
@@ -375,6 +383,8 @@ const schema = defineSchema(
       author: v.optional(v.string()),
       authorId: v.optional(v.id("users")),
       body: v.string(),
+      /** Voice notes, images and files attached to this comment or reply. */
+      media: v.optional(v.array(mediaValidator)),
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),
     }).index("postId", ["postId"]),

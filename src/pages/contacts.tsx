@@ -219,9 +219,6 @@ export function QuickAddContact({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Quick Add Contact</DialogTitle>
-          <DialogDescription>
-            Add a person met during outreach in under 2 minutes.
-          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <div>

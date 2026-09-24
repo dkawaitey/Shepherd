@@ -18,7 +18,7 @@ import {
 import { REACTION_KINDS, ROLES } from "./constants";
 import { checkRateLimit } from "./rateLimit";
 import { notifyUsers } from "./inbox";
-import { validatePostTitle, validatePostBody, validateCommentBody } from "./validate";
+import { validateCommentBody } from "./validate";
 
 // ── Media validation constants ───────────────────────────────────────
 const ALLOWED_MIME_TYPES = new Set([
@@ -49,6 +49,8 @@ const MAX_FILE_SIZES: Record<string, number> = {
 };
 
 const MAX_MEDIA_PER_POST = 5;
+/** A comment or reply is a short message, so it carries at most one voice note. */
+const MAX_MEDIA_PER_COMMENT = 1;
 
 /**
  * How often a reader's "last viewed" time may be refreshed once their view has
@@ -312,8 +314,20 @@ export const getMediaUrl = query({
     if (!user || user.isAnonymous) return null;
     const post = await ctx.db.get(args.postId);
     if (!post) return null;
-    // Verify the storageId actually belongs to this post's media
-    const owns = post.media?.some((m) => m.storageId === args.storageId);
+    // The storageId must belong to this post: either one of its own
+    // attachments or one attached to a comment in its thread (where voice
+    // notes and screenshots live). Anything else is refused, so a signed-in
+    // reader cannot walk storage ids they were never shown.
+    let owns = post.media?.some((m) => m.storageId === args.storageId) ?? false;
+    if (!owns) {
+      const comments = await ctx.db
+        .query("comments")
+        .withIndex("postId", (q) => q.eq("postId", args.postId))
+        .collect();
+      owns = comments.some((c) =>
+        c.media?.some((m) => m.storageId === args.storageId),
+      );
+    }
     if (!owns) return null;
     return await ctx.storage.getUrl(args.storageId as any);
   },
@@ -853,17 +867,18 @@ export const create = mutation({
     await checkRateLimit(ctx, "post.create");
     // A standalone poll carries no title/content of its own.
     const standalonePoll = args.poll !== undefined;
-    const title = standalonePoll
-      ? (args.title ?? "").trim()
-      : validatePostTitle(args.title ?? "");
-    const body = standalonePoll
-      ? (args.body ?? "").trim()
-      : validatePostBody(args.body ?? "");
+    const title = (args.title ?? "").trim();
+    const body = (args.body ?? "").trim();
     if (title.length > 500) {
       throw new ConvexError("Title must be 500 characters or fewer");
     }
     if (body.length > 10000) {
       throw new ConvexError("Content must be 10000 characters or fewer");
+    }
+    // A post needs something to show. A voice note (or any attachment) on its
+    // own is enough, so recording a quick update never means typing a title.
+    if (!standalonePoll && !title && !body && !args.media?.length) {
+      throw new ConvexError("Add a title, a message or a voice note");
     }
 
     // Validate media attachments server-side
@@ -1011,6 +1026,7 @@ export const create = mutation({
         .map((u) => u._id);
 
       if (recipientIds.length > 0) {
+        const hasVoice = args.media?.some((m) => m.type === "audio") ?? false;
         const ts = Date.now();
         const jobId = await ctx.db.insert("notificationJobs", {
           kind: "post",
@@ -1022,7 +1038,9 @@ export const create = mutation({
             body: `${user.name ?? user.email ?? "Someone"}: ${
               pollInput
                 ? pollInput.question
-                : title || body || "posted an update"
+                : title ||
+                  body ||
+                  (hasVoice ? "sent a voice note" : "posted an update")
             }`,
             url: "/announcements",
           },
@@ -1613,8 +1631,27 @@ export const announcePollResult = mutation({
 export const addComment = mutation({
   args: {
     postId: v.id("posts"),
-    body: v.string(),
+    /** Optional when the reply is a voice note. */
+    body: v.optional(v.string()),
     parentId: v.optional(v.id("comments")),
+    /** Optional voice note (or image/file) attached to this comment. */
+    media: v.optional(
+      v.array(
+        v.object({
+          storageId: v.string(),
+          type: v.string(),
+          name: v.string(),
+          mimeType: v.string(),
+          size: v.number(),
+          width: v.optional(v.number()),
+          height: v.optional(v.number()),
+          duration: v.optional(v.number()),
+          thumbnailStorageId: v.optional(v.string()),
+          status: v.string(),
+          uploadedAt: v.number(),
+        }),
+      ),
+    ),
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
@@ -1622,7 +1659,22 @@ export const addComment = mutation({
     const post = await ctx.db.get(args.postId);
     if (!post) throw new ConvexError("Post not found");
     await checkRateLimit(ctx, "post.addComment");
-    const body = validateCommentBody(args.body);
+    if (args.media) {
+      if (args.media.length > MAX_MEDIA_PER_COMMENT) {
+        throw new ConvexError(
+          `A comment can carry at most ${MAX_MEDIA_PER_COMMENT} attachment`,
+        );
+      }
+      for (const m of args.media) {
+        validateMediaItem(m);
+      }
+    }
+    const rawBody = (args.body ?? "").trim();
+    // A comment is a message or a voice note — never empty of both.
+    if (!rawBody && !args.media?.length) {
+      throw new ConvexError("Write a comment or record a voice note");
+    }
+    const body = rawBody ? validateCommentBody(rawBody) : "";
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
       if (!parent || parent.postId !== args.postId) {
@@ -1639,6 +1691,7 @@ export const addComment = mutation({
       author: user.name ?? user.email ?? "Member",
       authorId: user._id,
       body,
+      media: args.media,
       createdAt: Date.now(),
     });
 
@@ -1672,6 +1725,12 @@ export const addComment = mutation({
         const isReply = !!args.parentId;
         const kind = isReply ? ("reply" as const) : ("comment" as const);
         const label = isReply ? "New reply" : "New comment";
+        const hasVoice = args.media?.some((m) => m.type === "audio") ?? false;
+        const preview = body
+          ? body.slice(0, 120)
+          : hasVoice
+            ? "sent a voice note"
+            : "sent an attachment";
         const ts = Date.now();
         const jobId = await ctx.db.insert("notificationJobs", {
           kind,
@@ -1680,7 +1739,7 @@ export const addComment = mutation({
           status: "scheduled",
           payload: {
             title: label,
-            body: `${user.name ?? user.email ?? "Someone"}: ${body.slice(0, 120)}`,
+            body: `${user.name ?? user.email ?? "Someone"}: ${preview}`,
             url: "/announcements",
           },
           recipientUserIds: recipientIds as any,

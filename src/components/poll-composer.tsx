@@ -9,7 +9,6 @@ import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -77,10 +76,6 @@ export function PollComposer({
           <DialogTitle className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-primary" /> New poll
           </DialogTitle>
-          <DialogDescription>
-            Polls are standalone — just a question and its answers. It appears in
-            the announcements feed straight away, where everyone can answer it.
-          </DialogDescription>
         </DialogHeader>
 
         <form
@@ -198,11 +193,8 @@ export function PollComposer({
               checked={multiple}
               onCheckedChange={(v: boolean) => setMultiple(v)}
             />
-            <Label
-              htmlFor="poll-multiple"
-              className="text-[11px] font-normal text-muted-foreground"
-            >
-              Let people choose more than one answer
+            <Label htmlFor="poll-multiple" className="text-[11px] font-normal">
+              Multiple answers
             </Label>
           </div>
 

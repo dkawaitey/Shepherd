@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -190,7 +189,6 @@ function FollowupCalendar({ events }: { events: any[] }) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Follow-ups — {fmtDate(selectedDate)}</DialogTitle>
-            <DialogDescription>Click a person to open their profile and follow-up history.</DialogDescription>
           </DialogHeader>
           <div className="max-h-80 space-y-2 overflow-y-auto">
             {(selected ?? []).map((ev) => (
