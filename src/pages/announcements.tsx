@@ -1276,14 +1276,36 @@ function PostMediaItem({
   media: { storageId: string; type: string; name: string; duration?: number };
   postId: string;
 }) {
+  // A voice note resolves its own file URL, so it is rendered here rather than
+  // behind the placeholder below: its length shows in the feed straight away,
+  // while the rest of the card is still loading.
+  if (media.type === "audio") {
+    return (
+      <VoiceNotePlayer
+        storageId={media.storageId}
+        postId={postId}
+        durationHintMs={media.duration ? media.duration * 1000 : undefined}
+        name={media.name}
+        className="w-full max-w-md"
+      />
+    );
+  }
+
+  return <PostMediaFile media={media} postId={postId} />;
+}
+
+/** An image, video or file attachment in the feed, resolved from storage. */
+function PostMediaFile({
+  media,
+  postId,
+}: {
+  media: { storageId: string; type: string; name: string; duration?: number };
+  postId: string;
+}) {
   const url = useQuery(api.posts.getMediaUrl, { storageId: media.storageId, postId: postId as any });
 
   if (!url) {
-    return (
-      <div className="flex h-16 w-16 items-center justify-center rounded-md border bg-muted">
-        <span className="text-[8px] text-muted-foreground">Loading...</span>
-      </div>
-    );
+    return <div className="h-20 w-28 animate-pulse rounded-lg border bg-muted/40" />;
   }
 
   if (media.type === "image") {
@@ -1304,18 +1326,6 @@ function PostMediaItem({
         src={url as string}
         controls
         className="max-h-48 rounded-md border"
-      />
-    );
-  }
-
-  if (media.type === "audio") {
-    return (
-      <VoiceNotePlayer
-        storageId={media.storageId}
-        postId={postId}
-        durationHintMs={media.duration ? media.duration * 1000 : undefined}
-        name={media.name}
-        className="w-full max-w-md"
       />
     );
   }
