@@ -38,10 +38,13 @@ function getDecodeContext(): AudioContext | null {
   return decodeCtx;
 }
 
-/** Peaks are expensive to compute, so each source is decoded at most once. */
-const peakCache = new Map<string, number[]>();
+/** A decoded voice note: its waveform bars and its real length in seconds. */
+type DecodedWave = { bars: number[]; duration: number };
 
-async function computePeaks(src: string, bars = PLAY_BARS) {
+/** Decoding is expensive, so each source is analysed at most once. */
+const waveCache = new Map<string, DecodedWave>();
+
+async function decodeWave(src: string, bars = PLAY_BARS): Promise<DecodedWave | null> {
   const ctx = getDecodeContext();
   if (!ctx) return null;
   try {
@@ -60,7 +63,13 @@ async function computePeaks(src: string, bars = PLAY_BARS) {
       out.push(max);
     }
     const loudest = Math.max(...out, 0.001);
-    return out.map((v) => Math.max(0.09, Math.min(1, v / loudest)));
+    return {
+      bars: out.map((v) => Math.max(0.09, Math.min(1, v / loudest))),
+      // decoding reports the true length, which is the only reliable source for
+      // the WebM clips MediaRecorder produces: those often report Infinity from
+      // the <audio> element, leaving a duration stuck at 0:00.
+      duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+    };
   } catch {
     // Some browsers refuse to decode the container we just recorded; the
     // player still works, it just draws an approximated waveform.
@@ -116,8 +125,10 @@ function WaveBars({
 
 /**
  * An animated voice-note player: play/pause, a tappable waveform that doubles
- * as a progress bar, elapsed/total time and a playback-speed chip. The
- * waveform is drawn from the real audio, so a quiet note looks quiet.
+ * as a progress bar, the length of the recording, elapsed time while playing,
+ * and a playback-speed chip. The waveform is drawn from the real audio, so a
+ * quiet note looks quiet, and the length is shown from the stored metadata so
+ * it reads correctly the moment the note appears in the feed.
  */
 export function AudioWavePlayer({
   src,
@@ -140,23 +151,32 @@ export function AudioWavePlayer({
   const [duration, setDuration] = useState((durationHintMs ?? 0) / 1000);
   const [speedIndex, setSpeedIndex] = useState(0);
   const [peaks, setPeaks] = useState<number[] | null>(
-    () => peakCache.get(src) ?? null,
+    () => waveCache.get(src)?.bars ?? null,
   );
   const speed = SPEEDS[speedIndex];
 
-  // Draw the real waveform once per source.
+  // Draw the real waveform once per source, and fill in the length from the
+  // decode whenever the stored duration is missing or the file reports none.
   useEffect(() => {
-    const cached = peakCache.get(src);
+    const keepDecodedDuration = (decoded?: number) => {
+      if (!decoded || !Number.isFinite(decoded) || decoded <= 0) return;
+      setDuration((prev) => (Number.isFinite(prev) && prev > 0 ? prev : decoded));
+    };
+
+    const cached = waveCache.get(src);
     if (cached) {
-      setPeaks(cached);
+      setPeaks(cached.bars);
+      keepDecodedDuration(cached.duration);
       return;
     }
+
     let alive = true;
-    void computePeaks(src).then((computed) => {
+    void decodeWave(src).then((decoded) => {
       if (!alive) return;
-      const bars = computed ?? fallbackPeaks(src);
-      peakCache.set(src, bars);
+      const bars = decoded?.bars ?? fallbackPeaks(src);
+      waveCache.set(src, { bars, duration: decoded?.duration ?? 0 });
       setPeaks(bars);
+      keepDecodedDuration(decoded?.duration);
     });
     return () => {
       alive = false;
@@ -324,23 +344,35 @@ export function AudioWavePlayer({
           />
         </div>
 
-        <div
-          className={cn(
-            "mt-0.5 flex items-center gap-2 text-muted-foreground",
-            compact ? "text-[9px]" : "text-[10px]",
-          )}
-        >
-          <span className="tabular-nums">{formatClock(current)}</span>
-          <span className="text-muted-foreground/40">/</span>
-          <span className="tabular-nums">{formatClock(duration)}</span>
-          {playing && (
+        <div className="mt-1 flex items-center gap-2">
+          {/* How long the recording is — the number a reader wants before
+              deciding to press play. */}
+          <span
+            title={`Voice note · ${formatClock(duration)}`}
+            className={cn(
+              "flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-card/60 font-semibold tabular-nums text-foreground/80",
+              compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
+            )}
+          >
+            <Mic
+              className={cn("text-primary", compact ? "h-2.5 w-2.5" : "h-3 w-3")}
+            />
+            {formatClock(duration)}
+          </span>
+          {(playing || current > 0) && (
             <motion.span
-              className="text-primary"
+              className={cn(
+                "tabular-nums text-muted-foreground",
+                compact ? "text-[9px]" : "text-[10px]",
+              )}
               initial={{ opacity: 0 }}
-              animate={{ opacity: [0.45, 1, 0.45] }}
-              transition={{ duration: 1.6, repeat: Infinity }}
+              animate={{ opacity: 1 }}
             >
-              playing
+              {formatClock(current)}
+              <span className="text-muted-foreground/50">
+                {" / "}
+                {formatClock(duration)}
+              </span>
             </motion.span>
           )}
         </div>
@@ -381,6 +413,8 @@ export function VoiceNotePlayer({
   });
 
   if (!url) {
+    // The stored duration is already known, so the length shows up straight
+    // away even while the file's URL is still resolving.
     return (
       <div
         className={cn(
@@ -389,15 +423,33 @@ export function VoiceNotePlayer({
           className,
         )}
       >
-        <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-muted" />
-        <div className="flex h-7 flex-1 items-center gap-[2px]">
-          {Array.from({ length: PLAY_BARS }).map((_, i) => (
-            <span
-              key={i}
-              className="min-w-px flex-1 animate-pulse rounded-full bg-muted-foreground/25"
-              style={{ height: `${25 + ((i * 37) % 55)}%` }}
+        <div
+          className={cn(
+            "shrink-0 animate-pulse rounded-full bg-muted",
+            compact ? "h-8 w-8" : "h-10 w-10",
+          )}
+        />
+        <div className="min-w-0 flex-1">
+          <div className={cn("flex items-center gap-[2px]", compact ? "h-7" : "h-9")}>
+            {Array.from({ length: PLAY_BARS }).map((_, i) => (
+              <span
+                key={i}
+                className="min-w-px flex-1 animate-pulse rounded-full bg-muted-foreground/25"
+                style={{ height: `${25 + ((i * 37) % 55)}%` }}
+              />
+            ))}
+          </div>
+          <div
+            className={cn(
+              "mt-1 flex items-center gap-1 font-semibold tabular-nums text-muted-foreground",
+              compact ? "text-[9px]" : "text-[10px]",
+            )}
+          >
+            <Mic
+              className={cn("text-primary/70", compact ? "h-2.5 w-2.5" : "h-3 w-3")}
             />
-          ))}
+            {formatClock((durationHintMs ?? 0) / 1000)}
+          </div>
         </div>
       </div>
     );
