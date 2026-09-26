@@ -1013,6 +1013,12 @@ function AttendanceTab({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const removeRecord = async (id: any) => {
+    if (!window.confirm("Delete this attendance record? This cannot be undone.")) return;
+    await deleteAttendance({ id });
+    toast.success("Attendance record deleted");
+  };
+
   return (
     <div className="space-y-4 p-5">
       {needsFollowUp && (
@@ -1138,10 +1144,64 @@ function AttendanceTab({
         {rows.length === 0 ? (
           <EmptyState title="No attendance records" message="Attendance appears here once recorded." />
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            {/* Scrolls sideways on phones rather than crushing seven columns
-                into unreadable wraps. */}
-            <table className="w-full min-w-[680px] whitespace-nowrap text-left text-[12px]">
+          <div className="overflow-hidden rounded-lg border">
+            {/* Phones: one card per record, so nothing has to scroll sideways. */}
+            <ul className="divide-y sm:hidden">
+              {rows.map((a) => (
+                <li key={a._id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold">{fmtDate(a.date)}</div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">
+                        {ATTENDANCE_TYPE_LABELS[a.type]}
+                        {a.programName ? ` · ${a.programName}` : ""}
+                      </div>
+                    </div>
+                    <StatusPill status={a.status} />
+                  </div>
+                  <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                    <div className="min-w-0">
+                      <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Time marked</dt>
+                      <dd className="mt-0.5 font-mono tabular-nums">{a.time ? fmtTime(a.time) : "—"}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Recorded by</dt>
+                      <dd className="mt-0.5 truncate">{a.recordedBy || "—"}</dd>
+                    </div>
+                    {a.remarks && (
+                      <div className="col-span-2 min-w-0">
+                        <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Remarks</dt>
+                        <dd className="mt-0.5">{a.remarks}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  {isAdmin && (
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        onClick={() => startEdit(a)}
+                      >
+                        <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[11px] text-destructive hover:text-destructive"
+                        onClick={() => removeRecord(a._id)}
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            {/* Wider screens: the full table. */}
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full whitespace-nowrap text-left text-[12px]">
               <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Date</th>
@@ -1175,11 +1235,7 @@ function AttendanceTab({
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
-                            onClick={async () => {
-                              if (!window.confirm("Delete this attendance record? This cannot be undone.")) return;
-                              await deleteAttendance({ id: a._id });
-                              toast.success("Attendance record deleted");
-                            }}
+                            onClick={() => removeRecord(a._id)}
                             title="Delete record"
                             className="rounded p-1 text-destructive hover:bg-destructive/10"
                           >
@@ -1190,8 +1246,9 @@ function AttendanceTab({
                     )}
                   </tr>
                 ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

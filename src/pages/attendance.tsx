@@ -226,11 +226,11 @@ export default function Attendance() {
 
       {/* History filter */}
       <div className="mb-5 rounded-lg border bg-card p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <p className="term-label mb-3">// attendance history</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="w-full sm:w-44">
+            <p className="term-label mb-2">// attendance history</p>
             <Select value={klass} onValueChange={setKlass}>
-              <SelectTrigger className="mt-1 w-44"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All classes</SelectItem>
                 {CLASS_OPTIONS.map((c) => (
@@ -239,7 +239,7 @@ export default function Attendance() {
               </SelectContent>
             </Select>
           </div>
-          <p className="mb-1 text-[11px] text-muted-foreground">
+          <p className="text-[11px] leading-5 text-muted-foreground sm:max-w-xs sm:text-right">
             Attendance is recorded from each member's profile.
           </p>
         </div>
@@ -253,10 +253,63 @@ export default function Attendance() {
         />
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card">
-          {/* Eight columns cannot fit a phone, so the table scrolls sideways
-              rather than squashing each cell into an unreadable wrap. */}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] whitespace-nowrap text-left text-[12px]">
+          {/* Phones: one card per record, so every field stays readable. */}
+          <ul className="divide-y sm:hidden">
+            {rows.map((r) => {
+              const m = memberById.get(r.memberId!);
+              return (
+                <li key={r._id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link
+                        to={`/members/${r.memberId}`}
+                        className="text-[13px] font-semibold hover:text-primary hover:underline"
+                      >
+                        {m?.fullName ?? "—"}
+                      </Link>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                        {m?.membershipId && (
+                          <span className="font-mono text-primary/80">{m.membershipId}</span>
+                        )}
+                        <span>{m?.klass ?? "—"} Class</span>
+                      </div>
+                    </div>
+                    <StatusPill status={r.status} />
+                  </div>
+                  <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                    <div className="min-w-0">
+                      <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Date</dt>
+                      <dd className="mt-0.5 truncate">{fmtDate(r.date)}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Marked</dt>
+                      <dd className="mt-0.5 truncate font-mono tabular-nums">
+                        {r.time ? fmtTime(r.time) : "—"}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Activity</dt>
+                      <dd className="mt-0.5 truncate">{ATTENDANCE_TYPE_LABELS[r.type] ?? r.type}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Recorded by</dt>
+                      <dd className="mt-0.5 truncate">{r.recordedBy || "—"}</dd>
+                    </div>
+                    {r.programName && (
+                      <div className="col-span-2 min-w-0">
+                        <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Program</dt>
+                        <dd className="mt-0.5 truncate">{r.programName}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Wider screens: the full table. */}
+          <div className="hidden overflow-x-auto sm:block">
+            <table className="w-full whitespace-nowrap text-left text-[12px]">
               <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Member</th>
@@ -300,9 +353,6 @@ export default function Attendance() {
               </tbody>
             </table>
           </div>
-          <p className="border-t px-4 py-2 text-[10px] text-muted-foreground sm:hidden">
-            Swipe sideways to see every column.
-          </p>
         </div>
       )}
 
@@ -379,7 +429,7 @@ export default function Attendance() {
                     {/* Both lines are captioned: two unlabelled curves plus an
                         arrow badge was the part that read as a puzzle. */}
                     <div className="flex items-center gap-1.5">
-                      <span className="w-14 whitespace-nowrap text-right text-[8px] uppercase tracking-wider text-muted-foreground">
+                      <span className="w-14 whitespace-nowrap text-right text-[9px] uppercase tracking-wider text-muted-foreground">
                         attendance
                       </span>
                       <AttendanceWaveline points={points} direction={summary.direction} />
@@ -388,7 +438,7 @@ export default function Attendance() {
                         the leading signal below the lagging one. */}
                     {punctualityTrend.some((p) => p.timed > 0) && (
                       <div className="flex items-center gap-1.5">
-                        <span className="w-14 whitespace-nowrap text-right text-[8px] uppercase tracking-wider text-muted-foreground">
+                        <span className="w-14 whitespace-nowrap text-right text-[9px] uppercase tracking-wider text-muted-foreground">
                           on time
                         </span>
                         <AttendanceWaveline
