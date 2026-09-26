@@ -668,29 +668,55 @@ export default function Attendance() {
               <div
                 key={t.member._id}
                 className={cn(
-                  "flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3",
+                  "flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-start sm:justify-between",
                   t.drift.level === "atRisk"
                     ? "border-status-red/40 bg-status-red/5"
                     : "border-status-amber/40 bg-status-amber/5",
                 )}
               >
-                <Link
-                  to={`/members/${t.member._id}`}
-                  className="flex min-w-0 flex-1 items-center gap-3"
-                >
-                  <DriftPill drift={t.drift} className="shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-semibold">{t.member.fullName}</div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {t.drift.reasons.join(" · ")}. Lateness leads absence — a check-in
-                      now is easier than catching the absence later.
-                    </div>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      to={`/members/${t.member._id}`}
+                      className="min-w-0 truncate text-[13px] font-semibold hover:text-primary hover:underline"
+                    >
+                      {t.member.fullName}
+                    </Link>
+                    <DriftPill drift={t.drift} className="shrink-0" />
                   </div>
-                </Link>
+                  {t.drift.reasons.length > 0 && (
+                    <ul className="space-y-0.5">
+                      {t.drift.reasons.map((reason) => (
+                        <li
+                          key={reason}
+                          className="flex gap-1.5 text-[11px] leading-5 text-muted-foreground"
+                        >
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "select-none",
+                              t.drift.level === "atRisk"
+                                ? "text-status-red"
+                                : "text-status-amber",
+                            )}
+                          >
+                            •
+                          </span>
+                          <span className="min-w-0 break-words">{reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="text-[11px] leading-5 text-muted-foreground">
+                    Lateness leads absence — a check-in now is easier than catching the
+                    absence later.
+                  </p>
+                </div>
                 {canFollowUp && (
                   <Button
                     size="sm"
                     variant="outline"
+                    className="shrink-0 self-start sm:ml-2"
                     onClick={() => {
                       setFollowupFor(t.member);
                       // Prefill the reason the flag was raised, so the follow-up
