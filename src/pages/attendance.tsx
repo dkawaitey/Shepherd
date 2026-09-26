@@ -94,6 +94,8 @@ export default function Attendance() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   // How many history rows are shown before the "show more" step. Long
   // ministries keep hundreds of records, so the list is windowed.
   const [visibleCount, setVisibleCount] = useState(25);
@@ -147,6 +149,9 @@ export default function Attendance() {
   const filteredRows = rows.filter((r) => {
     if (statusFilter !== "all" && r.status !== statusFilter) return false;
     if (typeFilter !== "all" && r.type !== typeFilter) return false;
+    const day = (r.date ?? "").slice(0, 10);
+    if (fromDate && day < fromDate) return false;
+    if (toDate && day > toDate) return false;
     if (term) {
       const m = memberById.get(r.memberId!);
       const hay = `${m?.fullName ?? ""} ${m?.membershipId ?? ""} ${
@@ -158,7 +163,12 @@ export default function Attendance() {
   });
   const shownRows = filteredRows.slice(0, visibleCount);
   const filtersActive =
-    klass !== "all" || statusFilter !== "all" || typeFilter !== "all" || !!term;
+    klass !== "all" ||
+    statusFilter !== "all" ||
+    typeFilter !== "all" ||
+    !!term ||
+    !!fromDate ||
+    !!toDate;
 
   const csvRows = filteredRows.map((r) => ({
     member: memberById.get(r.memberId!)?.fullName ?? "—",
@@ -268,6 +278,8 @@ export default function Attendance() {
                 setStatusFilter("all");
                 setTypeFilter("all");
                 setSearch("");
+                setFromDate("");
+                setToDate("");
                 setVisibleCount(25);
               }}
             >
@@ -275,7 +287,7 @@ export default function Attendance() {
             </Button>
           )}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Class</Label>
             <Select
@@ -343,6 +355,30 @@ export default function Attendance() {
                 setVisibleCount(25);
               }}
               placeholder="Member, program…"
+            />
+          </div>
+          <div>
+            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">From</Label>
+            <Input
+              type="date"
+              className="mt-1 w-full"
+              value={fromDate}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setVisibleCount(25);
+              }}
+            />
+          </div>
+          <div>
+            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">To</Label>
+            <Input
+              type="date"
+              className="mt-1 w-full"
+              value={toDate}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setVisibleCount(25);
+              }}
             />
           </div>
         </div>

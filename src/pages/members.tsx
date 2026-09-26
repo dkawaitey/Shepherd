@@ -75,6 +75,7 @@ const deriveShortcut = (area: string) =>
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
+  ChevronDown,
   ClipboardList,
   Clock,
   Crown,
@@ -948,10 +949,37 @@ function AttendanceTab({
   const [remarks, setRemarks] = useState("");
   const [recordedBy, setRecordedBy] = useState(me?.name || me?.email || "");
   const [editingId, setEditingId] = useState<string | null>(null);
+  // History-list filters — the rate above and the trend panel keep reading the
+  // full history, so narrowing the list never rewrites those readings.
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [visibleCount, setVisibleCount] = useState(25);
 
   const present = rows.filter((r) => r.status === "present").length;
   const rate = rows.length ? Math.round((present / rows.length) * 100) : 0;
   const needsFollowUp = rows.length >= 2 && rate < 60;
+
+  const term = search.trim().toLowerCase();
+  const filteredRows = rows.filter((r) => {
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (typeFilter !== "all" && r.type !== typeFilter) return false;
+    const day = (r.date ?? "").slice(0, 10);
+    if (fromDate && day < fromDate) return false;
+    if (toDate && day > toDate) return false;
+    if (term) {
+      const hay = `${r.programName ?? ""} ${r.recordedBy ?? ""} ${
+        r.remarks ?? ""
+      }`.toLowerCase();
+      if (!hay.includes(term)) return false;
+    }
+    return true;
+  });
+  const shownRows = filteredRows.slice(0, visibleCount);
+  const filtersActive =
+    statusFilter !== "all" || typeFilter !== "all" || !!term || !!fromDate || !!toDate;
 
   // Late-mark warning: the same threshold the punctuality analysis uses, so the
   // recorder is told at the moment of entry that this will count as late — and
@@ -1141,14 +1169,116 @@ function AttendanceTab({
 
       {/* History */}
       <div>
-        <p className="term-label mb-3">// attendance history</p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="term-label">// attendance history</p>
+          {filtersActive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-[11px] text-muted-foreground"
+              onClick={() => {
+                setStatusFilter("all");
+                setTypeFilter("all");
+                setSearch("");
+                setFromDate("");
+                setToDate("");
+                setVisibleCount(25);
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
         {rows.length === 0 ? (
           <EmptyState title="No attendance records" message="Attendance appears here once recorded." />
         ) : (
+          <>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</Label>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => {
+                  setStatusFilter(v);
+                  setVisibleCount(25);
+                }}
+              >
+                <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any status</SelectItem>
+                  {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Activity</Label>
+              <Select
+                value={typeFilter}
+                onValueChange={(v) => {
+                  setTypeFilter(v);
+                  setVisibleCount(25);
+                }}
+              >
+                <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any activity</SelectItem>
+                  {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="mp-att-search" className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Search
+              </Label>
+              <Input
+                id="mp-att-search"
+                className="mt-1 w-full"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setVisibleCount(25);
+                }}
+                placeholder="Program, remarks…"
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">From</Label>
+              <Input
+                type="date"
+                className="mt-1 w-full"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setVisibleCount(25);
+                }}
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">To</Label>
+              <Input
+                type="date"
+                className="mt-1 w-full"
+                value={toDate}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setVisibleCount(25);
+                }}
+              />
+            </div>
+          </div>
+          <div className="mt-3">
+          {filteredRows.length === 0 ? (
+            <EmptyState title="No records match these filters" message="Try a different status, activity, date range or search term." />
+          ) : (
+          <>
           <div className="overflow-hidden rounded-lg border">
             {/* Phones: one card per record, so nothing has to scroll sideways. */}
             <ul className="divide-y sm:hidden">
-              {rows.map((a) => (
+              {shownRows.map((a) => (
                 <li key={a._id} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1216,7 +1346,7 @@ function AttendanceTab({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((a) => (
+                {shownRows.map((a) => (
                   <tr key={a._id} className="border-t">
                     <td className="px-3 py-2">{fmtDate(a.date)}</td>
                     <td className="px-3 py-2 font-mono tabular-nums">{a.time ? fmtTime(a.time) : "—"}</td>
@@ -1251,6 +1381,26 @@ function AttendanceTab({
               </table>
             </div>
           </div>
+          <div className="mt-3 flex flex-col items-center gap-1.5">
+            {filteredRows.length > shownRows.length && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisibleCount((v) => v + 25)}
+              >
+                <ChevronDown className="mr-1.5 h-3.5 w-3.5" />
+                Show {Math.min(25, filteredRows.length - shownRows.length)} more
+              </Button>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Showing {shownRows.length} of {filteredRows.length} record
+              {filteredRows.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          </>
+          )}
+          </div>
+          </>
         )}
       </div>
     </div>
