@@ -253,49 +253,56 @@ export default function Attendance() {
         />
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card">
-          <table className="w-full text-left text-[12px]">
-            <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Member</th>
-                <th className="px-3 py-2">Class</th>
-                <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">Marked</th>
-                <th className="px-3 py-2">Activity</th>
-                <th className="px-3 py-2">Program</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Recorded by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const m = memberById.get(r.memberId!);
-                return (
-                  <tr key={r._id} className="border-t">
-                    <td className="px-3 py-2">
-                      <Link
-                        to={`/members/${r.memberId}`}
-                        className="font-semibold hover:text-primary hover:underline"
-                      >
-                        {m?.fullName ?? "—"}
-                      </Link>
-                      <span className="ml-2 text-[10px] text-muted-foreground">
-                        {m?.membershipId}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">{m?.klass ?? "—"}</td>
-                    <td className="px-3 py-2">{fmtDate(r.date)}</td>
-                    <td className="px-3 py-2 font-mono tabular-nums">
-                      {r.time ? fmtTime(r.time) : "—"}
-                    </td>
-                    <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[r.type] ?? r.type}</td>
-                    <td className="px-3 py-2">{r.programName || "—"}</td>
-                    <td className="px-3 py-2"><StatusPill status={r.status} /></td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.recordedBy || "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {/* Eight columns cannot fit a phone, so the table scrolls sideways
+              rather than squashing each cell into an unreadable wrap. */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] whitespace-nowrap text-left text-[12px]">
+              <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Member</th>
+                  <th className="px-3 py-2">Class</th>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Marked</th>
+                  <th className="px-3 py-2">Activity</th>
+                  <th className="px-3 py-2">Program</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Recorded by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const m = memberById.get(r.memberId!);
+                  return (
+                    <tr key={r._id} className="border-t">
+                      <td className="px-3 py-2">
+                        <Link
+                          to={`/members/${r.memberId}`}
+                          className="font-semibold hover:text-primary hover:underline"
+                        >
+                          {m?.fullName ?? "—"}
+                        </Link>
+                        <span className="ml-2 text-[10px] text-muted-foreground">
+                          {m?.membershipId}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{m?.klass ?? "—"}</td>
+                      <td className="px-3 py-2">{fmtDate(r.date)}</td>
+                      <td className="px-3 py-2 font-mono tabular-nums">
+                        {r.time ? fmtTime(r.time) : "—"}
+                      </td>
+                      <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[r.type] ?? r.type}</td>
+                      <td className="px-3 py-2">{r.programName || "—"}</td>
+                      <td className="px-3 py-2"><StatusPill status={r.status} /></td>
+                      <td className="px-3 py-2 text-muted-foreground">{r.recordedBy || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="border-t px-4 py-2 text-[10px] text-muted-foreground sm:hidden">
+            Swipe sideways to see every column.
+          </p>
         </div>
       )}
 
@@ -316,12 +323,12 @@ export default function Attendance() {
       {/* Per-member time-trend analysis over the recorded history. */}
       {memberTrends.length > 0 && (
         <div className="mt-6 overflow-hidden rounded-lg border bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
+          <div className="flex flex-col gap-1 border-b px-4 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
             <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-primary" />
+              <Activity className="h-4 w-4 shrink-0 text-primary" />
               <p className="term-label">attendance trends by member</p>
             </div>
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[10px] leading-4 text-muted-foreground">
               last 6 months · two lines each: <span className="text-foreground/70">attendance</span> then{" "}
               <span className="text-foreground/70">arriving on time</span> · weakest first
             </span>
@@ -368,11 +375,11 @@ export default function Attendance() {
                   >
                     {member.fullName}
                   </Link>
-                  <div className="flex flex-col items-end gap-0.5">
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
                     {/* Both lines are captioned: two unlabelled curves plus an
                         arrow badge was the part that read as a puzzle. */}
                     <div className="flex items-center gap-1.5">
-                      <span className="w-14 text-right text-[8px] uppercase tracking-wider text-muted-foreground">
+                      <span className="w-14 whitespace-nowrap text-right text-[8px] uppercase tracking-wider text-muted-foreground">
                         attendance
                       </span>
                       <AttendanceWaveline points={points} direction={summary.direction} />
@@ -381,7 +388,7 @@ export default function Attendance() {
                         the leading signal below the lagging one. */}
                     {punctualityTrend.some((p) => p.timed > 0) && (
                       <div className="flex items-center gap-1.5">
-                        <span className="w-14 text-right text-[8px] uppercase tracking-wider text-muted-foreground">
+                        <span className="w-14 whitespace-nowrap text-right text-[8px] uppercase tracking-wider text-muted-foreground">
                           on time
                         </span>
                         <AttendanceWaveline

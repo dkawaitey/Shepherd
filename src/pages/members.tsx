@@ -1139,7 +1139,9 @@ function AttendanceTab({
           <EmptyState title="No attendance records" message="Attendance appears here once recorded." />
         ) : (
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-left text-[12px]">
+            {/* Scrolls sideways on phones rather than crushing seven columns
+                into unreadable wraps. */}
+            <table className="w-full min-w-[680px] whitespace-nowrap text-left text-[12px]">
               <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Date</th>
