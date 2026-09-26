@@ -692,7 +692,7 @@ export function MemberProfile() {
 
       <div className="overflow-hidden rounded-lg border bg-card">
         {/* Header */}
-        <div className="border-b bg-muted/40 px-5 py-4">
+        <div className="border-b bg-muted/40 px-4 py-4 sm:px-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -740,8 +740,9 @@ export function MemberProfile() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-1 border-b px-3 pt-2">
+        {/* Tabs — one scrollable row, so the counts never wrap awkwardly on a
+            phone. */}
+        <div className="flex gap-1 overflow-x-auto border-b px-3 pt-2">
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
@@ -750,13 +751,13 @@ export function MemberProfile() {
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-t-md border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
+                  "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-md border-b-2 px-3 py-2 text-[12px] font-medium transition-colors",
                   active
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-3.5 w-3.5 shrink-0" />
                 {t.label}
               </button>
             );
@@ -803,7 +804,7 @@ export function MemberProfile() {
         {tab === "profile" && (
           <div className="space-y-4 p-5">
             {/* Attendance stats */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {[
                 { label: "Youth Meetings", value: youthPct },
                 { label: "Church Services", value: churchPct },
@@ -867,7 +868,7 @@ export function MemberProfile() {
                     }
                   }}
                 >
-                  <SelectTrigger className="w-64">
+                  <SelectTrigger className="w-full sm:w-64">
                     <SelectValue placeholder="Select account" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1020,7 +1021,7 @@ function AttendanceTab({
   };
 
   return (
-    <div className="space-y-4 p-5">
+    <div className="space-y-4 p-4 sm:p-5">
       {needsFollowUp && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-[12px] text-amber-800 dark:text-amber-300">
           <Heart className="mt-0.5 h-4 w-4 shrink-0" />

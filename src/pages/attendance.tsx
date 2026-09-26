@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -22,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ATTENDANCE_STATUS_LABELS,
   ATTENDANCE_TYPE_LABELS,
   CLASS_OPTIONS,
 } from "@/convex/constants";
@@ -61,6 +63,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   Activity,
+  ChevronDown,
   Clock,
   TriangleAlert,
   CircleCheck,
@@ -88,6 +91,12 @@ const punctualityAsTrend = (points: PunctualityTrendPoint[]): TrendPoint[] =>
 
 export default function Attendance() {
   const [klass, setKlass] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  // How many history rows are shown before the "show more" step. Long
+  // ministries keep hundreds of records, so the list is windowed.
+  const [visibleCount, setVisibleCount] = useState(25);
 
   const members = useQuery(api.members.list, {
     klass: klass === "all" ? undefined : klass,
@@ -131,7 +140,27 @@ export default function Attendance() {
     )
     .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt ?? 0) - (a.createdAt ?? 0));
 
-  const csvRows = rows.map((r) => ({
+  // The history list narrows to what the filters ask for; the trend and
+  // punctuality readings below stay on the full class-scoped history, so
+  // filtering the list never rewrites the analysis.
+  const term = search.trim().toLowerCase();
+  const filteredRows = rows.filter((r) => {
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (typeFilter !== "all" && r.type !== typeFilter) return false;
+    if (term) {
+      const m = memberById.get(r.memberId!);
+      const hay = `${m?.fullName ?? ""} ${m?.membershipId ?? ""} ${
+        r.programName ?? ""
+      } ${r.recordedBy ?? ""}`.toLowerCase();
+      if (!hay.includes(term)) return false;
+    }
+    return true;
+  });
+  const shownRows = filteredRows.slice(0, visibleCount);
+  const filtersActive =
+    klass !== "all" || statusFilter !== "all" || typeFilter !== "all" || !!term;
+
+  const csvRows = filteredRows.map((r) => ({
     member: memberById.get(r.memberId!)?.fullName ?? "—",
     klass: memberById.get(r.memberId!)?.klass ?? "",
     date: r.date,
@@ -224,13 +253,39 @@ export default function Attendance() {
         }
       />
 
-      {/* History filter */}
+      {/* History filters — narrow the list by class, status, activity or a
+          free-text search over member, program and recorder. */}
       <div className="mb-5 rounded-lg border bg-card p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="w-full sm:w-44">
-            <p className="term-label mb-2">// attendance history</p>
-            <Select value={klass} onValueChange={setKlass}>
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="term-label">// attendance history</p>
+          {filtersActive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-[11px] text-muted-foreground"
+              onClick={() => {
+                setKlass("all");
+                setStatusFilter("all");
+                setTypeFilter("all");
+                setSearch("");
+                setVisibleCount(25);
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Class</Label>
+            <Select
+              value={klass}
+              onValueChange={(v) => {
+                setKlass(v);
+                setVisibleCount(25);
+              }}
+            >
+              <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All classes</SelectItem>
                 {CLASS_OPTIONS.map((c) => (
@@ -239,23 +294,79 @@ export default function Attendance() {
               </SelectContent>
             </Select>
           </div>
-          <p className="text-[11px] leading-5 text-muted-foreground sm:max-w-xs sm:text-right">
-            Attendance is recorded from each member's profile.
-          </p>
+          <div>
+            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</Label>
+            <Select
+              value={statusFilter}
+              onValueChange={(v) => {
+                setStatusFilter(v);
+                setVisibleCount(25);
+              }}
+            >
+              <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any status</SelectItem>
+                {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Activity</Label>
+            <Select
+              value={typeFilter}
+              onValueChange={(v) => {
+                setTypeFilter(v);
+                setVisibleCount(25);
+              }}
+            >
+              <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any activity</SelectItem>
+                {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="att-search" className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Search
+            </Label>
+            <Input
+              id="att-search"
+              className="mt-1 w-full"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setVisibleCount(25);
+              }}
+              placeholder="Member, program…"
+            />
+          </div>
         </div>
+        <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
+          Attendance is recorded from each member's profile.
+        </p>
       </div>
 
       {/* History */}
-      {rows.length === 0 ? (
+      {filteredRows.length === 0 ? (
         <EmptyState
-          title="No attendance records"
-          message="Attendance history appears here once records are kept in member profiles."
+          title={rows.length === 0 ? "No attendance records" : "No records match these filters"}
+          message={
+            rows.length === 0
+              ? "Attendance history appears here once records are kept in member profiles."
+              : "Try a different class, status, activity or search term."
+          }
         />
       ) : (
+        <>
         <div className="overflow-hidden rounded-lg border bg-card">
           {/* Phones: one card per record, so every field stays readable. */}
           <ul className="divide-y sm:hidden">
-            {rows.map((r) => {
+            {shownRows.map((r) => {
               const m = memberById.get(r.memberId!);
               return (
                 <li key={r._id} className="px-4 py-3">
@@ -323,7 +434,7 @@ export default function Attendance() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {shownRows.map((r) => {
                   const m = memberById.get(r.memberId!);
                   return (
                     <tr key={r._id} className="border-t">
@@ -354,6 +465,23 @@ export default function Attendance() {
             </table>
           </div>
         </div>
+        <div className="mt-3 flex flex-col items-center gap-1.5">
+          {filteredRows.length > shownRows.length && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setVisibleCount((v) => v + 25)}
+            >
+              <ChevronDown className="mr-1.5 h-3.5 w-3.5" />
+              Show {Math.min(25, filteredRows.length - shownRows.length)} more
+            </Button>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            Showing {shownRows.length} of {filteredRows.length} record
+            {filteredRows.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        </>
       )}
 
       {/* Team punctuality — the roster below answers "who is late?", this
