@@ -153,7 +153,7 @@ function UsersTab() {
     <div className="space-y-4">
 
       <div className="overflow-x-auto rounded-lg border bg-card">
-        <table className="w-full text-left text-[11px]">
+        <table className="w-full min-w-[760px] text-left text-[11px]">
           <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">User</th>
@@ -1198,8 +1198,8 @@ function AuditTab() {
           <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
         </Button>
       </div>
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <table className="w-full text-left text-[11px]">
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <table className="w-full min-w-[640px] text-left text-[11px]">
           <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Time</th>

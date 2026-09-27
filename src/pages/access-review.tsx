@@ -351,7 +351,7 @@ export default function AccessReview() {
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border bg-card">
-          <table className="w-full text-left text-[11px]">
+          <table className="w-full min-w-[680px] text-left text-[11px]">
             <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Account</th>

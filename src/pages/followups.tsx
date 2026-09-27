@@ -37,6 +37,7 @@ import {
   fmtTime,
   formatError,
   userCanWrite,
+  userIsAdmin,
 } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ import {
   Hash,
   Lock,
   Search,
+  ShieldAlert,
   type LucideIcon,
   Tag,
   Trash2,
@@ -383,6 +385,8 @@ export default function Followups() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [changing, setChanging] = useState<any | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any | null>(null);
+  const [overriding, setOverriding] = useState<any | null>(null);
+  const [overrideStatus, setOverrideStatus] = useState<string>(FOLLOWUP_STATUS.PENDING);
 
   const status = searchParams.get("status") ?? "";
   const search = searchParams.get("search") ?? "";
@@ -396,7 +400,13 @@ export default function Followups() {
   // class leaders (plus admins) on the server — a read-only leader or a plain
   // member may follow along, but not act.
   const canWork = userCanWrite(me);
+  // Only the account that scheduled a follow-up may edit or close it; an
+  // administrator can always override (mirrors the server-side owner check).
+  const isAdmin = userIsAdmin(me);
+  const canManage = (f: { createdBy?: string }) =>
+    canWork && (isAdmin || (!!me?._id && f.createdBy === me._id));
   const remove = useMutation(api.followups.remove);
+  const adminOverride = useMutation(api.followups.adminOverride);
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -546,8 +556,17 @@ export default function Followups() {
                 <FollowupRow
                   key={f._id}
                   f={f}
+                  canManage={canManage(f)}
                   onStatus={canWork ? () => setChanging(f) : undefined}
                   onDelete={canWork ? () => setConfirmDelete(f) : undefined}
+                  onOverride={
+                    isAdmin
+                      ? () => {
+                          setOverriding(f);
+                          setOverrideStatus(f.status);
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -565,8 +584,17 @@ export default function Followups() {
                 <FollowupRow
                   key={f._id}
                   f={f}
+                  canManage={canManage(f)}
                   onStatus={canWork ? () => setChanging(f) : undefined}
                   onDelete={canWork ? () => setConfirmDelete(f) : undefined}
+                  onOverride={
+                    isAdmin
+                      ? () => {
+                          setOverriding(f);
+                          setOverrideStatus(f.status);
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -576,6 +604,56 @@ export default function Followups() {
 
       <ScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} />
       <StatusChangeDialog followup={changing} open={!!changing} onOpenChange={(v) => !v && setChanging(null)} />
+
+      {/* Administrator override — the scheduler owns a follow-up, an admin can
+          always set its status directly (including back to Pending). */}
+      <Dialog open={!!overriding} onOpenChange={(v) => !v && setOverriding(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Administrator override</DialogTitle>
+            <DialogDescription>
+              {overriding?.contactName} · {FOLLOWUP_TYPE_LABELS[overriding?.type] ?? ""}
+              {" · "}
+              {overriding && fmtDate(overriding.date)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Set status</Label>
+              <Select value={overrideStatus} onValueChange={setOverrideStatus}>
+                <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FOLLOWUP_STATUS.PENDING}>Pending</SelectItem>
+                  <SelectItem value={FOLLOWUP_STATUS.COMPLETED}>Completed</SelectItem>
+                  <SelectItem value={FOLLOWUP_STATUS.MISSED}>Missed</SelectItem>
+                  <SelectItem value={FOLLOWUP_STATUS.CANCELLED}>Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="rounded-md border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+              Setting a follow-up back to <b>Pending</b> unlocks it, so the person who
+              scheduled it can update it again.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOverriding(null)}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                if (!overriding) return;
+                try {
+                  await adminOverride({ id: overriding._id, status: overrideStatus });
+                  toast.success("Follow-up overridden");
+                  setOverriding(null);
+                } catch (err) {
+                  toast.error(formatError(err, "Could not override"));
+                }
+              }}
+            >
+              Save override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation */}
       <Dialog open={!!confirmDelete} onOpenChange={(v) => !v && setConfirmDelete(null)}>
@@ -707,12 +785,16 @@ function SectionHeading({ children }: { children: ReactNode }) {
 
 function FollowupRow({
   f,
+  canManage,
   onStatus,
   onDelete,
+  onOverride,
 }: {
   f: any;
+  canManage: boolean;
   onStatus?: () => void;
   onDelete?: () => void;
+  onOverride?: () => void;
 }) {
   const due = dueMeta(f);
   // A 4px status rail down the left edge, so the list scans by colour before
@@ -816,17 +898,36 @@ function FollowupRow({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {f.status === FOLLOWUP_STATUS.PENDING && onStatus && (
+        {f.status === FOLLOWUP_STATUS.PENDING && onStatus && canManage && (
           <Button size="sm" onClick={onStatus}>
             <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Update status
           </Button>
+        )}
+        {f.status === FOLLOWUP_STATUS.PENDING && !canManage && (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+            title="Only the person who scheduled this follow-up (or an administrator) can update it"
+          >
+            <Lock className="h-3 w-3" /> Scheduler only
+          </span>
         )}
         <Link to={`/contacts/${f.contactId}`} title="Open contact profile">
           <Button variant="outline" size="sm">
             <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open
           </Button>
         </Link>
-        {onDelete && (
+        {onOverride && (f.status !== FOLLOWUP_STATUS.PENDING || f.locked) && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={onOverride}
+            title="Administrator override — set the status directly"
+          >
+            <ShieldAlert className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {canManage && onDelete && (
           <Button
             variant="ghost"
             size="icon"

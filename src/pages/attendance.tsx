@@ -578,18 +578,32 @@ export default function Attendance() {
                 <div
                   key={member._id}
                   className={cn(
-                    "flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 border-l-transparent px-4 py-2.5",
+                    "flex flex-col gap-2 border-l-2 border-l-transparent px-4 py-3",
+                    "sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:py-2.5",
                     late === "often" && "border-l-status-red/70 bg-status-red/5",
                     late === "sometimes" && "border-l-status-amber/70 bg-status-amber/5",
                   )}
                 >
-                  <Link
-                    to={`/members/${member._id}`}
-                    className="min-w-0 flex-1 truncate text-[12px] font-semibold hover:text-primary hover:underline"
-                  >
-                    {member.fullName}
-                  </Link>
-                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                  {/* Name and verdict on one line. On a phone the row stacks
+                      instead of squeezing the name away. */}
+                  <div className="flex min-w-0 items-center gap-2 sm:flex-1">
+                    <Link
+                      to={`/members/${member._id}`}
+                      className="min-w-0 flex-1 truncate text-[12px] font-semibold hover:text-primary hover:underline"
+                    >
+                      {member.fullName}
+                    </Link>
+                    <span
+                      title={`6-month attendance direction: ${v.label}`}
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+                        v.cls,
+                      )}
+                    >
+                      <Icon className="h-2.5 w-2.5" /> {v.label}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-0.5 self-end sm:self-auto">
                     {/* Both lines are captioned: two unlabelled curves plus an
                         arrow badge was the part that read as a puzzle. */}
                     <div className="flex items-center gap-1.5">
@@ -613,41 +627,36 @@ export default function Attendance() {
                       </div>
                     )}
                   </div>
-                  <span
-                    title={`6-month attendance direction: ${v.label}`}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
-                      v.cls,
+                  {/* The metric pills wrap together, so they line up as a block
+                      on a phone and sit inline from tablet up. */}
+                  <div className="flex flex-wrap items-center gap-1.5 sm:contents">
+                    {punctuality.timed > 0 && (
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+                          PUNCTUALITY_META[punctuality.verdict].cls,
+                        )}
+                        title={`Average ${punctuality.averageDelay} min after the session began · ${punctuality.timed} arrival${punctuality.timed === 1 ? "" : "s"} timed`}
+                      >
+                        <Clock className="h-2.5 w-2.5" />
+                        {PUNCTUALITY_META[punctuality.verdict].label}
+                      </span>
                     )}
-                  >
-                    <Icon className="h-2.5 w-2.5" /> {v.label}
-                  </span>
-                  {punctuality.timed > 0 && (
+                    <PunctualityBaselinePill
+                      baseline={punctuality.timed > 0 ? punctuality.baseline : "none"}
+                    />
+                    <DriftPill drift={drift} />
                     <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
-                        PUNCTUALITY_META[punctuality.verdict].cls,
-                      )}
-                      title={`Average ${punctuality.averageDelay} min after the session began · ${punctuality.timed} arrival${punctuality.timed === 1 ? "" : "s"} timed`}
+                      className="w-10 text-right font-mono text-[11px] font-semibold tabular-nums"
+                      style={{ color: progressColor(participation.rate) }}
+                      title={`Effective participation — present and on time for ${participation.effective} of ${participation.sessions} sessions (raw attendance ${participation.attendanceRate}%)`}
                     >
-                      <Clock className="h-2.5 w-2.5" />
-                      {PUNCTUALITY_META[punctuality.verdict].label}
+                      {participation.rate}%
                     </span>
-                  )}
-                  <PunctualityBaselinePill
-                    baseline={punctuality.timed > 0 ? punctuality.baseline : "none"}
-                  />
-                  <DriftPill drift={drift} />
-                  <span
-                    className="w-10 text-right font-mono text-[11px] font-semibold tabular-nums"
-                    style={{ color: progressColor(participation.rate) }}
-                    title={`Effective participation — present and on time for ${participation.effective} of ${participation.sessions} sessions (raw attendance ${participation.attendanceRate}%)`}
-                  >
-                    {participation.rate}%
-                  </span>
-                  <span className="w-16 text-right text-[9px] text-muted-foreground">
-                    {total} {total === 1 ? "record" : "records"}
-                  </span>
+                    <span className="text-right text-[9px] text-muted-foreground sm:w-16">
+                      {total} {total === 1 ? "record" : "records"}
+                    </span>
+                  </div>
                 </div>
               );
             })}
@@ -751,7 +760,7 @@ export default function Attendance() {
             {lowAttendance.map((r) => (
               <div
                 key={r.member._id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#f59e0b]/40 bg-[#2e2408]/80 px-4 py-3 transition-colors hover:border-[#f59e0b]/70"
+                className="flex flex-col gap-2.5 rounded-lg border border-[#f59e0b]/40 bg-[#2e2408]/80 px-4 py-3 transition-colors hover:border-[#f59e0b]/70 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
               >
                 <Link
                   to={`/members/${r.member._id}`}
@@ -769,7 +778,7 @@ export default function Attendance() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-[#f59e0b]/50 text-status-amber hover:bg-[#f59e0b]/10 hover:text-status-amber"
+                    className="self-start border-[#f59e0b]/50 text-status-amber hover:bg-[#f59e0b]/10 hover:text-status-amber sm:self-auto"
                     onClick={() => {
                       setFollowupFor(r.member);
                       setOutcome("");

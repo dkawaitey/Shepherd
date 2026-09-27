@@ -176,6 +176,7 @@ const schema = defineSchema(
       date: v.string(), // ISO date
       time: v.optional(v.string()), // scheduled time of day, "HH:MM" (24h)
       assignedWorker: v.optional(v.string()),
+      createdBy: v.optional(v.string()), // user id of whoever scheduled it
       notes: v.optional(v.string()),
       reminder: v.optional(v.boolean()),
       status: v.union(

@@ -586,14 +586,14 @@ export const merge = mutation({
 });
 
 /** Promote a contact to a Youth Ministry member. Creates a member record from
- *  the contact's data (same ID format as contacts) and marks the contact. */
+ *  the contact's data (same ID format as contacts) and marks the contact.
+ *  Admin only — promotion is a deliberate ministry decision. */
 export const promoteToMember = mutation({
   args: { id: v.id("contacts") },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
+    await requireRole(ctx, []);
     const contact = await ctx.db.get(args.id);
     if (!contact || contact.isDeleted) throw new ConvexError("Contact not found");
-    assertClassScope(user, contact.klass);
     if (contact.promotedToMemberId) throw new ConvexError("Contact already promoted");
 
     const dateJoined = nowIso();
@@ -626,6 +626,51 @@ export const promoteToMember = mutation({
       details: `${contact.fullName} — linked to member ${membershipId}`,
     });
     return { _id: memberId, membershipId };
+  },
+});
+
+/**
+ * Admin-only: undo a mistaken promotion. Deletes the member record that was
+ * created from the contact (plus any attendance, prayer and note records that
+ * were attached to it) and moves the contact back to Contacts, where it can be
+ * re-promoted once corrected.
+ */
+export const demoteFromMember = mutation({
+  args: { id: v.id("contacts") },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, []);
+    const contact = await ctx.db.get(args.id);
+    if (!contact || contact.isDeleted) throw new ConvexError("Contact not found");
+    if (!contact.promotedToMemberId) {
+      throw new ConvexError("This contact has not been promoted");
+    }
+    const memberId = contact.promotedToMemberId;
+
+    // Drop everything that was created against the mistaken member record.
+    for (const table of ["attendance", "prayerRequests", "notes"] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("memberId", (q) => q.eq("memberId", memberId))
+        .collect();
+      for (const row of rows) await ctx.db.delete(row._id);
+    }
+
+    // Unlink any signed-in account that was tied to this member record.
+    const users = await ctx.db.query("users").collect();
+    for (const u of users) {
+      if (u.memberId === memberId) {
+        await ctx.db.patch(u._id, { memberId: undefined });
+      }
+    }
+
+    await ctx.db.delete(memberId);
+    await ctx.db.patch(args.id, { promotedToMemberId: undefined, updatedAt: Date.now() });
+    await logAudit(ctx, {
+      action: "contact.demote",
+      entityType: "contacts",
+      entityId: args.id,
+      details: `${contact.fullName} — promotion undone, returned to contacts`,
+    });
   },
 });
 

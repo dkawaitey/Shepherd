@@ -391,9 +391,9 @@ export function ClassPunctualityCard({
           return (
             <div
               key={klass}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5"
+              className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1.5 sm:py-2.5"
             >
-              <div className="w-28 shrink-0">
+              <div className="w-full shrink-0 sm:w-28">
                 <div className="text-[12px] font-semibold">{klass} Class</div>
                 <div className="text-[9px] text-muted-foreground">
                   {members} member{members === 1 ? "" : "s"} · {records} record
@@ -402,13 +402,13 @@ export function ClassPunctualityCard({
               </div>
 
               {summary.timed === 0 ? (
-                <span className="flex-1 text-[10px] text-muted-foreground">
+                <span className="text-[10px] text-muted-foreground sm:flex-1">
                   No arrival times to compare yet — record the time members are
                   marked to build this.
                 </span>
               ) : (
                 <div
-                  className="flex h-3 min-w-24 flex-1 overflow-hidden rounded-sm bg-muted"
+                  className="flex h-3 w-full overflow-hidden rounded-sm bg-muted sm:min-w-24 sm:flex-1"
                   title={`${onTimeRate}% of ${summary.timed} timed arrivals were on time`}
                 >
                   {PUNCTUALITY_BANDS.map((b) => {
@@ -429,7 +429,7 @@ export function ClassPunctualityCard({
               )}
 
               {summary.timed > 0 && (
-                <>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 sm:contents">
                   <span className="w-10 shrink-0 text-right font-mono text-[11px] font-semibold tabular-nums">
                     {onTimeRate}%
                   </span>
@@ -443,18 +443,18 @@ export function ClassPunctualityCard({
                     <Clock className="h-2.5 w-2.5" />
                     {verdict.label}
                   </span>
-                  <span className="w-20 shrink-0 text-right font-mono text-[9px] tabular-nums text-muted-foreground">
+                  <span className="font-mono text-[9px] tabular-nums text-muted-foreground sm:w-20 sm:text-right">
                     {summary.averageDelay === 0 ? "first" : `+${summary.averageDelay}m`} ·{" "}
                     {summary.timed}
                   </span>
                   <span
-                    className="w-20 shrink-0 text-right text-[9px] text-muted-foreground"
+                    className="text-[9px] text-muted-foreground sm:w-20 sm:text-right"
                     title="Members often or sometimes late"
                   >
                     {flagged > 0 ? `${flagged} late` : "none late"}
                   </span>
                   <PunctualityBaselinePill baseline={summary.baseline} />
-                </>
+                </div>
               )}
             </div>
           );

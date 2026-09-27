@@ -1095,60 +1095,60 @@ function AttendanceTab({
           <p className="term-label mb-3">
             {editingId ? "// edit attendance record" : "// record attendance"}
           </p>
-          <div className="overflow-x-auto pb-1">
-            <div className="flex min-w-max items-end gap-2">
-              <div>
-                <Label>Activity</Label>
-                <Select value={type} onValueChange={setType}>
-                  <SelectTrigger className="mt-1 w-36"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Date</Label>
-                <Input type="date" className="mt-1 w-36" value={date} onChange={(e) => setDate(e.target.value)} />
-              </div>
-              <div>
-                <Label>Time marked</Label>
-                <Input type="time" className="mt-1 w-28" value={time} onChange={(e) => setTime(e.target.value)} />
-              </div>
-              <div>
-                <Label>Status</Label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="mt-1 w-28"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Program / Session</Label>
-                <Input className="mt-1 w-44" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Morning session" />
-              </div>
-              <div>
-                <Label>Remarks</Label>
-                <Input className="mt-1 w-48" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Late, brought a friend…" />
-              </div>
-              <div>
-                <Label>Recorded by</Label>
-                <Input className="mt-1 w-40" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
-              </div>
-              <div className="flex shrink-0 gap-1.5">
-                {editingId && (
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setEditingId(null)}>
-                    Cancel
-                  </Button>
-                )}
-                <Button type="submit" size="sm">
-                  <Plus className="mr-1 h-3.5 w-3.5" /> {editingId ? "Save changes" : "Record"}
+          {/* A responsive grid instead of a sideways-scrolling strip, so the
+              form stays usable on a phone. */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <Label>Activity</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input type="date" className="mt-1 w-full" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div>
+              <Label>Time marked</Label>
+              <Input type="time" className="mt-1 w-full" value={time} onChange={(e) => setTime(e.target.value)} />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Program / Session</Label>
+              <Input className="mt-1 w-full" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Morning session" />
+            </div>
+            <div>
+              <Label>Recorded by</Label>
+              <Input className="mt-1 w-full" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Label>Remarks</Label>
+              <Input className="mt-1 w-full" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Late, brought a friend…" />
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2 lg:col-span-3">
+              {editingId && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setEditingId(null)}>
+                  Cancel
                 </Button>
-              </div>
+              )}
+              <Button type="submit" size="sm">
+                <Plus className="mr-1 h-3.5 w-3.5" /> {editingId ? "Save changes" : "Record"}
+              </Button>
             </div>
           </div>
 

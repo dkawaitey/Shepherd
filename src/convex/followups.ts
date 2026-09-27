@@ -17,7 +17,25 @@ import {
   assertClassScope,
   classScoped,
   canReadMinistry,
+  type CurrentUser,
 } from "./helpers";
+
+/**
+ * Only the account that scheduled a follow-up may edit or close it; an
+ * administrator may always override (that is exactly what `adminOverride`
+ * exists for). Records created before ownership was tracked have no
+ * `createdBy`, so they fall to administrators only.
+ */
+const assertFollowupOwner = (
+  user: CurrentUser,
+  f: { createdBy?: string },
+) => {
+  if (f.createdBy !== user._id && !hasRole(user, ROLES.ADMIN)) {
+    throw new ConvexError(
+      "Only the person who scheduled this follow-up (or an administrator) can change it",
+    );
+  }
+};
 import { checkRateLimit } from "./rateLimit";
 
 /** Scheduled time of day, 24h "HH:MM". */
@@ -109,6 +127,7 @@ export const create = mutation({
       date: args.date,
       time: args.time,
       assignedWorker: args.assignedWorker,
+      createdBy: user._id,
       notes: args.notes,
       reminder: args.reminder ?? false,
       status: FOLLOWUP_STATUS.PENDING,
@@ -166,6 +185,7 @@ export const update = mutation({
     }
     const fuContact = await ctx.db.get(f.contactId);
     assertClassScope(user, fuContact?.klass);
+    assertFollowupOwner(user, f);
     const patch: Record<string, unknown> = {};
     if (args.type !== undefined) patch.type = args.type;
     if (args.date !== undefined) patch.date = args.date;
@@ -204,6 +224,7 @@ export const changeStatus = mutation({
     if (!f) throw new ConvexError("Follow-up not found");
     const fuContact = await ctx.db.get(f.contactId);
     assertClassScope(user, fuContact?.klass);
+    assertFollowupOwner(user, f);
 
     if (f.locked && !hasRole(user, ROLES.ADMIN)) {
       throw new ConvexError("This follow-up status is locked. Only an administrator can override it.");
@@ -330,6 +351,7 @@ export const remove = mutation({
     if (!f) throw new ConvexError("Follow-up not found");
     const fuContact = await ctx.db.get(f.contactId);
     assertClassScope(user, fuContact?.klass);
+    assertFollowupOwner(user, f);
     if (f.status !== FOLLOWUP_STATUS.PENDING && !hasRole(user, ROLES.ADMIN)) {
       throw new ConvexError("Only pending follow-ups can be deleted");
     }

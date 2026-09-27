@@ -76,6 +76,7 @@ import {
   Sparkle,
   Trash2,
   Trophy,
+  Undo2,
   UserCheck,
   UserPlus,
   UserRound,
@@ -103,14 +104,16 @@ export default function ContactProfile() {
   // Everyone but the read-only Leader role may edit records (mirrors the
   // server's requireRole calls).
   const canEdit = userCanWrite(me);
-  const canAdd = canAddRecords(me);
   // `canEdit` covers follow-ups, prayers, notes and Bible study, whose server
   // checks allow coordinators and workers too. Editing the contact record
   // itself (details, stage, journey events) is class-leader work, and the
-  // server only accepts admins and class leaders — same rule as `canAdd`.
+  // server only accepts admins and class leaders (same rule that guards
+  // promotion).
   const canEditContact = canAddRecords(me);
   const promote = useMutation(api.contacts.promoteToMember);
+  const demote = useMutation(api.contacts.demoteFromMember);
   const [promoting, setPromoting] = useState(false);
+  const [confirmDemote, setConfirmDemote] = useState(false);
 
   const [tab, setTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
@@ -192,11 +195,23 @@ export default function ContactProfile() {
                 </Button>
               )}
               {contact.promotedToMemberId ? (
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-[#4ade80]/40 bg-[#15291c] px-2.5 py-1 text-[11px] font-semibold text-[#86efac]">
-                  <UserCheck className="h-3.5 w-3.5" /> Promoted to Member
-                </span>
+                <>
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-[#4ade80]/40 bg-[#15291c] px-2.5 py-1 text-[11px] font-semibold text-[#86efac]">
+                    <UserCheck className="h-3.5 w-3.5" /> Promoted to Member
+                  </span>
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConfirmDemote(true)}
+                      title="Undo this promotion and return the contact to Contacts"
+                    >
+                      <Undo2 className="mr-1 h-3.5 w-3.5" /> Back to Contacts
+                    </Button>
+                  )}
+                </>
               ) : (
-                canAdd && (
+                isAdmin && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -310,12 +325,18 @@ export default function ContactProfile() {
                         {f.outcome ?? f.reasonMissed ?? f.reasonCancelled}
                       </p>
                     )}
-                    {f.status === "pending" && canEdit && (
+                    {f.status === "pending" && canEdit && (isAdmin || f.createdBy === me?._id) && (
                       <div className="mt-2">
                         <Button size="sm" onClick={() => setChanging(f)}>
                           Update status
                         </Button>
                       </div>
+                    )}
+                    {f.status === "pending" && (!canEdit || (!isAdmin && f.createdBy !== me?._id)) && (
+                      <p className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Lock className="h-3 w-3" /> Only the person who scheduled this (or an
+                        administrator) can update it
+                      </p>
                     )}
                   </div>
                 ))
@@ -332,6 +353,36 @@ export default function ContactProfile() {
       <ContactFormDialog open={editOpen} onOpenChange={setEditOpen} contact={contact} onSaved={() => setEditOpen(false)} />
       <ScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} presetContactId={contact._id} />
       <StatusChangeDialog followup={changing} open={!!changing} onOpenChange={(v) => !v && setChanging(null)} />
+
+      <Dialog open={confirmDemote} onOpenChange={setConfirmDemote}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Send back to contacts?</DialogTitle>
+            <DialogDescription>
+              {contact.fullName}'s member record will be removed and any attendance,
+              prayer or notes recorded against it will be deleted. The contact
+              stays in Contacts and can be promoted again once corrected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmDemote(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  await demote({ id: contact._id });
+                  toast.success(`${contact.fullName} returned to contacts`);
+                  setConfirmDemote(false);
+                } catch (err) {
+                  toast.error(formatError(err, "Could not undo the promotion"));
+                }
+              }}
+            >
+              Send back
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent className="max-w-sm">
@@ -889,47 +940,49 @@ function AttendanceTab({
           }}
         >
           <p className="term-label mb-3">// record attendance</p>
-          <div className="overflow-x-auto pb-1">
-            <div className="flex min-w-max items-end gap-2">
-              <div>
-                <Label>Activity</Label>
-                <Select value={type} onValueChange={setType}>
-                  <SelectTrigger className="mt-1 w-36"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Date</Label>
-                <Input type="date" className="mt-1 w-36" value={date} onChange={(e) => setDate(e.target.value)} />
-              </div>
-              <div>
-                <Label>Status</Label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="mt-1 w-28"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Program / Session</Label>
-                <Input className="mt-1 w-44" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Morning session" />
-              </div>
-              <div>
-                <Label>Remarks</Label>
-                <Input className="mt-1 w-48" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Brought a friend…" />
-              </div>
-              <div>
-                <Label>Recorded by</Label>
-                <Input className="mt-1 w-40" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
-              </div>
-              <Button type="submit" size="sm" className="shrink-0">Record</Button>
+          {/* A responsive grid instead of a sideways-scrolling strip, so the
+              form stays usable on a phone. */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <Label>Activity</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ATTENDANCE_TYPE_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input type="date" className="mt-1 w-full" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Program / Session</Label>
+              <Input className="mt-1 w-full" value={program} onChange={(e) => setProgram(e.target.value)} placeholder="e.g. Morning session" />
+            </div>
+            <div>
+              <Label>Recorded by</Label>
+              <Input className="mt-1 w-full" value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} placeholder="Your name" />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Label>Remarks</Label>
+              <Input className="mt-1 w-full" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Brought a friend…" />
+            </div>
+            <div className="flex items-center gap-1.5 sm:col-span-2 lg:col-span-3">
+              <Button type="submit" size="sm">Record</Button>
             </div>
           </div>
         </form>
@@ -943,31 +996,64 @@ function AttendanceTab({
       {rows.length === 0 ? (
         <EmptyState title="No attendance records" message="Record attendance for services, youth meetings and programs." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-left text-[12px]">
-            <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">Activity</th>
-                <th className="px-3 py-2">Program</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Recorded by</th>
-                <th className="px-3 py-2">Remarks</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r._id} className="border-t">
-                  <td className="px-3 py-2">{fmtDate(r.date)}</td>
-                  <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[r.type]}</td>
-                  <td className="px-3 py-2">{r.programName || "—"}</td>
-                  <td className="px-3 py-2"><StatusPill status={r.status} /></td>
-                  <td className="px-3 py-2">{r.recordedBy || "—"}</td>
-                  <td className="px-3 py-2">{r.remarks || "—"}</td>
+        <div className="overflow-hidden rounded-lg border">
+          {/* Phones: one card per record, so nothing scrolls sideways. */}
+          <ul className="divide-y sm:hidden">
+            {rows.map((r) => (
+              <li key={r._id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold">{fmtDate(r.date)}</div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                      {ATTENDANCE_TYPE_LABELS[r.type]}
+                      {r.programName ? ` · ${r.programName}` : ""}
+                    </div>
+                  </div>
+                  <StatusPill status={r.status} />
+                </div>
+                <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                  <div className="min-w-0">
+                    <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Recorded by</dt>
+                    <dd className="mt-0.5 truncate">{r.recordedBy || "—"}</dd>
+                  </div>
+                  {r.remarks && (
+                    <div className="col-span-2 min-w-0">
+                      <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">Remarks</dt>
+                      <dd className="mt-0.5">{r.remarks}</dd>
+                    </div>
+                  )}
+                </dl>
+              </li>
+            ))}
+          </ul>
+
+          {/* Wider screens: the full table. */}
+          <div className="hidden overflow-x-auto sm:block">
+            <table className="w-full whitespace-nowrap text-left text-[12px]">
+              <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Activity</th>
+                  <th className="px-3 py-2">Program</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Recorded by</th>
+                  <th className="px-3 py-2">Remarks</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r._id} className="border-t">
+                    <td className="px-3 py-2">{fmtDate(r.date)}</td>
+                    <td className="px-3 py-2">{ATTENDANCE_TYPE_LABELS[r.type]}</td>
+                    <td className="px-3 py-2">{r.programName || "—"}</td>
+                    <td className="px-3 py-2"><StatusPill status={r.status} /></td>
+                    <td className="px-3 py-2">{r.recordedBy || "—"}</td>
+                    <td className="px-3 py-2">{r.remarks || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
