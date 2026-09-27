@@ -591,11 +591,12 @@ export const merge = mutation({
 export const promoteToMember = mutation({
   args: { id: v.id("contacts") },
   handler: async (ctx, args) => {
-    await requireRole(ctx, []);
+    const user = await requireRole(ctx, []);
     const contact = await ctx.db.get(args.id);
     if (!contact || contact.isDeleted) throw new ConvexError("Contact not found");
     if (contact.promotedToMemberId) throw new ConvexError("Contact already promoted");
 
+    const actor = user.name ?? user.email ?? "Unknown";
     const dateJoined = nowIso();
     const membershipId = await nextMembershipId(ctx, deriveShortcut(contact.area), dateJoined);
     const now = Date.now();
@@ -613,17 +614,24 @@ export const promoteToMember = mutation({
       occupation: contact.occupation,
       status: "active",
       sourceContactId: args.id,
+      promotedAt: now,
+      promotedByName: actor,
       isDeleted: false,
       createdAt: now,
       updatedAt: now,
       membershipId,
     });
-    await ctx.db.patch(args.id, { promotedToMemberId: memberId, updatedAt: now });
+    await ctx.db.patch(args.id, {
+      promotedToMemberId: memberId,
+      promotedAt: now,
+      promotedByName: actor,
+      updatedAt: now,
+    });
     await logAudit(ctx, {
       action: "contact.promote",
       entityType: "contacts",
       entityId: args.id,
-      details: `${contact.fullName} — linked to member ${membershipId}`,
+      details: `${contact.fullName} promoted to member ${membershipId} by ${actor}`,
     });
     return { _id: memberId, membershipId };
   },
@@ -638,12 +646,13 @@ export const promoteToMember = mutation({
 export const demoteFromMember = mutation({
   args: { id: v.id("contacts") },
   handler: async (ctx, args) => {
-    await requireRole(ctx, []);
+    const user = await requireRole(ctx, []);
     const contact = await ctx.db.get(args.id);
     if (!contact || contact.isDeleted) throw new ConvexError("Contact not found");
     if (!contact.promotedToMemberId) {
       throw new ConvexError("This contact has not been promoted");
     }
+    const actor = user.name ?? user.email ?? "Unknown";
     const memberId = contact.promotedToMemberId;
 
     // Drop everything that was created against the mistaken member record.
@@ -663,13 +672,19 @@ export const demoteFromMember = mutation({
       }
     }
 
+    const member = await ctx.db.get(memberId);
     await ctx.db.delete(memberId);
-    await ctx.db.patch(args.id, { promotedToMemberId: undefined, updatedAt: Date.now() });
+    await ctx.db.patch(args.id, {
+      promotedToMemberId: undefined,
+      promotedAt: undefined,
+      promotedByName: undefined,
+      updatedAt: Date.now(),
+    });
     await logAudit(ctx, {
       action: "contact.demote",
       entityType: "contacts",
       entityId: args.id,
-      details: `${contact.fullName} — promotion undone, returned to contacts`,
+      details: `${contact.fullName} returned to contacts from member ${member?.membershipId ?? ""} by ${actor}`,
     });
   },
 });

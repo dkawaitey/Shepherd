@@ -903,7 +903,7 @@ function FollowupRow({
             <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Update status
           </Button>
         )}
-        {f.status === FOLLOWUP_STATUS.PENDING && !canManage && (
+        {f.status === FOLLOWUP_STATUS.PENDING && onStatus && !canManage && (
           <span
             className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
             title="Only the person who scheduled this follow-up (or an administrator) can update it"

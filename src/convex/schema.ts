@@ -139,6 +139,8 @@ const schema = defineSchema(
       ministry: v.optional(v.string()),
       tags: v.optional(v.array(v.string())),
       promotedToMemberId: v.optional(v.id("members")), // set when promoted
+      promotedAt: v.optional(v.number()), // when the promotion was recorded
+      promotedByName: v.optional(v.string()), // admin who promoted (display name)
 
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),
@@ -314,6 +316,8 @@ const schema = defineSchema(
       ), // ministry position — the source of truth for system roles
       isClassLeader: v.optional(v.boolean()), // legacy: class-leader flag (kept in sync with position)
       sourceContactId: v.optional(v.id("contacts")), // set when promoted from a contact
+      promotedAt: v.optional(v.number()), // when this member record was created by a promotion
+      promotedByName: v.optional(v.string()), // admin who promoted (display name)
       attendanceFollowup: v.optional(
         v.object({
           date: v.string(), // ISO date the follow-up happened

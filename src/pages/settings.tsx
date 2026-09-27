@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ import {
   Download,
   FileText,
   MailCheck,
+  Search,
   Send,
   ContactRound,
 } from "lucide-react";
@@ -1152,51 +1153,100 @@ function NotificationsTab() {
   );
 }
 
+/**
+ * The audit log reads as one long stream, so promotion/demotion changes are
+ * easy to lose. These groups let an administrator jump straight to the
+ * member-status changes without searching action strings by hand.
+ */
+const AUDIT_GROUPS = [
+  { id: "all", label: "All activity", match: () => true },
+  {
+    id: "promotions",
+    label: "Promotions & demotions",
+    match: (l: { action: string }) =>
+      l.action === "contact.promote" || l.action === "contact.demote",
+  },
+  { id: "contacts", label: "Contacts", match: (l: { entityType: string }) => l.entityType === "contacts" },
+  { id: "followups", label: "Follow-ups", match: (l: { entityType: string }) => l.entityType === "followUps" },
+  { id: "members", label: "Members", match: (l: { entityType: string }) => l.entityType === "members" },
+  { id: "accounts", label: "Accounts & access", match: (l: { entityType: string }) => l.entityType === "users" },
+] as const;
+
 function AuditTab() {
   const logs = useQuery(api.settings.listAuditLogs, {});
+  const [group, setGroup] = useState<string>("all");
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const active = AUDIT_GROUPS.find((g) => g.id === group) ?? AUDIT_GROUPS[0];
+    const term = q.trim().toLowerCase();
+    return (logs ?? []).filter((l) => {
+      if (!active.match(l as never)) return false;
+      if (!term) return true;
+      return `${l.userName ?? ""} ${l.action} ${l.entityType} ${l.details ?? ""}`
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [logs, group, q]);
+
+  const exportRows = filtered.map((l) => ({
+    date: fmtDateTime(new Date(l.createdAt).toISOString()),
+    user: l.userName ?? "",
+    action: l.action,
+    entity: l.entityType,
+    details: l.details ?? "",
+  }));
+
   return (
     <div className="space-y-3">
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1 basis-52">
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search user, action or details…"
+          />
+        </div>
+        <Select value={group} onValueChange={setGroup}>
+          <SelectTrigger className="w-full sm:w-56"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {AUDIT_GROUPS.map((g) => (
+              <SelectItem key={g.id} value={g.id}>{g.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] text-muted-foreground">
+          Showing {filtered.length} of {logs?.length ?? 0} entries
+        </span>
+        <div className="flex justify-end gap-2">
         <Button
           variant="outline"
           size="sm"
           onClick={() =>
-            downloadCsv(
-              "audit-logs.csv",
-              (logs ?? []).map((l) => ({
-                date: fmtDateTime(new Date(l.createdAt).toISOString()),
-                user: l.userName ?? "",
-                action: l.action,
-                entity: l.entityType,
-                details: l.details ?? "",
-              })),
-            )
+            downloadCsv("audit-logs.csv", exportRows)
           }
-          disabled={!logs?.length}
+          disabled={!filtered.length}
         >
           <Download className="mr-1.5 h-3.5 w-3.5" /> Export logs
         </Button>
         <Button
           variant="outline"
           size="sm"
-          disabled={!logs?.length}
+          disabled={!filtered.length}
           onClick={() =>
             downloadPdf("audit-logs.pdf", [
-              {
-                heading: "Audit Logs — System Activity",
-                rows: (logs ?? []).map((l) => ({
-                  date: fmtDateTime(new Date(l.createdAt).toISOString()),
-                  user: l.userName ?? "",
-                  action: l.action,
-                  entity: l.entityType,
-                  details: l.details ?? "",
-                })),
-              },
+              { heading: "Audit Logs — System Activity", rows: exportRows },
             ])
           }
         >
           <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
         </Button>
+        </div>
       </div>
       <div className="overflow-x-auto rounded-lg border bg-card">
         <table className="w-full min-w-[640px] text-left text-[11px]">
@@ -1216,19 +1266,38 @@ function AuditTab() {
                     <td colSpan={5} className="px-3 py-2"><div className="h-3 animate-pulse rounded bg-muted" /></td>
                   </tr>
                 ))
-              : logs.map((l) => (
-                  <tr key={l._id} className="border-t align-top">
-                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{fmtDateTime(new Date(l.createdAt).toISOString())}</td>
-                    <td className="px-3 py-2">{l.userName ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px]">{l.action}</span>
-                    </td>
-                    <td className="px-3 py-2">{l.entityType}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{l.details ?? "—"}</td>
-                  </tr>
-                ))}
+              : filtered.map((l) => {
+                  const promoted =
+                    l.action === "contact.promote" || l.action === "contact.demote";
+                  return (
+                    <tr
+                      key={l._id}
+                      className={cn("border-t align-top", promoted && "bg-status-green/5")}
+                    >
+                      <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{fmtDateTime(new Date(l.createdAt).toISOString())}</td>
+                      <td className="px-3 py-2">{l.userName ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 font-mono text-[9px]",
+                            promoted
+                              ? "bg-status-green/15 text-status-green"
+                              : "bg-muted",
+                          )}
+                        >
+                          {l.action}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{l.entityType}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.details ?? "—"}</td>
+                    </tr>
+                  );
+                })}
             {logs?.length === 0 && (
               <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No activity logged yet</td></tr>
+            )}
+            {logs && logs.length > 0 && filtered.length === 0 && (
+              <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No entries match this filter</td></tr>
             )}
           </tbody>
         </table>

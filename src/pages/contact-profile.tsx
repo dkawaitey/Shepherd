@@ -196,8 +196,20 @@ export default function ContactProfile() {
               )}
               {contact.promotedToMemberId ? (
                 <>
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-[#4ade80]/40 bg-[#15291c] px-2.5 py-1 text-[11px] font-semibold text-[#86efac]">
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#4ade80]/40 bg-[#15291c] px-2.5 py-1 text-[11px] font-semibold text-[#86efac]"
+                    title={
+                      contact.promotedAt
+                        ? `Promoted on ${fmtDate(new Date(contact.promotedAt).toISOString())}${contact.promotedByName ? ` by ${contact.promotedByName}` : ""}`
+                        : undefined
+                    }
+                  >
                     <UserCheck className="h-3.5 w-3.5" /> Promoted to Member
+                    {contact.promotedAt && (
+                      <span className="font-normal opacity-80">
+                        · {fmtDate(new Date(contact.promotedAt).toISOString())}
+                      </span>
+                    )}
                   </span>
                   {isAdmin && (
                     <Button

@@ -35,7 +35,7 @@ import {
   MINISTRIES,
   STAGE_LABELS,
 } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, ContactChannelActions, StagePill, Mark, downloadCsv, downloadPdf, canAddRecords, formatError } from "@/components/shared";
+import { EmptyState, PageHeader, StatusPill, ContactChannelActions, StagePill, Mark, downloadCsv, downloadPdf, canAddRecords, formatError, fmtDate } from "@/components/shared";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import {
@@ -104,8 +104,20 @@ function ContactCard({
       <div className="mt-3 space-y-1">
         <StagePill stage={contact.status} />
         {contact.promotedToMemberId && (
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-status-green">
+          <div
+            className="flex items-center gap-1.5 text-[11px] font-semibold text-status-green"
+            title={
+              contact.promotedAt
+                ? `Promoted on ${fmtDate(new Date(contact.promotedAt).toISOString())}${contact.promotedByName ? ` by ${contact.promotedByName}` : ""}`
+                : undefined
+            }
+          >
             <UserCheck className="h-3.5 w-3.5" /> Promoted to Member
+            {contact.promotedAt && (
+              <span className="font-normal text-status-green/80">
+                · {fmtDate(new Date(contact.promotedAt).toISOString())}
+              </span>
+            )}
           </div>
         )}
         {events.slice(0, 2).map((label) => (

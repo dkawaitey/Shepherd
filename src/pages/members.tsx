@@ -296,8 +296,16 @@ export default function Members() {
                   ) : null;
                 })()}
                 {m.sourceContactId && (
-                  <span className="inline-flex items-center gap-1 rounded border border-[#4ade80]/40 bg-[#15291c] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#86efac]">
+                  <span
+                    className="inline-flex items-center gap-1 rounded border border-[#4ade80]/40 bg-[#15291c] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#86efac]"
+                    title={
+                      m.promotedByName
+                        ? `Promoted by ${m.promotedByName}`
+                        : "Promoted from a contact record"
+                    }
+                  >
                     Promoted from contacts
+                    {m.promotedAt ? ` · ${fmtDate(new Date(m.promotedAt).toISOString())}` : ""}
                   </span>
                 )}
 

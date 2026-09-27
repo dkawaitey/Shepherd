@@ -19,6 +19,7 @@ import {
   canReadMinistry,
   type CurrentUser,
 } from "./helpers";
+import { checkRateLimit } from "./rateLimit";
 
 /**
  * Only the account that scheduled a follow-up may edit or close it; an
@@ -36,7 +37,6 @@ const assertFollowupOwner = (
     );
   }
 };
-import { checkRateLimit } from "./rateLimit";
 
 /** Scheduled time of day, 24h "HH:MM". */
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -323,15 +323,26 @@ export const changeStatus = mutation({
 export const adminOverride = mutation({
   args: { id: v.id("followUps"), status: v.string() },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, []);
+    await requireRole(ctx, []);
     const f = await ctx.db.get(args.id);
     if (!f) throw new ConvexError("Follow-up not found");
     if (![FOLLOWUP_STATUS.PENDING, FOLLOWUP_STATUS.COMPLETED, FOLLOWUP_STATUS.MISSED, FOLLOWUP_STATUS.CANCELLED].includes(args.status as any)) {
       throw new ConvexError("Invalid status");
     }
+    // Re-opening a follow-up clears the outcome it was closed with, so a
+    // pending record never shows a stale result next to it.
+    const reopening = args.status === FOLLOWUP_STATUS.PENDING;
     await ctx.db.patch(args.id, {
       status: args.status as any,
-      locked: args.status === FOLLOWUP_STATUS.PENDING ? false : true,
+      locked: !reopening,
+      ...(reopening
+        ? {
+            outcome: undefined,
+            reasonMissed: undefined,
+            reasonCancelled: undefined,
+            completedDate: undefined,
+          }
+        : {}),
     });
     await logAudit(ctx, {
       action: "followup.adminOverride",
