@@ -380,6 +380,9 @@ export const update = mutation({
     const scope = classScoped(user);
     if (scope) data.klass = scope; // a class leader cannot move a contact out of their class
     data.fullName = validateName(data.fullName);
+    if (data.email) data.email = validateEmail(data.email);
+    if (data.phone) data.phone = validatePhone(data.phone);
+    if (data.whatsapp) data.whatsapp = validateWhatsapp(data.whatsapp);
     await ctx.db.patch(id, { ...data, updatedAt: Date.now() });
     await logAudit(ctx, {
       action: "contact.update",
