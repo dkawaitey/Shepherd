@@ -1013,8 +1013,9 @@ function AttendanceTab({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // An absence has no arrival time, so nothing is sent for "Time marked".
-    const markedTime = status === "absent" ? undefined : time || undefined;
+    // Only a present mark carries an arrival time, so nothing is sent for
+    // "Time marked" on an absence or an excuse.
+    const markedTime = status === "present" ? time || undefined : undefined;
     if (editingId) {
       await updateAttendance({
         id: editingId as any,
@@ -1054,9 +1055,9 @@ function AttendanceTab({
     setDate(a.date.slice(0, 10));
     setStatus(a.status);
     // Leave the field blank for a record that predates the time field, so
-    // correcting an old record doesn't stamp it with the current time. An
-    // absence has no time at all.
-    setTime(a.status === "absent" ? "" : a.time || "");
+    // correcting an old record doesn't stamp it with the current time. Only a
+    // present mark has a time to show.
+    setTime(a.status === "present" ? a.time || "" : "");
     setProgram(a.programName || "");
     setRemarks(a.remarks || "");
     setRecordedBy(a.recordedBy || "");
@@ -1139,13 +1140,13 @@ function AttendanceTab({
               <Input
                 type="time"
                 className="mt-1 w-full disabled:opacity-50"
-                value={status === "absent" ? "" : time}
+                value={status === "present" ? time : ""}
                 onChange={(e) => setTime(e.target.value)}
-                disabled={status === "absent"}
+                disabled={status !== "present"}
               />
-              {status === "absent" && (
+              {status !== "present" && (
                 <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
-                  An absence has no arrival time, so none is recorded.
+                  Only a present mark carries a time — an absence or an excuse has none.
                 </p>
               )}
             </div>

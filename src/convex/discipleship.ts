@@ -199,8 +199,9 @@ export const recordAttendance = mutation({
       type: args.type as any,
       programName: args.programName,
       status: args.status,
-      // An absence has no arrival time, so the mark is stored without one.
-      time: args.status === "absent" ? undefined : normalizeTime(args.time),
+      // Only a present mark carries an arrival time, so absent and excused are
+      // stored without one.
+      time: args.status === "present" ? normalizeTime(args.time) : undefined,
       remarks: args.remarks?.trim() || undefined,
       recordedBy: user.name,
       createdAt: Date.now(),
@@ -231,9 +232,10 @@ export const setAttendance = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
-    // An absence carries no arrival time, so whatever was typed for "Time
-    // marked" is dropped rather than stored.
-    const time = args.status === "absent" ? undefined : normalizeTime(args.time);
+    // Only a present mark carries an arrival time, so whatever was typed for
+    // "Time marked" is dropped for an absence or an excuse rather than stored.
+    const keepsTime = args.status === "present";
+    const time = keepsTime ? normalizeTime(args.time) : undefined;
     if (args.memberId && isScopedClassLeader(user)) {
       throw new ConvexError("Member attendance can only be recorded by administrators or coordinators");
     }
@@ -270,8 +272,8 @@ export const setAttendance = mutation({
         programName,
         // Keep the original mark time when no new one is supplied, so a status
         // correction doesn't silently wipe the arrival time behind punctuality —
-        // but an absence is stored with no time at all.
-        time: args.status === "absent" ? undefined : time ?? existing.time,
+        // but a mark that isn't present is stored with no time at all.
+        time: keepsTime ? time ?? existing.time : undefined,
         remarks: args.remarks?.trim() || undefined,
         recordedBy,
       });
@@ -359,10 +361,11 @@ export const updateAttendance = mutation({
     if (args.type !== undefined) patch.type = args.type;
     if (args.programName !== undefined) patch.programName = args.programName?.trim() || undefined;
     if (args.status !== undefined) patch.status = args.status;
-    // The record's resulting status decides whether a time is kept: an absence
-    // has none, whether it was just marked or corrected into one.
+    // The record's resulting status decides whether a time is kept: only a
+    // present mark has one, so an absence or an excuse loses any time it had,
+    // whether it was just marked or corrected into that status.
     const finalStatus = args.status ?? row.status;
-    if (finalStatus === "absent") {
+    if (finalStatus !== "present") {
       patch.time = undefined;
     } else if (args.time !== undefined) {
       patch.time = normalizeTime(args.time);
