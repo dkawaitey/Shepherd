@@ -496,8 +496,18 @@ function AddMemberDialog({
               <Input id="m-phone" className="mt-1" value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="m-wa">WhatsApp</Label>
-              <Input id="m-wa" className="mt-1" value={form.whatsapp ?? ""} onChange={(e) => set("whatsapp", e.target.value)} />
+              <Label htmlFor="m-wa">WhatsApp username</Label>
+              <Input
+                id="m-wa"
+                className="mt-1"
+                value={form.whatsapp ?? ""}
+                onChange={(e) => set("whatsapp", e.target.value)}
+                placeholder="e.g. kofi.mensah"
+              />
+              <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                Their WhatsApp @username — a number no longer opens a chat. A phone
+                number still works if they have not set one.
+              </p>
             </div>
           </div>
           <div>

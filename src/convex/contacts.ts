@@ -16,7 +16,7 @@ import {
   withinClassScope,
 } from "./helpers";
 import { checkRateLimit } from "./rateLimit";
-import { validateName, validateEmail, validatePhone, validateOptionalText } from "./validate";
+import { validateName, validateEmail, validatePhone, validateWhatsapp, validateOptionalText } from "./validate";
 
 const contactFields = {
   fullName: v.string(),
@@ -216,6 +216,7 @@ export const create = mutation({
     data.fullName = validateName(data.fullName);
     if (data.email) data.email = validateEmail(data.email);
     if (data.phone) data.phone = validatePhone(data.phone);
+    if (data.whatsapp) data.whatsapp = validateWhatsapp(data.whatsapp);
     const scope = classScoped(user);
     if (scope) data.klass = scope; // class leaders can only create within their own class
     const dateMet = data.dateMet || nowIso();
@@ -304,6 +305,7 @@ export const quickAdd = mutation({
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
     args.fullName = validateName(args.fullName);
     if (args.phone) args.phone = validatePhone(args.phone);
+    if (args.whatsapp) args.whatsapp = validateWhatsapp(args.whatsapp);
     const scope = classScoped(user);
     if (scope) {
       args.klass = scope; // class leaders can only create within their own class

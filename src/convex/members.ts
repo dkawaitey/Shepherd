@@ -26,7 +26,7 @@ import {
 } from "./helpers";
 import { Doc } from "./_generated/dataModel";
 import { checkRateLimit } from "./rateLimit";
-import { validateName, validateEmail, validatePhone } from "./validate";
+import { validateName, validateEmail, validatePhone, validateWhatsapp } from "./validate";
 import {
   parseStartTimes,
   participationInsight,
@@ -353,6 +353,7 @@ export const create = mutation({
     args.fullName = validateName(args.fullName);
     if (args.email) args.email = validateEmail(args.email);
     if (args.phone) args.phone = validatePhone(args.phone);
+    if (args.whatsapp) args.whatsapp = validateWhatsapp(args.whatsapp);
     const isAdminCaller = hasRole(user, ROLES.ADMIN);
     // Only administrators may appoint ministry positions / class leadership.
     const classLeader = isAdminCaller ? args.classLeader : undefined;
@@ -442,6 +443,7 @@ export const update = mutation({
     if (args.fullName) args.fullName = validateName(args.fullName);
     if (args.email) args.email = validateEmail(args.email);
     if (args.phone) args.phone = validatePhone(args.phone);
+    if (args.whatsapp) args.whatsapp = validateWhatsapp(args.whatsapp);
     const isAdminCaller = hasRole(user, ROLES.ADMIN);
     const { id, ...data } = args;
     const member = await ctx.db.get(id);

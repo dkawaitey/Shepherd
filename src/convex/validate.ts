@@ -10,6 +10,7 @@
  */
 
 import { ConvexError } from "convex/values";
+import { checkWhatsapp } from "../lib/whatsapp";
 
 /** Trim and validate a name field. Names must be 1–200 chars after trimming. */
 export function validateName(value: string, fieldName = "Name"): string {
@@ -78,6 +79,21 @@ export function validatePhone(phone: string): string {
     );
   }
   return trimmed;
+}
+
+/**
+ * Validate and normalise a WhatsApp value.
+ *
+ * WhatsApp now identifies people by username as well as by number, so this
+ * accepts either: a username (see `lib/whatsapp`) or a phone number. The two are
+ * not interchangeable in a link — `wa.me/<username>` opens a chat, a
+ * number-shaped handle is refused with "not a username" — which is why the rule
+ * lives in one place and both the server and the client read it from there.
+ */
+export function validateWhatsapp(value: string): string {
+  const result = checkWhatsapp(value);
+  if (!result.ok) throw new ConvexError(result.error);
+  return result.value;
 }
 
 /** Validate that a value is one of the allowed enum values. */

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { parseWhatsappTargets, whatsappHref, type ChatTarget } from "@/lib/whatsapp";
 import {
   FOLLOWUP_STATUS_COLORS,
   ROLE_LABELS,
@@ -360,11 +361,14 @@ export function parsePhoneNumbers(value?: string | null): PhoneNumber[] {
   return numbers;
 }
 
-export function waLink(number?: string, text?: string) {
-  const digits = parsePhoneNumbers(number)[0]?.digits;
-  if (!digits) return "#";
-  const url = `https://wa.me/${digits}`;
-  return text ? `${url}?text=${encodeURIComponent(text)}` : url;
+/**
+ * A WhatsApp chat link for a stored value — a username opens a chat with the
+ * handle, a number is dialled as digits.
+ */
+export function waLink(value?: string, text?: string) {
+  const target = parseWhatsappTargets(value)[0];
+  if (!target) return "#";
+  return whatsappHref(target.value, text);
 }
 
 export function smsLink(number?: string, text?: string) {
@@ -395,11 +399,10 @@ const CHANNEL_META: Record<
   sms: { icon: MessageSquareText, label: "SMS", pickerVerb: "Text", external: false },
 };
 
-const channelHref = (channel: Channel, digits: string, text?: string) => {
-  if (channel === "call") return `tel:${digits}`;
-  if (channel === "whatsapp")
-    return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
-  return `sms:${digits}${text ? `?body=${encodeURIComponent(text)}` : ""}`;
+const channelHref = (channel: Channel, value: string, text?: string) => {
+  if (channel === "call") return `tel:${value}`;
+  if (channel === "whatsapp") return whatsappHref(value, text);
+  return `sms:${value}${text ? `?body=${encodeURIComponent(text)}` : ""}`;
 };
 
 /**
@@ -426,22 +429,29 @@ export function ContactChannelActions({
   className?: string;
 }) {
   const callNumbers = parsePhoneNumbers(phone);
-  const whatsappNumbers = parsePhoneNumbers(whatsapp).length
-    ? parsePhoneNumbers(whatsapp)
-    : callNumbers;
+  // A stored WhatsApp username is preferred; older records with only a number
+  // still offer a chat, dialled from the number on file.
+  const storedWhatsapp = parseWhatsappTargets(whatsapp);
+  const waTargets: ChatTarget[] = storedWhatsapp.length
+    ? storedWhatsapp
+    : callNumbers.map((n) => ({ value: n.digits, label: n.label }));
+  const callTargets: ChatTarget[] = callNumbers.map((n) => ({
+    value: n.digits,
+    label: n.label,
+  }));
 
   return (
     <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-      <ChannelAction channel="call" numbers={callNumbers} compact={compact} />
+      <ChannelAction channel="call" targets={callTargets} compact={compact} />
       <ChannelAction
         channel="whatsapp"
-        numbers={whatsappNumbers}
+        targets={waTargets}
         compact={compact}
         text={whatsappText}
       />
       <ChannelAction
         channel="sms"
-        numbers={callNumbers}
+        targets={callTargets}
         compact={compact}
         text={smsText}
       />
@@ -451,18 +461,18 @@ export function ContactChannelActions({
 
 function ChannelAction({
   channel,
-  numbers,
+  targets,
   text,
   compact = false,
 }: {
   channel: Channel;
-  numbers: PhoneNumber[];
+  targets: ChatTarget[];
   text?: string;
   compact?: boolean;
 }) {
   const meta = CHANNEL_META[channel];
   const Icon = meta.icon;
-  if (numbers.length === 0) return null;
+  if (targets.length === 0) return null;
 
   const hover =
     channel === "whatsapp"
@@ -472,22 +482,22 @@ function ChannelAction({
   const triggerClass = compact
     ? cn(
         "flex h-7 items-center justify-center gap-0.5 rounded-md border text-muted-foreground transition-colors",
-        numbers.length > 1 ? "px-1.5" : "w-7",
+        targets.length > 1 ? "px-1.5" : "w-7",
         hover,
       )
     : cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5", hover);
 
   const iconEl = <Icon className="h-3.5 w-3.5" />;
 
-  // Single number: act immediately.
-  if (numbers.length === 1) {
-    const n = numbers[0]!;
+  // Single target: act immediately.
+  if (targets.length === 1) {
+    const t = targets[0]!;
     return (
       <a
-        href={channelHref(channel, n.digits, text)}
+        href={channelHref(channel, t.value, text)}
         target={meta.external ? "_blank" : undefined}
         rel={meta.external ? "noreferrer" : undefined}
-        title={`${meta.label} ${n.label}`}
+        title={`${meta.label} ${t.label}`}
         onClick={(e) => e.stopPropagation()}
         className={triggerClass}
       >
@@ -497,13 +507,13 @@ function ChannelAction({
     );
   }
 
-  // Several numbers: ask which one to use.
+  // Several targets: ask which one to use.
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          title={`${numbers.length} numbers on file — choose one`}
+          title={`${targets.length} contacts on file — choose one`}
           onClick={(e) => e.stopPropagation()}
           className={triggerClass}
         >
@@ -518,20 +528,20 @@ function ChannelAction({
         onClick={(e) => e.stopPropagation()}
       >
         <DropdownMenuLabel className="text-[11px] font-medium text-muted-foreground">
-          {numbers.length} numbers on file
+          {targets.length} contacts on file
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {numbers.map((n, i) => (
-          <DropdownMenuItem key={n.digits} asChild>
+        {targets.map((t, i) => (
+          <DropdownMenuItem key={t.value} asChild>
             <a
-              href={channelHref(channel, n.digits, text)}
+              href={channelHref(channel, t.value, text)}
               target={meta.external ? "_blank" : undefined}
               rel={meta.external ? "noreferrer" : undefined}
               className="flex cursor-pointer items-center gap-2"
             >
               <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="flex flex-col">
-                <span className="text-[12px] font-semibold">{n.label}</span>
+                <span className="text-[12px] font-semibold">{t.label}</span>
                 <span className="text-[10px] text-muted-foreground">
                   {meta.pickerVerb}
                   {i === 0 ? " · primary" : " · backup"}

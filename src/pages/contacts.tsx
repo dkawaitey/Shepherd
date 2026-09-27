@@ -243,8 +243,8 @@ export function QuickAddContact({
               <Input id="qa-phone" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="024 000 0000" className="mt-1" />
             </div>
             <div>
-              <Label htmlFor="qa-wa">WhatsApp</Label>
-              <Input id="qa-wa" value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} placeholder="024 000 0000" className="mt-1" />
+              <Label htmlFor="qa-wa">WhatsApp username</Label>
+              <Input id="qa-wa" value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} placeholder="e.g. kofi.mensah" className="mt-1" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -463,8 +463,18 @@ export function ContactFormDialog({
                 <Input id="c-phone" value={field("phone")} onChange={(e) => set("phone", e.target.value)} className="mt-1" />
               </div>
               <div>
-                <Label htmlFor="c-wa">WhatsApp</Label>
-                <Input id="c-wa" value={field("whatsapp")} onChange={(e) => set("whatsapp", e.target.value)} className="mt-1" />
+                <Label htmlFor="c-wa">WhatsApp username</Label>
+                <Input
+                  id="c-wa"
+                  value={field("whatsapp")}
+                  onChange={(e) => set("whatsapp", e.target.value)}
+                  placeholder="e.g. kofi.mensah"
+                  className="mt-1"
+                />
+                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                  Their WhatsApp @username — a number no longer opens a chat. A phone
+                  number still works if they have not set one.
+                </p>
               </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="c-email">Email</Label>
