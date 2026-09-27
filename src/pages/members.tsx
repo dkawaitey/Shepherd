@@ -1013,6 +1013,8 @@ function AttendanceTab({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // An absence has no arrival time, so nothing is sent for "Time marked".
+    const markedTime = status === "absent" ? undefined : time || undefined;
     if (editingId) {
       await updateAttendance({
         id: editingId as any,
@@ -1020,7 +1022,7 @@ function AttendanceTab({
         type: type as any,
         programName: program.trim() || undefined,
         status: status as any,
-        time: time || undefined,
+        time: markedTime,
         // Always send a value (even empty) so clearing the remarks field in an
         // edit actually persists, instead of leaving the old text behind.
         remarks: remarks.trim(),
@@ -1037,7 +1039,7 @@ function AttendanceTab({
         type: type as any,
         programName: program.trim() || undefined,
         status: status as any,
-        time: time || undefined,
+        time: markedTime,
         remarks: remarks.trim() || undefined,
         recordedBy: recordedBy.trim() || me?.name || me?.email || undefined,
       });
@@ -1052,8 +1054,9 @@ function AttendanceTab({
     setDate(a.date.slice(0, 10));
     setStatus(a.status);
     // Leave the field blank for a record that predates the time field, so
-    // correcting an old record doesn't stamp it with the current time.
-    setTime(a.time || "");
+    // correcting an old record doesn't stamp it with the current time. An
+    // absence has no time at all.
+    setTime(a.status === "absent" ? "" : a.time || "");
     setProgram(a.programName || "");
     setRemarks(a.remarks || "");
     setRecordedBy(a.recordedBy || "");
@@ -1133,7 +1136,18 @@ function AttendanceTab({
             </div>
             <div>
               <Label>Time marked</Label>
-              <Input type="time" className="mt-1 w-full" value={time} onChange={(e) => setTime(e.target.value)} />
+              <Input
+                type="time"
+                className="mt-1 w-full disabled:opacity-50"
+                value={status === "absent" ? "" : time}
+                onChange={(e) => setTime(e.target.value)}
+                disabled={status === "absent"}
+              />
+              {status === "absent" && (
+                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                  An absence has no arrival time, so none is recorded.
+                </p>
+              )}
             </div>
             <div>
               <Label>Status</Label>

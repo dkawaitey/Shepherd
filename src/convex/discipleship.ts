@@ -199,7 +199,8 @@ export const recordAttendance = mutation({
       type: args.type as any,
       programName: args.programName,
       status: args.status,
-      time: normalizeTime(args.time),
+      // An absence has no arrival time, so the mark is stored without one.
+      time: args.status === "absent" ? undefined : normalizeTime(args.time),
       remarks: args.remarks?.trim() || undefined,
       recordedBy: user.name,
       createdAt: Date.now(),
@@ -230,7 +231,9 @@ export const setAttendance = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
-    const time = normalizeTime(args.time);
+    // An absence carries no arrival time, so whatever was typed for "Time
+    // marked" is dropped rather than stored.
+    const time = args.status === "absent" ? undefined : normalizeTime(args.time);
     if (args.memberId && isScopedClassLeader(user)) {
       throw new ConvexError("Member attendance can only be recorded by administrators or coordinators");
     }
@@ -266,8 +269,9 @@ export const setAttendance = mutation({
         status: args.status,
         programName,
         // Keep the original mark time when no new one is supplied, so a status
-        // correction doesn't silently wipe the arrival time behind punctuality.
-        time: time ?? existing.time,
+        // correction doesn't silently wipe the arrival time behind punctuality —
+        // but an absence is stored with no time at all.
+        time: args.status === "absent" ? undefined : time ?? existing.time,
         remarks: args.remarks?.trim() || undefined,
         recordedBy,
       });
@@ -355,7 +359,14 @@ export const updateAttendance = mutation({
     if (args.type !== undefined) patch.type = args.type;
     if (args.programName !== undefined) patch.programName = args.programName?.trim() || undefined;
     if (args.status !== undefined) patch.status = args.status;
-    if (args.time !== undefined) patch.time = normalizeTime(args.time);
+    // The record's resulting status decides whether a time is kept: an absence
+    // has none, whether it was just marked or corrected into one.
+    const finalStatus = args.status ?? row.status;
+    if (finalStatus === "absent") {
+      patch.time = undefined;
+    } else if (args.time !== undefined) {
+      patch.time = normalizeTime(args.time);
+    }
     if (args.remarks !== undefined) patch.remarks = args.remarks?.trim() || undefined;
     if (args.recordedBy !== undefined) patch.recordedBy = args.recordedBy?.trim() || user.name;
     await ctx.db.patch(args.id, patch);
