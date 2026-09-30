@@ -474,6 +474,10 @@ type FeedPost = {
   viewCount: number;
   viewerCount: number;
   poll: FeedPoll | null;
+  /** Author opted into a manual "Remind" button on this post. */
+  allowReminder?: boolean;
+  /** Last time a reminder push was sent (drives the cooldown note). */
+  lastRemindedAt?: number;
 };
 
 type PollResultOption = {
@@ -924,6 +928,26 @@ function PostCard({
   // Closing the poll and announcing its result follow the same permission.
   const canManagePoll = canSeeDetails;
 
+  // A post reminder re-notifies everyone, so it is the author's to send and
+  // only when they opted into the button while composing.
+  const remind = useMutation(api.posts.remind);
+  const [reminding, setReminding] = useState(false);
+  const canRemind = isAuthor && !!post.allowReminder;
+  const sendReminder = async () => {
+    if (reminding) return;
+    setReminding(true);
+    try {
+      const res = await remind({ postId: post._id as any });
+      toast.success(
+        `Reminder sent to ${res.reminded} ${res.reminded === 1 ? "member" : "members"}`,
+      );
+    } catch (err) {
+      toast.error(formatError(err, "Could not send reminder"));
+    } finally {
+      setReminding(false);
+    }
+  };
+
   return (
     <article
       ref={ref}
@@ -951,6 +975,18 @@ function PostCard({
               <span className="flex items-center gap-1 rounded border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#fbbf24]">
                 <Pin className="h-2.5 w-2.5" /> pinned
               </span>
+            )}
+            {canRemind && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-primary"
+                title="Push a reminder to everyone about this post"
+                onClick={sendReminder}
+                disabled={reminding}
+              >
+                <Bell className="h-3.5 w-3.5" />
+              </Button>
             )}
             {canDelete && (
               <Button

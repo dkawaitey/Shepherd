@@ -190,3 +190,34 @@ export const logAudit = async (
 };
 
 export const nowIso = () => new Date().toISOString();
+
+/** A user account shape needed to resolve an assigned-worker name. */
+type WorkerCandidate = { _id: string; name?: string | null; memberId?: string | null };
+type MemberCandidate = { _id: string; fullName: string };
+
+/**
+ * Resolve an "assigned worker" name to a user account.
+ *
+ * The assigned-worker pickers store a class member's full name, which is not
+ * necessarily the account's own display name — so match the name to a member
+ * record first, then to the account linked to that member (`users.memberId`).
+ * Matching the account's own name is kept as a fallback for accounts named
+ * directly (the older free-text behaviour). Returns undefined when nothing
+ * matches, so callers can fall back to whoever scheduled the record.
+ */
+export const resolveWorkerUser = <U extends WorkerCandidate>(
+  assignedWorker: string | null | undefined,
+  users: U[],
+  members: MemberCandidate[],
+): U | undefined => {
+  const target = (assignedWorker ?? "").trim().toLowerCase();
+  if (!target) return undefined;
+  const member = members.find(
+    (m) => m.fullName.trim().toLowerCase() === target,
+  );
+  if (member) {
+    const linked = users.find((u) => u.memberId === member._id);
+    if (linked) return linked;
+  }
+  return users.find((u) => (u.name ?? "").trim().toLowerCase() === target);
+};

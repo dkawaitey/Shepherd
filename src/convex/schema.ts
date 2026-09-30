@@ -378,6 +378,12 @@ const schema = defineSchema(
       viewerCount: v.optional(v.number()),
       /** Set when this announcement carries a poll (see the polls table). */
       pollId: v.optional(v.id("polls")),
+      /** Author opted in to a manual "Remind" button on this post. */
+      allowReminder: v.optional(v.boolean()),
+      /** Last time a reminder push was sent for this post. */
+      lastRemindedAt: v.optional(v.number()),
+      /** How many reminder pushes have been sent for this post. */
+      reminderCount: v.optional(v.number()),
     })
       .index("createdAt", ["createdAt"])
       .index("by_pinned", ["isPinned", "createdAt"]),

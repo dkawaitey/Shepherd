@@ -624,8 +624,19 @@ function TimelineTab({
                           {ev.note && (
                             <p className="text-[11px] text-muted-foreground">{ev.note}</p>
                           )}
-                          {ev.worker && (
-                            <p className="text-[10px] text-muted-foreground/70">by {ev.worker}</p>
+                          {/* For "Met During Outreach" the useful detail is the
+                              class the contact was assigned to, not the member
+                              who happened to record the contact. */}
+                          {s === STAGES.REACHED ? (
+                            contact.klass && (
+                              <p className="text-[10px] text-muted-foreground/70">
+                                Class: {contact.klass}
+                              </p>
+                            )
+                          ) : (
+                            ev.worker && (
+                              <p className="text-[10px] text-muted-foreground/70">by {ev.worker}</p>
+                            )
                           )}
                         </div>
                       ))}

@@ -47,6 +47,9 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
 
   // Notification/broadcast — very strict
   "push.sendTestNotification": { maxRequests: 3, windowMs: 60_000 },
+  // A post reminder notifies every device at once; rare, on top of the
+  // per-post cooldown in posts.remind.
+  "post.remind": { maxRequests: 3, windowMs: 600_000 },
   // A poll result announces to every device at once, so keep it rare.
   "poll.announce": { maxRequests: 3, windowMs: 300_000 },
   "emails.sendNow": { maxRequests: 2, windowMs: 300_000 },

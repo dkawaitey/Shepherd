@@ -31,6 +31,7 @@ import {
 } from "@/components/voice-note";
 import {
   BarChart3,
+  BellRing,
   FileIcon,
   Paperclip,
   Plus,
@@ -81,6 +82,9 @@ export function PostComposerDialog({
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollMultiple, setPollMultiple] = useState(false);
+  // Adds a "Remind" button on the published post so the author can re-notify
+  // everyone later without writing a duplicate announcement.
+  const [allowReminder, setAllowReminder] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<PendingFile[]>([]);
@@ -119,6 +123,7 @@ export function PostComposerDialog({
     setPollQuestion("");
     setPollOptions(["", ""]);
     setPollMultiple(false);
+    setAllowReminder(false);
     setError(null);
   };
 
@@ -213,6 +218,7 @@ export function PostComposerDialog({
             .filter(Boolean)
             .slice(0, 5) || undefined,
         media: media.length > 0 ? media : undefined,
+        allowReminder: allowReminder || undefined,
         poll: pollOpen
           ? {
               question: pollQuestion.trim(),
@@ -351,6 +357,21 @@ export function PostComposerDialog({
             >
               <BarChart3 className="h-3.5 w-3.5" />
               Poll
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAllowReminder((v) => !v)}
+              title="Show a Remind button on this post so you can push a reminder later"
+              className={cn(
+                "flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors",
+                allowReminder
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary",
+              )}
+            >
+              <BellRing className="h-3.5 w-3.5" />
+              Remind later
             </button>
 
             <Input

@@ -8,7 +8,7 @@ import {
   STAGES,
   STAGE_ORDER,
 } from "./constants";
-import { getCurrentUser, userRoles } from "./helpers";
+import { getCurrentUser, resolveWorkerUser, userRoles } from "./helpers";
 import { attendanceSections, fmtShortDate } from "./emailHtml";
 import type {
   WorkerRecipient,
@@ -235,13 +235,22 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
   const workerMap = new Map<string, WorkerRecipient>();
   const skippedNames = new Set<string>();
   for (const f of [...overdue, ...scheduled]) {
+    // The per-follow-up "Send reminder" toggle (default on) lets the creator
+    // keep a follow-up off the reminder email entirely.
+    if (f.reminder === false) continue;
     const contact = contactById.get(f.contactId);
     if (!contact) continue;
     let worker = contact.assignedWorkerId ? userById.get(contact.assignedWorkerId) : undefined;
-    if (!worker?.email && f.assignedWorker) {
-      worker = people.find(
-        (u) => !!u.email && (u.name ?? "").toLowerCase() === f.assignedWorker!.toLowerCase(),
+    if (!worker || (!worker.email && !userPhone(worker))) {
+      // The picker stores a class member's full name; resolve it to the
+      // linked account so a name that differs from the account's display
+      // name still reaches the right worker.
+      const resolved = resolveWorkerUser(
+        f.assignedWorker ?? contact.assignedWorker,
+        people,
+        liveMembers,
       );
+      if (resolved && (resolved.email || userPhone(resolved))) worker = resolved;
     }
     // No worker assigned (or the free-text name matches no account) — fall back
     // to whoever scheduled the follow-up so the reminder still reaches a real

@@ -844,6 +844,11 @@ export const create = mutation({
       status: v.string(),
       uploadedAt: v.number(),
     }))),
+    /**
+     * When true the author can send a push reminder for this post later from
+     * a button on the post, without writing a new announcement.
+     */
+    allowReminder: v.optional(v.boolean()),
     /** Optional poll attached to this announcement. */
     poll: v.optional(
       v.object({
@@ -983,6 +988,7 @@ export const create = mutation({
       tags: args.tags,
       media: args.media,
       isPinned: false,
+      allowReminder: args.allowReminder ?? false,
       // Denormalized engagement counters start at zero.
       commentCount: 0,
       reactionCount: 0,
@@ -1069,6 +1075,90 @@ export const create = mutation({
     }
 
     return id;
+  },
+});
+
+/** Minimum gap between two reminders for the same post. */
+const REMINDER_COOLDOWN_MS = 30 * 60 * 1000;
+
+/**
+ * Send a push reminder for an existing post — for the author (or an admin),
+ * and only when the post was created with the "allow reminders" option on.
+ * This re-notifies everyone exactly like a new post, without creating a
+ * duplicate announcement. A cooldown keeps the button from spamming.
+ */
+export const remind = mutation({
+  args: { postId: v.id("posts") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.LEADER,
+      ROLES.CLASS_LEADER,
+    ]);
+    await checkRateLimit(ctx, "post.remind");
+
+    const post = await ctx.db.get(args.postId);
+    if (!post || post.isDeleted) throw new ConvexError("Post not found");
+    if (!post.allowReminder) {
+      throw new ConvexError("Reminders are not enabled for this post");
+    }
+    const isAuthor = post.authorId === user._id;
+    if (!isAuthor && !hasRole(user, ROLES.ADMIN)) {
+      throw new ConvexError("Only the author can send a reminder for this post");
+    }
+
+    const now = Date.now();
+    if (post.lastRemindedAt && now - post.lastRemindedAt < REMINDER_COOLDOWN_MS) {
+      const mins = Math.ceil(
+        (REMINDER_COOLDOWN_MS - (now - post.lastRemindedAt)) / 60000,
+      );
+      throw new ConvexError(`Please wait ${mins} more minute(s) before reminding again`);
+    }
+
+    const allUsers = await ctx.db.query("users").collect();
+    const recipientIds = allUsers
+      .filter((u) => !u.isAnonymous)
+      .map((u) => u._id);
+    if (recipientIds.length === 0) {
+      throw new ConvexError("There is nobody to remind yet");
+    }
+
+    const label =
+      post.title.trim() ||
+      (post.pollId ? "Poll" : post.body.trim() || "an update");
+    const jobId = await ctx.db.insert("notificationJobs", {
+      kind: "post",
+      // Unique per send so the cooldown, not the dedupe key, governs repeats.
+      dedupeKey: `post-reminder:${args.postId}:${now}`,
+      deliverAt: now,
+      status: "scheduled",
+      payload: {
+        title: "Reminder",
+        body: `${post.author ?? "Someone"}: ${label}`,
+        url: "/announcements",
+      },
+      recipientUserIds: recipientIds as any,
+      createdAt: now,
+    });
+    const sfId = await ctx.scheduler.runAfter(0, internal.pushNode.deliverJob, {
+      jobId,
+    });
+    await ctx.db.patch(jobId, { scheduledFunctionId: sfId });
+
+    await ctx.db.patch(args.postId, {
+      lastRemindedAt: now,
+      reminderCount: (post.reminderCount ?? 0) + 1,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "post.remind",
+      entityType: "posts",
+      entityId: args.postId,
+      details: label,
+    });
+
+    return { reminded: recipientIds.length, at: now };
   },
 });
 

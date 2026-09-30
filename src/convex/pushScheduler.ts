@@ -2,26 +2,40 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { resolveWorkerUser } from "./helpers";
 
-type UserRow = { _id: Id<"users">; name?: string | null; email?: string | null };
+type UserRow = {
+  _id: Id<"users">;
+  name?: string | null;
+  email?: string | null;
+  memberId?: Id<"members"> | null;
+};
+type MemberRow = { _id: Id<"members">; fullName: string };
 
 /**
  * Who should receive a follow-up reminder: the assigned worker when the name
  * resolves to a real account, plus whoever scheduled the follow-up. Sending to
- * both means a worker without a registered push device — or a free-text worker
- * name that matches no account — never silently swallows the reminder.
+ * both means a worker without a registered push device — or a worker name that
+ * matches no account — never silently swallows the reminder.
+ *
+ * The assigned-worker picker stores a class member's full name, so the name is
+ * resolved through the member record to its linked account (see
+ * `resolveWorkerUser`) rather than requiring an exact account-name match.
  */
 function followupRecipientIds(
   contact: { assignedWorkerId?: Id<"users"> | null; assignedWorker?: string | null },
   fu: { assignedWorker?: string | null; createdBy?: string | null },
   people: UserRow[],
+  members: MemberRow[],
   userById: Map<Id<"users">, UserRow>,
 ): Id<"users">[] {
   const ids: Id<"users">[] = [];
   let workerId = contact.assignedWorkerId ?? undefined;
-  if (!workerId && fu.assignedWorker) {
-    const worker = people.find(
-      (u) => !!u.email && (u.name ?? "").toLowerCase() === fu.assignedWorker!.toLowerCase(),
+  if (!workerId) {
+    const worker = resolveWorkerUser(
+      fu.assignedWorker ?? contact.assignedWorker,
+      people,
+      members,
     );
     if (worker) workerId = worker._id;
   }
@@ -91,13 +105,24 @@ export const dailyPushNotifications = internalMutation({
     // ─── 1. Follow-up reminders ───────────────────────────────────
     // Pending follow-ups due tomorrow → day-before reminder
     // Pending follow-ups due today → morning-of reminder
-    const pending = liveFollowups.filter((f) => f.status === "pending");
+    // The per-follow-up "Send reminder" toggle (default on) gates every
+    // follow-up alert, so unchecking it stops the reminders and the overdue
+    // nudge as well.
+    const pending = liveFollowups.filter(
+      (f) => f.status === "pending" && f.reminder !== false,
+    );
 
     for (const fu of pending) {
       const contact = contactById.get(fu.contactId);
       if (!contact) continue;
 
-      const recipientIds = followupRecipientIds(contact, fu, people, userById);
+      const recipientIds = followupRecipientIds(
+        contact,
+        fu,
+        people,
+        liveMembers,
+        userById,
+      );
       if (recipientIds.length === 0) continue;
 
       // Day-before reminder
@@ -140,7 +165,13 @@ export const dailyPushNotifications = internalMutation({
       const contact = contactById.get(fu.contactId);
       if (!contact) continue;
 
-      const recipientIds = followupRecipientIds(contact, fu, people, userById);
+      const recipientIds = followupRecipientIds(
+        contact,
+        fu,
+        people,
+        liveMembers,
+        userById,
+      );
       if (recipientIds.length === 0) continue;
 
       await ctx.runMutation(internal.notifications.scheduleNotification, {
@@ -234,9 +265,11 @@ export const dailyPushNotifications = internalMutation({
       if (!contact) continue;
 
       let workerId = contact.assignedWorkerId;
-      if (!workerId && contact.assignedWorker) {
-        const worker = people.find(
-          (u) => !!u.email && (u.name ?? "").toLowerCase() === contact.assignedWorker!.toLowerCase(),
+      if (!workerId) {
+        const worker = resolveWorkerUser(
+          contact.assignedWorker,
+          people,
+          liveMembers,
         );
         if (worker) workerId = worker._id;
       }

@@ -36,6 +36,7 @@ import {
   STAGE_LABELS,
 } from "@/convex/constants";
 import { EmptyState, PageHeader, StatusPill, ContactChannelActions, StagePill, Mark, downloadCsv, downloadPdf, canAddRecords, formatError, fmtDate } from "@/components/shared";
+import { WorkerPicker } from "@/components/worker-picker";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
 import {
@@ -422,6 +423,14 @@ export function ContactFormDialog({
 
   const field = (k: string) => form[k] ?? "";
 
+  // The follow-up worker should be a member of the class the contact is
+  // assigned to, so suggestions come from that class only.
+  const contactKlass = form.klass as string | undefined;
+  const classMembers = useQuery(
+    api.members.list,
+    contactKlass ? { klass: contactKlass } : "skip",
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
@@ -636,7 +645,20 @@ export function ContactFormDialog({
               </div>
               <div>
                 <Label htmlFor="c-worker">Follow-up worker</Label>
-                <Input id="c-worker" value={field("assignedWorker")} onChange={(e) => set("assignedWorker", e.target.value)} className="mt-1" placeholder="Brother Daniel" />
+                <div className="mt-1">
+                  <WorkerPicker
+                    value={field("assignedWorker")}
+                    onChange={(v) => set("assignedWorker", v)}
+                    members={classMembers ?? []}
+                    loading={classMembers === undefined}
+                    placeholder="Select a class member"
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {contactKlass
+                    ? `Members of ${contactKlass}'s class`
+                    : "Choose a class above to see its members"}
+                </p>
               </div>
               <div>
                 <Label htmlFor="c-mentor">Mentor</Label>
