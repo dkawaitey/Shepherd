@@ -239,13 +239,6 @@ export function ScheduleDialog({
 }) {
   const contacts = useQuery(api.contacts.list, {});
   const create = useMutation(api.followups.create);
-  // Assigned workers are suggested from the class the selected contact
-  // belongs to, so the name lines up with a real class member.
-  const selectedContact = (contacts ?? []).find((c) => c._id === form.contactId);
-  const classMembers = useQuery(
-    api.members.list,
-    selectedContact?.klass ? { klass: selectedContact.klass } : "skip",
-  );
   const [form, setForm] = useState<{
     contactId: string;
     type: string;
@@ -265,6 +258,15 @@ export function ScheduleDialog({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Assigned workers are suggested from the class the selected contact
+  // belongs to, so the name lines up with a real class member. Declared after
+  // `form` (its dependency) so the render never touches it in its dead zone.
+  const selectedContact = (contacts ?? []).find((c) => c._id === form.contactId);
+  const classMembers = useQuery(
+    api.members.list,
+    selectedContact?.klass ? { klass: selectedContact.klass } : "skip",
+  );
 
   useEffect(() => {
     if (open) {
