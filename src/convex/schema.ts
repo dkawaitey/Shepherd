@@ -397,6 +397,10 @@ const schema = defineSchema(
       sentAt: v.number(),
       recipientIds: v.array(v.id("users")),
       recipientNames: v.array(v.string()),
+      /** Optional extra note carried by the reminder push. */
+      note: v.optional(v.string()),
+      /** Short summary of who was targeted, e.g. "Everyone" / "Reuben class". */
+      audience: v.optional(v.string()),
     }).index("by_post", ["postId"]),
 
     comments: defineTable({

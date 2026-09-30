@@ -15,7 +15,13 @@ import {
   logAudit,
   requireRole,
 } from "./helpers";
-import { REACTION_KINDS, ROLES } from "./constants";
+import {
+  CLASS_OPTIONS,
+  REACTION_KINDS,
+  ROLE_LABELS,
+  ROLES,
+  type Role,
+} from "./constants";
 import { checkRateLimit } from "./rateLimit";
 import { notifyUsers } from "./inbox";
 import { validateCommentBody } from "./validate";
@@ -1080,15 +1086,29 @@ export const create = mutation({
 
 /** Minimum gap between two reminders for the same post. */
 const REMINDER_COOLDOWN_MS = 30 * 60 * 1000;
+/** Longest optional note carried by a reminder push. */
+const REMINDER_NOTE_MAX = 200;
 
 /**
  * Send a push reminder for an existing post — for the author (or an admin),
  * and only when the post was created with the "allow reminders" option on.
  * This re-notifies everyone exactly like a new post, without creating a
  * duplicate announcement. A cooldown keeps the button from spamming.
+ *
+ * Both extras are optional: a free-text `note` is appended to the push, and a
+ * `targetKlasses` / `targetRoles` filter can narrow the audience instead of
+ * reminding everyone.
  */
 export const remind = mutation({
-  args: { postId: v.id("posts") },
+  args: {
+    postId: v.id("posts"),
+    /** Optional extra line carried by the reminder push. */
+    note: v.optional(v.string()),
+    /** Optional: only remind accounts whose member is in these classes. */
+    targetKlasses: v.optional(v.array(v.string())),
+    /** Optional: only remind accounts holding any of these roles. */
+    targetRoles: v.optional(v.array(v.string())),
+  },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [
       ROLES.COORDINATOR,
@@ -1108,6 +1128,13 @@ export const remind = mutation({
       throw new ConvexError("Only the author can send a reminder for this post");
     }
 
+    const note = (args.note ?? "").trim();
+    if (note.length > REMINDER_NOTE_MAX) {
+      throw new ConvexError(
+        `A note must be ${REMINDER_NOTE_MAX} characters or fewer`,
+      );
+    }
+
     const now = Date.now();
     if (post.lastRemindedAt && now - post.lastRemindedAt < REMINDER_COOLDOWN_MS) {
       const mins = Math.ceil(
@@ -1117,14 +1144,48 @@ export const remind = mutation({
     }
 
     const allUsers = await ctx.db.query("users").collect();
-    const recipients = allUsers.filter((u) => !u.isAnonymous);
+    let recipients = allUsers.filter((u) => !u.isAnonymous);
+
+    // Targeting is optional: with neither filter, everyone is reminded. Only
+    // values the app actually knows about are honoured.
+    const klasses = (args.targetKlasses ?? []).filter((k) =>
+      CLASS_OPTIONS.includes(k as (typeof CLASS_OPTIONS)[number]),
+    );
+    const targetRoles = (args.targetRoles ?? []).filter((r) =>
+      (Object.values(ROLES) as string[]).includes(r),
+    );
+    if (klasses.length > 0) {
+      const members = await ctx.db.query("members").collect();
+      const memberById = new Map(members.map((m) => [m._id, m]));
+      const allowed = new Set(klasses);
+      recipients = recipients.filter((u) => {
+        const m = u.memberId ? memberById.get(u.memberId) : undefined;
+        return !!m?.klass && allowed.has(m.klass);
+      });
+    }
+    if (targetRoles.length > 0) {
+      const allowed = new Set(targetRoles);
+      recipients = recipients.filter((u) =>
+        (u.roles?.length ? u.roles : u.role ? [u.role] : []).some((r) =>
+          allowed.has(r),
+        ),
+      );
+    }
+
     const recipientIds = recipients.map((u) => u._id);
     const recipientNames = recipients.map(
       (u) => u.name ?? u.email ?? "Member",
     );
     if (recipientIds.length === 0) {
-      throw new ConvexError("There is nobody to remind yet");
+      throw new ConvexError("No one matches that audience");
     }
+
+    // A short summary of the audience, kept in the log.
+    const audience = klasses.length
+      ? `${klasses.join(", ")} class`
+      : targetRoles.length
+        ? targetRoles.map((r) => ROLE_LABELS[r as Role]).join(", ")
+        : "Everyone";
 
     const label =
       post.title.trim() ||
@@ -1137,7 +1198,9 @@ export const remind = mutation({
       status: "scheduled",
       payload: {
         title: "Reminder",
-        body: `${post.author ?? "Someone"}: ${label}`,
+        body: `${post.author ?? "Someone"}: ${label}${
+          note ? ` — ${note}` : ""
+        }`,
         url: "/announcements",
       },
       recipientUserIds: recipientIds as any,
@@ -1161,15 +1224,17 @@ export const remind = mutation({
       sentAt: now,
       recipientIds,
       recipientNames,
+      note: note || undefined,
+      audience,
     });
     await logAudit(ctx, {
       action: "post.remind",
       entityType: "posts",
       entityId: args.postId,
-      details: label,
+      details: audience === "Everyone" ? label : `${label} → ${audience}`,
     });
 
-    return { reminded: recipientIds.length, at: now };
+    return { reminded: recipientIds.length, at: now, audience };
   },
 });
 
@@ -1209,6 +1274,8 @@ export const reminderLog = query({
         sentAt: r.sentAt,
         recipientCount: r.recipientIds.length,
         recipientNames: r.recipientNames,
+        note: r.note ?? null,
+        audience: r.audience ?? "Everyone",
       })),
     };
   },

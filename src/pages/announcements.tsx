@@ -5,6 +5,8 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +27,7 @@ import {
   fmtDateTime,
   formatError,
 } from "@/components/shared";
-import { ROLES } from "@/convex/constants";
+import { CLASS_OPTIONS, ROLE_LABELS, ROLES } from "@/convex/constants";
 import { REACTION_PALETTE, reactionMeta } from "@/lib/reactions";
 import { canPublishPosts, userHasRole, userIsAdmin } from "@/components/shared";
 import { PollComposer } from "@/components/poll-composer";
@@ -923,6 +925,7 @@ function PostCard({
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const ref = useViewTracker(post._id, true);
   const isAuthor = !!meId && post.authorId === meId;
   const canDelete = isAdmin || isAuthor;
@@ -935,25 +938,9 @@ function PostCard({
   // The reminder log is for the author and leadership (see posts.reminderLog).
   const canSeeReminders = canSeeDetails || isClassLeader;
 
-  // A post reminder re-notifies everyone, so it is the author's to send and
+  // A post reminder re-notifies people, so it is the author's to send and
   // only when they opted into the button while composing.
-  const remind = useMutation(api.posts.remind);
-  const [reminding, setReminding] = useState(false);
   const canRemind = isAuthor && !!post.allowReminder;
-  const sendReminder = async () => {
-    if (reminding) return;
-    setReminding(true);
-    try {
-      const res = await remind({ postId: post._id as any });
-      toast.success(
-        `Reminder sent to ${res.reminded} ${res.reminded === 1 ? "member" : "members"}`,
-      );
-    } catch (err) {
-      toast.error(formatError(err, "Could not send reminder"));
-    } finally {
-      setReminding(false);
-    }
-  };
 
   return (
     <article
@@ -988,9 +975,8 @@ function PostCard({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-primary"
-                title="Push a reminder to everyone about this post"
-                onClick={sendReminder}
-                disabled={reminding}
+                title="Push a reminder about this post"
+                onClick={() => setComposeOpen(true)}
               >
                 <Bell className="h-3.5 w-3.5" />
               </Button>
@@ -1108,7 +1094,192 @@ function PostCard({
         open={reminderOpen}
         onOpenChange={setReminderOpen}
       />
+
+      <PostReminderComposerDialog
+        postId={post._id}
+        title={post.title.trim() || (post.poll ? "Poll" : "Announcement")}
+        open={composeOpen}
+        onOpenChange={setComposeOpen}
+      />
     </article>
+  );
+}
+
+/**
+ * Compose a reminder: an optional note carried by the push, and an optional
+ * audience (everyone by default, or a set of classes / roles).
+ */
+function PostReminderComposerDialog({
+  postId,
+  title,
+  open,
+  onOpenChange,
+}: {
+  postId: string;
+  title: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const remind = useMutation(api.posts.remind);
+  const [note, setNote] = useState("");
+  const [mode, setMode] = useState<"everyone" | "classes" | "roles">(
+    "everyone",
+  );
+  const [klasses, setKlasses] = useState<string[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setNote("");
+      setMode("everyone");
+      setKlasses([]);
+      setRoles([]);
+      setBusy(false);
+      setError(null);
+    }
+  }, [open]);
+
+  const toggle = (
+    list: string[],
+    setList: (v: string[]) => void,
+    value: string,
+  ) =>
+    setList(
+      list.includes(value) ? list.filter((v) => v !== value) : [...list, value],
+    );
+
+  const send = async () => {
+    if (busy) return;
+    if (mode === "classes" && klasses.length === 0) {
+      setError("Pick at least one class, or switch back to Everyone");
+      return;
+    }
+    if (mode === "roles" && roles.length === 0) {
+      setError("Pick at least one role, or switch back to Everyone");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await remind({
+        postId: postId as any,
+        note: note.trim() || undefined,
+        targetKlasses: mode === "classes" ? klasses : undefined,
+        targetRoles: mode === "roles" ? roles : undefined,
+      });
+      toast.success(
+        `Reminder sent to ${res.reminded} ${res.reminded === 1 ? "member" : "members"}`,
+      );
+      onOpenChange(false);
+    } catch (err) {
+      setError(formatError(err, "Could not send reminder"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chip = (active: boolean) =>
+    cn(
+      "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+      active
+        ? "border-primary/50 bg-primary/10 text-primary"
+        : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary",
+    );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">Send reminder</DialogTitle>
+          <DialogDescription className="truncate">{title}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="reminder-note">Note (optional)</Label>
+            <Textarea
+              id="reminder-note"
+              rows={2}
+              maxLength={200}
+              className="mt-1"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Please remember to bring your Bibles"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Send to</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ["everyone", "Everyone"],
+                  ["classes", "Classes"],
+                  ["roles", "Roles"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={chip(mode === value)}
+                  onClick={() => setMode(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {mode === "classes" && (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {CLASS_OPTIONS.map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={chip(klasses.includes(k))}
+                    onClick={() => toggle(klasses, setKlasses, k)}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {mode === "roles" && (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={chip(roles.includes(value))}
+                    onClick={() => toggle(roles, setRoles, value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {error && <p className="text-[11px] text-destructive">{error}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button type="button" onClick={send} disabled={busy}>
+            {busy ? "Sending…" : "Send reminder"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1162,7 +1333,13 @@ function PostReminderDialog({
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   Sent by {r.sentByName} to {r.recipientCount}{" "}
                   {r.recipientCount === 1 ? "member" : "members"}
+                  {r.audience && r.audience !== "Everyone" ? ` · ${r.audience}` : ""}
                 </p>
+                {r.note && (
+                  <p className="mt-1 rounded border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-foreground/80">
+                    {r.note}
+                  </p>
+                )}
                 {r.recipientNames.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {r.recipientNames.map((n, j) => (
