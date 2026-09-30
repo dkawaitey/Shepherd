@@ -25,6 +25,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   FOLLOWUP_STATUS,
   FOLLOWUP_TYPE_LABELS,
   FOLLOWUP_TYPES,
@@ -46,11 +59,14 @@ import {
   AlertTriangle,
   CalendarClock,
   CalendarPlus,
+  Check,
   CheckCircle2,
+  ChevronsUpDown,
   ClipboardCheck,
   ExternalLink,
   Hash,
   Lock,
+  Plus,
   Search,
   ShieldAlert,
   type LucideIcon,
@@ -226,6 +242,126 @@ export function StatusChangeDialog({
   );
 }
 
+// ============ Assigned-worker picker (class-scoped) ============
+// The assigned worker must be a member of the class the contact belongs to,
+// so we suggest names from that class instead of accepting free text. A name
+// can still be typed as a fallback for legacy records, but the member list is
+// the primary way to keep records resolvable for reminders.
+function WorkerPicker({
+  value,
+  onChange,
+  members,
+  loading,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  members: { _id: string; fullName: string; membershipId?: string }[];
+  loading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const q = query.toLowerCase().trim();
+  const filtered = q
+    ? members.filter((m) =>
+        [m.fullName, m.membershipId]
+          .filter(Boolean)
+          .some((f) => f!.toLowerCase().includes(q)),
+      )
+    : members;
+  const typedName = query.trim();
+  const exactMatch = members.some(
+    (m) => m.fullName.toLowerCase() === typedName.toLowerCase(),
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="mt-1 w-full justify-between font-normal"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>
+            {value || "Select a class member"}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+      >
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search class members..."
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            <CommandEmpty>
+              {loading ? "Loading members..." : "No members in this class."}
+            </CommandEmpty>
+            <CommandGroup>
+              {value && (
+                <CommandItem
+                  value="__clear"
+                  onSelect={() => {
+                    onChange("");
+                    setQuery("");
+                    setOpen(false);
+                  }}
+                >
+                  <XCircle className="mr-2 h-4 w-4 opacity-60" />
+                  Clear assignment
+                </CommandItem>
+              )}
+              {filtered.map((m) => (
+                <CommandItem
+                  key={m._id}
+                  value={m.fullName}
+                  onSelect={() => {
+                    onChange(m.fullName);
+                    setQuery("");
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4 shrink-0",
+                      value === m.fullName ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <span className="flex-1 truncate">{m.fullName}</span>
+                  {m.membershipId && (
+                    <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">
+                      {m.membershipId}
+                    </span>
+                  )}
+                </CommandItem>
+              ))}
+              {typedName && !exactMatch && (
+                <CommandItem
+                  value="__custom"
+                  onSelect={() => {
+                    onChange(typedName);
+                    setQuery("");
+                    setOpen(false);
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4 opacity-60" />
+                  Use “{typedName}”
+                </CommandItem>
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ============ Schedule dialog ============
 export function ScheduleDialog({
   open,
@@ -238,6 +374,13 @@ export function ScheduleDialog({
 }) {
   const contacts = useQuery(api.contacts.list, {});
   const create = useMutation(api.followups.create);
+  // Assigned workers are suggested from the class the selected contact
+  // belongs to, so the name lines up with a real class member.
+  const selectedContact = (contacts ?? []).find((c) => c._id === form.contactId);
+  const classMembers = useQuery(
+    api.members.list,
+    selectedContact?.klass ? { klass: selectedContact.klass } : "skip",
+  );
   const [form, setForm] = useState<{
     contactId: string;
     type: string;
@@ -323,7 +466,12 @@ export function ScheduleDialog({
         <form onSubmit={submit} className="space-y-3">
           <div>
             <Label htmlFor="fu-contact">Contact *</Label>
-            <Select value={form.contactId} onValueChange={(v) => setForm((f) => ({ ...f, contactId: v }))}>
+            <Select
+              value={form.contactId}
+              onValueChange={(v) =>
+                setForm((f) => ({ ...f, contactId: v, assignedWorker: "" }))
+              }
+            >
               <SelectTrigger id="fu-contact" className="mt-1 w-full">
                 <SelectValue placeholder="Select contact" />
               </SelectTrigger>
@@ -361,7 +509,17 @@ export function ScheduleDialog({
           </div>
           <div>
             <Label htmlFor="fu-worker">Assigned worker</Label>
-            <Input id="fu-worker" className="mt-1" value={form.assignedWorker} onChange={(e) => setForm((f) => ({ ...f, assignedWorker: e.target.value }))} placeholder="Brother Daniel" />
+            <WorkerPicker
+              value={form.assignedWorker}
+              onChange={(v) => setForm((f) => ({ ...f, assignedWorker: v }))}
+              members={classMembers ?? []}
+              loading={classMembers === undefined}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {selectedContact?.klass
+                ? `Members of ${selectedContact.klass}'s class`
+                : "Select a contact to see its class members"}
+            </p>
           </div>
           <div>
             <Label htmlFor="fu-notes">Notes</Label>
