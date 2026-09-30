@@ -36,16 +36,39 @@ const ALLOWED_MIME_TYPES = new Set([
   "audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/webm",
   // documents
   "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
 ]);
 
-// Fallback MIME mapping for browsers that send generic types
+// Fallback MIME mapping for browsers that send generic types (or none), used
+// when the reported type is not one we accept but the extension is known.
 const EXT_TO_MIME: Record<string, string> = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
   ".webp": "image/webp", ".avif": "image/avif",
   ".mp4": "video/mp4", ".webm": "video/webm",
   ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav",
   ".ogg": "audio/ogg", ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".txt": "text/plain",
 };
+
+/** The stored media type, ignoring any codec/charset parameters. */
+const baseMime = (mime: string) => mime.split(";")[0].trim().toLowerCase();
+
+/**
+ * The accepted MIME for an attachment: the reported type when we allow it,
+ * otherwise the type implied by the file extension. Returns undefined when
+ * neither is accepted.
+ */
+function acceptedMime(name: string, mimeType: string): string | undefined {
+  const base = baseMime(mimeType);
+  if (ALLOWED_MIME_TYPES.has(base)) return base;
+  const dot = name.lastIndexOf(".");
+  const ext = dot >= 0 ? name.slice(dot).toLowerCase() : "";
+  return EXT_TO_MIME[ext];
+}
 
 const MAX_FILE_SIZES: Record<string, number> = {
   image: 8 * 1024 * 1024,   // 8 MB
@@ -171,10 +194,14 @@ function classifyMime(mime: string): "image" | "video" | "audio" | "file" {
 }
 
 function validateMediaItem(m: { storageId: string; type: string; name: string; mimeType: string; size: number }) {
-  if (!ALLOWED_MIME_TYPES.has(m.mimeType)) {
-    throw new ConvexError(`Unsupported file type: ${m.mimeType} (${m.name})`);
+  // Browsers sometimes report a generic or blank type (e.g.
+  // "application/octet-stream"); accept the file when its extension is one we
+  // support. This is what lets the .doc/.docx/.txt the composer offers through.
+  const mime = acceptedMime(m.name, m.mimeType);
+  if (!mime) {
+    throw new ConvexError(`Unsupported file type: ${m.mimeType || "unknown"} (${m.name})`);
   }
-  const category = classifyMime(m.mimeType);
+  const category = classifyMime(mime);
   const maxSize = MAX_FILE_SIZES[category] ?? MAX_FILE_SIZES.file;
   if (m.size > maxSize) {
     const mb = (maxSize / 1024 / 1024).toFixed(0);
