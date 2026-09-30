@@ -22,7 +22,7 @@ type MemberRow = { _id: Id<"members">; fullName: string };
  * resolved through the member record to its linked account (see
  * `resolveWorkerUser`) rather than requiring an exact account-name match.
  */
-function followupRecipientIds(
+export function followupRecipientIds(
   contact: { assignedWorkerId?: Id<"users"> | null; assignedWorker?: string | null },
   fu: { assignedWorker?: string | null; createdBy?: string | null },
   people: UserRow[],
@@ -138,6 +138,9 @@ export const dailyPushNotifications = internalMutation({
             url: `/followups`,
           },
           recipientUserIds: recipientIds,
+          // Also lands on the in-app bell so the reminder survives a device
+          // that never registered (or dropped) its push subscription.
+          inApp: true,
         });
         scheduled++;
       }
@@ -154,6 +157,7 @@ export const dailyPushNotifications = internalMutation({
             url: `/followups`,
           },
           recipientUserIds: recipientIds,
+          inApp: true,
         });
         scheduled++;
       }
@@ -421,6 +425,9 @@ export const remindFollowup = internalMutation({
         url: "/followups",
       },
       recipientUserIds: recipientIds,
+      // Durable half: the bell always gets the reminder, whether or not a
+      // device is registered for it.
+      inApp: true,
     });
   },
 });

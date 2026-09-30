@@ -17,7 +17,8 @@ export const getDeliverableJob = internalQuery({
       { endpoint: string; p256dh: string; auth: string }
     >();
 
-    for (const userId of new Set(job.recipientUserIds)) {
+    const recipientUserIds = [...new Set(job.recipientUserIds)];
+    for (const userId of recipientUserIds) {
       const devices = await ctx.db
         .query("pushSubscriptions")
         .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -33,7 +34,11 @@ export const getDeliverableJob = internalQuery({
 
     return {
       payload: job.payload,
+      kind: job.kind,
       subscriptions: [...byEndpoint.values()],
+      // Reported back to the delivery log so a reminder that found no device
+      // is recorded as such rather than looking like a successful send.
+      recipientCount: recipientUserIds.length,
     };
   },
 });

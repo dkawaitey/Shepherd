@@ -3,7 +3,8 @@ import { ConvexError, v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, MutationCtx } from "./_generated/server";
-import { requireAdmin, getCurrentUser } from "./helpers";
+import { requireAdmin, getCurrentUser, normalizeDay } from "./helpers";
+import { followupRecipientIds } from "./pushScheduler";
 import { checkRateLimit } from "./rateLimit";
 
 /** Return the VAPID public key so the browser can subscribe. */
@@ -255,6 +256,85 @@ export const sendTestNotification = mutation({
   },
 });
 
+/**
+ * Send a real follow-up reminder immediately, using the same recipient
+ * resolution and delivery path the scheduler uses.
+ *
+ * This is the one check that separates "the reminder pipeline is broken" from
+ * "the reminder is scheduled but this device never registered". It picks the
+ * next pending follow-up that has reminders on, resolves its recipients, and
+ * pushes + bells them right away. Administrator only.
+ */
+export const sendTestFollowupReminder = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    await checkRateLimit(ctx, "push.sendTestFollowupReminder");
+
+    const users = await ctx.db.query("users").collect();
+    const people = users.filter((u) => !u.isAnonymous);
+    const members = (await ctx.db.query("members").collect()).filter(
+      (m) => !m.isDeleted,
+    );
+    const userById = new Map(people.map((u) => [u._id, u]));
+
+    const pending = (await ctx.db.query("followUps").collect())
+      .filter(
+        (f) => !f.isDeleted && f.status === "pending" && f.reminder !== false,
+      )
+      .sort((a, b) => normalizeDay(a.date).localeCompare(normalizeDay(b.date)));
+
+    if (pending.length === 0) {
+      throw new ConvexError(
+        'No pending follow-up has reminders turned on. Schedule one with "Send reminder" checked, then try again.',
+      );
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const fu =
+      pending.find((f) => normalizeDay(f.date) >= today) ??
+      pending[pending.length - 1];
+    const contact = await ctx.db.get(fu.contactId);
+    if (!contact) {
+      throw new ConvexError("That follow-up's contact no longer exists.");
+    }
+
+    const recipientIds = followupRecipientIds(
+      contact,
+      fu,
+      people,
+      members,
+      userById,
+    );
+    if (recipientIds.length === 0) {
+      throw new ConvexError(
+        "No recipient could be resolved for that follow-up. Assign a worker, or check that whoever scheduled it signed in with an account rather than a guest session.",
+      );
+    }
+
+    const now = Date.now();
+    await ctx.runMutation(internal.notifications.scheduleNotification, {
+      kind: "follow_up_reminder",
+      dedupeKey: `test-followup:${fu._id}:${now}`,
+      deliverAt: now,
+      payload: {
+        title: "Follow-up reminder (test)",
+        body: `${contact.fullName} — ${fu.type} follow-up on ${normalizeDay(fu.date)}`,
+        url: "/followups",
+      },
+      recipientUserIds: recipientIds,
+      inApp: true,
+    });
+
+    return {
+      recipients: recipientIds.length,
+      contact: contact.fullName,
+      date: normalizeDay(fu.date),
+      type: fu.type,
+    };
+  },
+});
+
 /** Remove dead subscriptions (404/410 from push service). Called internally only. */
 export const cleanupDeadSubscriptions = internalMutation({
   args: { endpoints: v.array(v.string()) },
@@ -311,6 +391,33 @@ export const deliveryDiagnostics = query({
       .order("desc")
       .take(5);
 
+    // Reminders specifically — the job list above is shared with posts, polls
+    // and test notifications, which could otherwise crowd them out.
+    const followupJobs = await ctx.db
+      .query("notificationJobs")
+      .filter((q) =>
+        q.or(
+          q.eq(q.field("kind"), "follow_up_reminder"),
+          q.eq(q.field("kind"), "missed_follow_up"),
+        ),
+      )
+      .order("desc")
+      .take(5);
+
+    /** Distinct devices registered for a set of recipients. A job whose
+     *  recipients have no devices was created but could never be delivered. */
+    const devicesFor = async (userIds: Id<"users">[]) => {
+      const endpoints = new Set<string>();
+      for (const userId of new Set(userIds)) {
+        const devices = await ctx.db
+          .query("pushSubscriptions")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .collect();
+        for (const d of devices) endpoints.add(d.endpoint);
+      }
+      return endpoints.size;
+    };
+
     // Check for recent post/comment/poll-result notification jobs.
     const postJobs = await ctx.db
       .query("notificationJobs")
@@ -329,6 +436,9 @@ export const deliveryDiagnostics = query({
       vapidPrivateKey: privateKey,
       vapidSubject: subject,
       totalSubscriptions: allSubscriptions.length,
+      // Devices registered vs. accounts that hold at least one. A reminder can
+      // only reach a device, never an account.
+      subscribedAccounts: new Set(allSubscriptions.map((s) => s.userId)).size,
       recentLogs: recentLogs.map((l) => ({
         endpoint: l.endpoint,
         success: l.success,
@@ -336,13 +446,27 @@ export const deliveryDiagnostics = query({
         statusCode: l.statusCode,
         createdAt: l.createdAt,
       })),
-      recentJobs: recentJobs.map((j) => ({
-        kind: j.kind,
-        status: j.status,
-        deliverAt: j.deliverAt,
-        recipients: j.recipientUserIds.length,
-        createdAt: j.createdAt,
-      })),
+      recentJobs: await Promise.all(
+        recentJobs.map(async (j) => ({
+          kind: j.kind,
+          status: j.status,
+          deliverAt: j.deliverAt,
+          recipients: j.recipientUserIds.length,
+          devices: await devicesFor(j.recipientUserIds),
+          createdAt: j.createdAt,
+        })),
+      ),
+      followupJobs: await Promise.all(
+        followupJobs.map(async (j) => ({
+          kind: j.kind,
+          title: j.payload.title,
+          status: j.status,
+          deliverAt: j.deliverAt,
+          recipients: j.recipientUserIds.length,
+          devices: await devicesFor(j.recipientUserIds),
+          createdAt: j.createdAt,
+        })),
+      ),
       postNotificationJobs: postJobs.map((j) => ({
         kind: j.kind,
         status: j.status,

@@ -38,7 +38,34 @@ export const deliverJob = internalAction({
       return;
     }
 
-    webpush.setVapidDetails(subject, publicKey, privateKey);
+    try {
+      webpush.setVapidDetails(subject, publicKey, privateKey);
+    } catch (error: any) {
+      // A malformed key or subject throws here, before any device is touched.
+      // Without this catch the action fails, nothing is logged anywhere and the
+      // job is left looking "scheduled" forever — which reads as "reminders
+      // silently don't fire".
+      await ctx.runMutation(internal.push.logDelivery, {
+        jobId,
+        endpoint: "config",
+        success: false,
+        error: `Invalid VAPID configuration: ${error?.message ?? String(error)}`,
+      });
+      console.warn("[push] VAPID configuration rejected by web-push");
+      return;
+    }
+
+    // No registered device: the push cannot be sent, but say so explicitly.
+    // Silently marking the job delivered is what made a missing device look
+    // identical to a working reminder.
+    if (job.subscriptions.length === 0) {
+      await ctx.runMutation(internal.push.logDelivery, {
+        jobId,
+        endpoint: "no-devices",
+        success: false,
+        error: `No push device registered for ${job.recipientCount} recipient(s)`,
+      });
+    }
 
     const dead: string[] = [];
     let sentCount = 0;

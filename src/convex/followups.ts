@@ -126,7 +126,11 @@ export const create = mutation({
     // Store the calendar day only — the client may send a full ISO timestamp,
     // and reminders compare this against a date-only string.
     const day = normalizeDay(args.date);
-    const reminder = args.reminder ?? false;
+    // Default ON, matching every read path (`reminder !== false`) and the
+    // "Send reminder" checkbox, which is checked when the dialog opens. This
+    // used to default to `false`, so any caller that left the flag out created
+    // a follow-up that no reminder path would ever pick up.
+    const reminder = args.reminder !== false;
     const id = await ctx.db.insert("followUps", {
       contactId: args.contactId,
       type: args.type as any,

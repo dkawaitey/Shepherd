@@ -142,6 +142,59 @@ export function usePushNotifications(enabled: boolean) {
     }
   }, []);
 
+  /**
+   * True when this browser subscription was created with a *different* VAPID
+   * key than the one the server advertises now.
+   *
+   * A subscription is bound to the `applicationServerKey` used to create it, so
+   * after the keys are regenerated every existing subscription is rejected by
+   * the push service (401/403) and the device stays silent forever — nothing in
+   * the app ever notices, because a subscription that exists is assumed to
+   * work. Returns null when the browser does not expose the key (Safari), so a
+   * possibly-good subscription is left alone.
+   */
+  const dropStaleSubscription = useCallback(
+    async (sub: PushSubscription, key: string): Promise<boolean> => {
+      let raw: ArrayBuffer | Uint8Array | null | undefined;
+      try {
+        raw = sub.options?.applicationServerKey as
+          | ArrayBuffer
+          | Uint8Array
+          | null
+          | undefined;
+      } catch {
+        return false;
+      }
+      if (!raw) return false;
+      const actual = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+      const expected = new Uint8Array(urlBase64ToUint8Array(key));
+      let stale = actual.length !== expected.length;
+      if (!stale) {
+        for (let i = 0; i < actual.length; i++) {
+          if (actual[i] !== expected[i]) {
+            stale = true;
+            break;
+          }
+        }
+      }
+      if (!stale) return false;
+
+      // Drop the browser copy only. The saved intent on the server is left
+      // alone on purpose — clearing it would switch the toggle off mid-repair.
+      // (The stale endpoint row is swept by the 404/410 cleanup on next send.)
+      try {
+        await sub.unsubscribe();
+      } catch {
+        /* best effort */
+      }
+      console.warn(
+        "[push] VAPID key changed — recreating this device's subscription",
+      );
+      return true;
+    },
+    [],
+  );
+
   /** Persist an existing browser subscription to the server. */
   const saveExisting = useCallback(async (sub: PushSubscription): Promise<EnableResult> => {
     const p256dh = sub.toJSON().keys?.p256dh;
@@ -163,7 +216,12 @@ export function usePushNotifications(enabled: boolean) {
   const subscribeNow = useCallback(async (key: string): Promise<EnableResult> => {
     const registration = await getRegistration();
     const existing = await registration.pushManager.getSubscription();
-    if (existing) return await saveExisting(existing);
+    if (existing) {
+      // A subscription made with an older key has to be recreated, not saved.
+      if (!(await dropStaleSubscription(existing, key))) {
+        return await saveExisting(existing);
+      }
+    }
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
@@ -171,7 +229,7 @@ export function usePushNotifications(enabled: boolean) {
     });
     await handKeyToServiceWorker(key);
     return await saveExisting(subscription);
-  }, [getRegistration, handKeyToServiceWorker, saveExisting]);
+  }, [getRegistration, handKeyToServiceWorker, saveExisting, dropStaleSubscription]);
 
   /**
    * Reconcile this device with the server-side intent:
@@ -188,7 +246,9 @@ export function usePushNotifications(enabled: boolean) {
     const registration = await getRegistration();
     const existing = await registration.pushManager.getSubscription();
 
-    if (existing) return await saveExisting(existing);
+    if (existing && !(await dropStaleSubscription(existing, key))) {
+      return await saveExisting(existing);
+    }
 
     setState((s) => ({ ...s, deviceSubscribed: false, subscription: null, permission: currentPermission() }));
 
@@ -199,7 +259,7 @@ export function usePushNotifications(enabled: boolean) {
     }
 
     return await subscribeNow(key);
-  }, [getRegistration, saveExisting, subscribeNow]);
+  }, [getRegistration, saveExisting, subscribeNow, dropStaleSubscription]);
 
   // Restore the device subscription whenever the app opens (or the user/session
   // changes). This is what stops the "it forgot I enabled it" reset.

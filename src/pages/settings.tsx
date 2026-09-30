@@ -895,7 +895,9 @@ function NotificationsTab() {
   const { subscribed, deviceReady, permission, loading, enable, disable } = usePushNotifications(!!me);
   const [actionError, setActionError] = useState("");
   const [testing, setTesting] = useState(false);
+  const [testingReminder, setTestingReminder] = useState(false);
   const sendTestNotif = useMutation(api.push.sendTestNotification);
+  const sendTestFollowup = useMutation(api.push.sendTestFollowupReminder);
 
   const supported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
   const inIframe = typeof window !== "undefined" && window.self !== window.top;
@@ -1026,6 +1028,42 @@ function NotificationsTab() {
             </div>
           )}
 
+          {/* An administrator can push a *real* follow-up reminder on demand.
+              This is the check that tells "the reminder pipeline is broken"
+              apart from "the reminder ran but this device was never
+              registered": it uses the same recipient resolution and the same
+              delivery path as the scheduler. */}
+          {isAdmin && (
+            <div className="flex items-center gap-2 border-b border-dashed pb-3">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={testingReminder}
+                onClick={async () => {
+                  setTestingReminder(true);
+                  setActionError("");
+                  try {
+                    const result = await sendTestFollowup();
+                    toast.success(
+                      `Reminder sent to ${result.recipients} recipient${result.recipients === 1 ? "" : "s"}`,
+                      { description: `${result.contact} · ${result.date}` },
+                    );
+                  } catch (err: any) {
+                    setActionError(formatError(err, "Could not send the reminder"));
+                  } finally {
+                    setTestingReminder(false);
+                  }
+                }}
+              >
+                <Bell className={cn("mr-1.5 h-3.5 w-3.5", testingReminder && "animate-pulse")} />
+                {testingReminder ? "Sending…" : "Send test follow-up reminder"}
+              </Button>
+              <span className="text-[10px] text-muted-foreground">
+                Delivers the next pending reminder now
+              </span>
+            </div>
+          )}
+
           {/* ── Diagnostics (admin only) ── */}
           {diag && (
             <div className="rounded-md border bg-muted/40 px-3 py-2.5 text-[10px] leading-4">
@@ -1046,6 +1084,17 @@ function NotificationsTab() {
                 <div>
                   <span className="text-muted-foreground">Registered devices: </span>
                   <span className="font-semibold">{diag.totalSubscriptions}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Accounts with a device: </span>
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      diag.subscribedAccounts > 0 ? "text-status-green" : "text-status-amber",
+                    )}
+                  >
+                    {diag.subscribedAccounts}
+                  </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Public key: </span>
@@ -1108,6 +1157,32 @@ function NotificationsTab() {
                           {j.kind}
                           <ArrowRight className="h-2.5 w-2.5" />
                           {j.recipients} recipient{j.recipients === 1 ? "" : "s"}
+                        </span>
+                        <span className="inline-flex shrink-0 items-center gap-1.5">
+                          {j.devices === 0 && (
+                            <span className="font-semibold text-destructive">
+                              no device
+                            </span>
+                          )}
+                          <span className={cn("text-[9px] font-semibold", j.status === "delivered" ? "text-status-green" : j.status === "cancelled" ? "text-muted-foreground" : "text-status-amber")}>
+                            {j.status}
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {diag.followupJobs && diag.followupJobs.length > 0 && (
+                <div className="mt-2">
+                  <div className="mb-1 font-semibold">Follow-up reminders</div>
+                  <div className="divide-y rounded border bg-background">
+                    {diag.followupJobs.map((j, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 px-2 py-1">
+                        <span className="min-w-0 truncate text-[9px] text-muted-foreground">
+                          {j.title} · {j.recipients} recipient{j.recipients === 1 ? "" : "s"} →{" "}
+                          {j.devices} device{j.devices === 1 ? "" : "s"}
                         </span>
                         <span className={cn("shrink-0 text-[9px] font-semibold", j.status === "delivered" ? "text-status-green" : j.status === "cancelled" ? "text-muted-foreground" : "text-status-amber")}>
                           {j.status}

@@ -47,6 +47,8 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
 
   // Notification/broadcast — very strict
   "push.sendTestNotification": { maxRequests: 3, windowMs: 60_000 },
+  // Real reminder delivery, used to verify the follow-up reminder pipeline.
+  "push.sendTestFollowupReminder": { maxRequests: 3, windowMs: 60_000 },
   // A post reminder notifies every device at once; rare, on top of the
   // per-post cooldown in posts.remind.
   "post.remind": { maxRequests: 3, windowMs: 600_000 },
