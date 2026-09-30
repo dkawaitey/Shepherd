@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { normalizeDay, resolveWorkerUser } from "./helpers";
 
@@ -291,5 +291,136 @@ export const dailyPushNotifications = internalMutation({
     }
 
     return { scheduled };
+  },
+});
+
+// ─── Directly-scheduled follow-up reminders ──────────────────────────────
+//
+// The daily cron above is a safety net: it only fires a reminder when it
+// happens to run on the exact due day, at 06:30 UTC. Scheduling a follow-up
+// usually happens after that (or days ahead), so in practice no reminder ever
+// went out. Instead, schedule each follow-up's reminders the moment it is
+// created (see `scheduleFollowupReminders`). Both paths share the same dedupe
+// keys, so if they ever overlap only one notification is sent.
+
+/** The hour (UTC) at which reminders are delivered. */
+const REMINDER_HOUR_UTC = 6;
+const REMINDER_MINUTE_UTC = 30;
+
+/** Epoch ms of the reminder hour (UTC) on a `YYYY-MM-DD` day. */
+function reminderTimeUtc(day: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return null;
+  return Date.UTC(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    REMINDER_HOUR_UTC,
+    REMINDER_MINUTE_UTC,
+  );
+}
+
+/** The UTC day `n` days from now, as `YYYY-MM-DD`. */
+const utcDay = (n = 0) =>
+  new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+
+/**
+ * Schedule a follow-up's day-before and morning-of reminders.
+ *
+ * - Day-before fires at 06:30 UTC the previous day when that is still ahead.
+ * - Morning-of fires at 06:30 UTC on the due day; if the follow-up is created
+ *   for *today* after that hour, it fires immediately instead, so scheduling
+ *   always produces a reminder.
+ *
+ * Called on create/update; each scheduled run re-checks the follow-up so an
+ * edit, completion or deletion simply makes it a no-op.
+ */
+export async function scheduleFollowupReminders(
+  ctx: MutationCtx,
+  followupId: Id<"followUps">,
+  date: string,
+) {
+  const day = normalizeDay(date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+
+  const now = Date.now();
+  const plan: { when: "day-before" | "morning"; at: number }[] = [];
+
+  // The reminder hour on the follow-up day; the day-before reminder is that
+  // instant minus a day.
+  const followupMs = reminderTimeUtc(day);
+  if (followupMs !== null) {
+    const dayBefore = followupMs - 86400000;
+    if (dayBefore > now) plan.push({ when: "day-before", at: dayBefore });
+    if (followupMs > now) {
+      plan.push({ when: "morning", at: followupMs });
+    } else if (day === utcDay(0)) {
+      // The follow-up is today and the reminder hour already passed — send now.
+      plan.push({ when: "morning", at: now });
+    }
+  }
+
+  for (const p of plan) {
+    await ctx.scheduler.runAfter(
+      Math.max(0, p.at - now),
+      internal.pushScheduler.remindFollowup,
+      { followupId, when: p.when },
+    );
+  }
+}
+
+/**
+ * Deliver one follow-up reminder, re-checking the follow-up first so a record
+ * that was completed, cancelled, deleted, edited to another day, or had its
+ * reminder switched off since scheduling sends nothing.
+ */
+export const remindFollowup = internalMutation({
+  args: {
+    followupId: v.id("followUps"),
+    when: v.union(v.literal("day-before"), v.literal("morning")),
+  },
+  handler: async (ctx, { followupId, when }) => {
+    const fu = await ctx.db.get(followupId);
+    if (!fu || fu.isDeleted || fu.status !== "pending" || fu.reminder === false) {
+      return;
+    }
+    // The follow-up must still fall on the day this reminder is for.
+    const day = normalizeDay(fu.date);
+    const expected = when === "morning" ? utcDay(0) : utcDay(1);
+    if (day !== expected) return;
+
+    const contact = await ctx.db.get(fu.contactId);
+    if (!contact) return;
+
+    const people = (await ctx.db.query("users").collect()).filter(
+      (u) => !u.isAnonymous,
+    );
+    const members = (await ctx.db.query("members").collect()).filter(
+      (m) => !m.isDeleted,
+    );
+    const userById = new Map(people.map((u) => [u._id, u]));
+    const recipientIds = followupRecipientIds(
+      contact,
+      fu,
+      people,
+      members,
+      userById,
+    );
+    if (recipientIds.length === 0) return;
+
+    const isDayBefore = when === "day-before";
+    await ctx.runMutation(internal.notifications.scheduleNotification, {
+      kind: "follow_up_reminder",
+      dedupeKey: `follow-up:${fu._id}:${when}`,
+      deliverAt: Date.now(),
+      payload: {
+        title: isDayBefore ? "Follow-up Tomorrow" : "Follow-up Today",
+        body: isDayBefore
+          ? `Reminder: ${contact.fullName} — ${fu.type} follow-up is tomorrow`
+          : `Today: ${contact.fullName} — ${fu.type} follow-up is scheduled`,
+        url: "/followups",
+      },
+      recipientUserIds: recipientIds,
+    });
   },
 });

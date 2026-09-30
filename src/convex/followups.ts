@@ -21,6 +21,7 @@ import {
   type CurrentUser,
 } from "./helpers";
 import { checkRateLimit } from "./rateLimit";
+import { scheduleFollowupReminders } from "./pushScheduler";
 
 /**
  * Only the account that scheduled a follow-up may edit or close it; an
@@ -122,22 +123,29 @@ export const create = mutation({
     if (!FOLLOWUP_TYPE_LABELS[args.type]) throw new ConvexError("Invalid follow-up type");
     if (args.time && !TIME_RE.test(args.time)) throw new ConvexError("Invalid time");
 
+    // Store the calendar day only — the client may send a full ISO timestamp,
+    // and reminders compare this against a date-only string.
+    const day = normalizeDay(args.date);
+    const reminder = args.reminder ?? false;
     const id = await ctx.db.insert("followUps", {
       contactId: args.contactId,
       type: args.type as any,
-      // Store the calendar day only — the client may send a full ISO timestamp,
-      // and reminders compare this against a date-only string.
-      date: normalizeDay(args.date),
+      date: day,
       time: args.time,
       assignedWorker: args.assignedWorker,
       createdBy: user._id,
       notes: args.notes,
-      reminder: args.reminder ?? false,
+      reminder,
       status: FOLLOWUP_STATUS.PENDING,
       locked: false,
 
       createdAt: Date.now(),
     });
+    // Schedule the reminder pushes now, rather than waiting for the daily cron
+    // to land on the exact due day.
+    if (reminder) {
+      await scheduleFollowupReminders(ctx, id, day);
+    }
     await logAudit(ctx, {
       action: "followup.create",
       entityType: "followUps",
@@ -200,6 +208,14 @@ export const update = mutation({
     if (args.notes !== undefined) patch.notes = args.notes;
     if (args.reminder !== undefined) patch.reminder = args.reminder;
     await ctx.db.patch(args.id, patch);
+    // Re-time the reminders when the date or the reminder toggle changed.
+    if (args.date !== undefined || args.reminder !== undefined) {
+      const nextDay = (patch.date as string | undefined) ?? f.date;
+      const nextReminder = (patch.reminder as boolean | undefined) ?? f.reminder;
+      if (nextReminder !== false) {
+        await scheduleFollowupReminders(ctx, args.id, nextDay);
+      }
+    }
     await logAudit(ctx, {
       action: "followup.update",
       entityType: "followUps",
