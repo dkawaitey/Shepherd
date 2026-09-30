@@ -573,7 +573,10 @@ function TimelineTab({
           {STAGE_ORDER.map((s, i) => {
             const Icon = STAGE_ICONS[s];
             const reached = i <= currentIdx;
-            const event = journeyEvents.filter((e) => e.stage === s)[journeyEvents.filter((e) => e.stage === s).length - 1];
+            // Every event filed under this stage, oldest first, so a later
+            // follow-up shows up with its own label instead of hiding the
+            // milestone that actually reached the stage.
+            const stageEvents = journeyEvents.filter((e) => e.stage === s);
             return (
               <div key={s} className="relative flex gap-3 pb-4">
                 {i < STAGE_ORDER.length - 1 && (
@@ -598,12 +601,36 @@ function TimelineTab({
                       {reached && <Mark glyph="done" />}
                       {STAGE_LABELS[s]}
                     </span>
-                    {event && (
-                      <span className="text-[10px] text-muted-foreground">{fmtDate(event.date)}</span>
+                    {stageEvents.length === 1 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {fmtDate(stageEvents[0].date)}
+                      </span>
                     )}
                   </div>
-                  {event?.note && <p className="text-[11px] text-muted-foreground">{event.note}</p>}
-                  {event?.worker && <p className="text-[10px] text-muted-foreground/70">by {event.worker}</p>}
+                  {stageEvents.length > 0 && (
+                    <div className="mt-0.5 space-y-1.5">
+                      {stageEvents.map((ev: any) => (
+                        <div key={ev._id}>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {ev.label !== STAGE_LABELS[s] && (
+                              <span className="text-[12px] font-medium text-foreground">
+                                {ev.label}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted-foreground">
+                              {fmtDate(ev.date)}
+                            </span>
+                          </div>
+                          {ev.note && (
+                            <p className="text-[11px] text-muted-foreground">{ev.note}</p>
+                          )}
+                          {ev.worker && (
+                            <p className="text-[10px] text-muted-foreground/70">by {ev.worker}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );

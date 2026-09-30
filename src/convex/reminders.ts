@@ -243,6 +243,13 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
         (u) => !!u.email && (u.name ?? "").toLowerCase() === f.assignedWorker!.toLowerCase(),
       );
     }
+    // No worker assigned (or the free-text name matches no account) — fall back
+    // to whoever scheduled the follow-up so the reminder still reaches a real
+    // account instead of being skipped entirely.
+    if ((!worker || (!worker.email && !userPhone(worker))) && f.createdBy) {
+      const creator = userById.get(f.createdBy as any);
+      if (creator && (creator.email || userPhone(creator))) worker = creator;
+    }
     if (!worker || (!worker.email && !userPhone(worker))) {
       skippedNames.add(f.assignedWorker || "unassigned");
       continue;

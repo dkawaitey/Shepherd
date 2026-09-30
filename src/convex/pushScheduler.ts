@@ -1,6 +1,37 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
+
+type UserRow = { _id: Id<"users">; name?: string | null; email?: string | null };
+
+/**
+ * Who should receive a follow-up reminder: the assigned worker when the name
+ * resolves to a real account, plus whoever scheduled the follow-up. Sending to
+ * both means a worker without a registered push device — or a free-text worker
+ * name that matches no account — never silently swallows the reminder.
+ */
+function followupRecipientIds(
+  contact: { assignedWorkerId?: Id<"users"> | null; assignedWorker?: string | null },
+  fu: { assignedWorker?: string | null; createdBy?: string | null },
+  people: UserRow[],
+  userById: Map<Id<"users">, UserRow>,
+): Id<"users">[] {
+  const ids: Id<"users">[] = [];
+  let workerId = contact.assignedWorkerId ?? undefined;
+  if (!workerId && fu.assignedWorker) {
+    const worker = people.find(
+      (u) => !!u.email && (u.name ?? "").toLowerCase() === fu.assignedWorker!.toLowerCase(),
+    );
+    if (worker) workerId = worker._id;
+  }
+  if (workerId) ids.push(workerId);
+  if (fu.createdBy && fu.createdBy !== workerId) {
+    const creator = userById.get(fu.createdBy as Id<"users">);
+    if (creator) ids.push(creator._id);
+  }
+  return ids;
+}
 
 const localDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -66,15 +97,8 @@ export const dailyPushNotifications = internalMutation({
       const contact = contactById.get(fu.contactId);
       if (!contact) continue;
 
-      // Find the assigned worker
-      let workerId = contact.assignedWorkerId;
-      if (!workerId && fu.assignedWorker) {
-        const worker = people.find(
-          (u) => !!u.email && (u.name ?? "").toLowerCase() === fu.assignedWorker!.toLowerCase(),
-        );
-        if (worker) workerId = worker._id;
-      }
-      if (!workerId) continue;
+      const recipientIds = followupRecipientIds(contact, fu, people, userById);
+      if (recipientIds.length === 0) continue;
 
       // Day-before reminder
       if (fu.date === tomorrow) {
@@ -87,7 +111,7 @@ export const dailyPushNotifications = internalMutation({
             body: `Reminder: ${contact.fullName} — ${fu.type} follow-up is tomorrow`,
             url: `/followups`,
           },
-          recipientUserIds: [workerId],
+          recipientUserIds: recipientIds,
         });
         scheduled++;
       }
@@ -103,7 +127,7 @@ export const dailyPushNotifications = internalMutation({
             body: `Today: ${contact.fullName} — ${fu.type} follow-up is scheduled`,
             url: `/followups`,
           },
-          recipientUserIds: [workerId],
+          recipientUserIds: recipientIds,
         });
         scheduled++;
       }
@@ -116,14 +140,8 @@ export const dailyPushNotifications = internalMutation({
       const contact = contactById.get(fu.contactId);
       if (!contact) continue;
 
-      let workerId = contact.assignedWorkerId;
-      if (!workerId && fu.assignedWorker) {
-        const worker = people.find(
-          (u) => !!u.email && (u.name ?? "").toLowerCase() === fu.assignedWorker!.toLowerCase(),
-        );
-        if (worker) workerId = worker._id;
-      }
-      if (!workerId) continue;
+      const recipientIds = followupRecipientIds(contact, fu, people, userById);
+      if (recipientIds.length === 0) continue;
 
       await ctx.runMutation(internal.notifications.scheduleNotification, {
         kind: "missed_follow_up",
@@ -134,7 +152,7 @@ export const dailyPushNotifications = internalMutation({
           body: `Overdue: ${contact.fullName} — was due ${fu.date}`,
           url: `/followups`,
         },
-        recipientUserIds: [workerId],
+        recipientUserIds: recipientIds,
       });
       scheduled++;
     }

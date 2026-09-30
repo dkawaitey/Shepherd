@@ -85,6 +85,9 @@ export function StatusChangeDialog({
       setReasonMissed("");
       setReasonCancelled("");
       setError(null);
+      // Reset the busy flag too — the dialog stays mounted between opens, so a
+      // previous save would otherwise leave the button stuck on "Saving...".
+      setBusy(false);
     }
   }, [open, followup]);
 
