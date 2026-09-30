@@ -1117,9 +1117,11 @@ export const remind = mutation({
     }
 
     const allUsers = await ctx.db.query("users").collect();
-    const recipientIds = allUsers
-      .filter((u) => !u.isAnonymous)
-      .map((u) => u._id);
+    const recipients = allUsers.filter((u) => !u.isAnonymous);
+    const recipientIds = recipients.map((u) => u._id);
+    const recipientNames = recipients.map(
+      (u) => u.name ?? u.email ?? "Member",
+    );
     if (recipientIds.length === 0) {
       throw new ConvexError("There is nobody to remind yet");
     }
@@ -1151,6 +1153,15 @@ export const remind = mutation({
       reminderCount: (post.reminderCount ?? 0) + 1,
       updatedAt: now,
     });
+    // Keep a log so leadership can see who was notified and when.
+    await ctx.db.insert("postReminders", {
+      postId: args.postId,
+      sentById: user._id as Id<"users">,
+      sentByName: user.name ?? user.email ?? undefined,
+      sentAt: now,
+      recipientIds,
+      recipientNames,
+    });
     await logAudit(ctx, {
       action: "post.remind",
       entityType: "posts",
@@ -1159,6 +1170,47 @@ export const remind = mutation({
     });
 
     return { reminded: recipientIds.length, at: now };
+  },
+});
+
+/**
+ * Who received the manual reminders for a post, and when.
+ *
+ * Visible to the post's author and to leadership — administrators,
+ * coordinators and class leaders. Returns null for anyone else.
+ */
+export const reminderLog = query({
+  args: { postId: v.id("posts") },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) return null;
+    const post = await ctx.db.get(args.postId);
+    if (!post) return null;
+    const isAuthor = !!post.authorId && post.authorId === user._id;
+    const allowed =
+      isAuthor ||
+      hasRole(user, ROLES.ADMIN) ||
+      hasRole(user, ROLES.COORDINATOR) ||
+      hasRole(user, ROLES.CLASS_LEADER);
+    if (!allowed) return null;
+
+    const rows = await ctx.db
+      .query("postReminders")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .collect();
+    rows.sort((a, b) => b.sentAt - a.sentAt);
+    return {
+      postId: args.postId,
+      title: post.title.trim() || (post.pollId ? "Poll" : "Announcement"),
+      count: rows.length,
+      reminders: rows.map((r) => ({
+        _id: r._id,
+        sentByName: r.sentByName ?? "Someone",
+        sentAt: r.sentAt,
+        recipientCount: r.recipientIds.length,
+        recipientNames: r.recipientNames,
+      })),
+    };
   },
 });
 

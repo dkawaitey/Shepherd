@@ -114,6 +114,7 @@ export default function Announcements() {
   // "test as", exactly like the server's hasRole).
   const isAdmin = userIsAdmin(me);
   const isCoordinator = userHasRole(me, ROLES.COORDINATOR);
+  const isClassLeader = userHasRole(me, ROLES.CLASS_LEADER);
   // Publishing is leadership-only on the server (`posts.create`); members still
   // read, react, comment and vote.
   const canPublish = canPublishPosts(me);
@@ -196,6 +197,7 @@ export default function Announcements() {
               meId={me?._id}
               isAdmin={isAdmin}
               isCoordinator={isCoordinator}
+              isClassLeader={isClassLeader}
               isOpen={expanded === p._id}
               onToggle={() => setExpanded(expanded === p._id ? null : p._id)}
               onRemove={async () => {
@@ -905,6 +907,7 @@ function PostCard({
   meId,
   isAdmin,
   isCoordinator,
+  isClassLeader,
   isOpen,
   onToggle,
   onRemove,
@@ -913,11 +916,13 @@ function PostCard({
   meId?: string;
   isAdmin: boolean;
   isCoordinator: boolean;
+  isClassLeader: boolean;
   isOpen: boolean;
   onToggle: () => void;
   onRemove: () => Promise<void>;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
   const ref = useViewTracker(post._id, true);
   const isAuthor = !!meId && post.authorId === meId;
   const canDelete = isAdmin || isAuthor;
@@ -927,6 +932,8 @@ function PostCard({
   const canSeeDetails = isAdmin || isCoordinator || isAuthor;
   // Closing the poll and announcing its result follow the same permission.
   const canManagePoll = canSeeDetails;
+  // The reminder log is for the author and leadership (see posts.reminderLog).
+  const canSeeReminders = canSeeDetails || isClassLeader;
 
   // A post reminder re-notifies everyone, so it is the author's to send and
   // only when they opted into the button while composing.
@@ -1050,6 +1057,18 @@ function PostCard({
             <span className="text-muted-foreground/50">{isOpen ? "−" : "+"}</span>
           </button>
 
+          {/* Who was reminded — visible to the author and leadership. */}
+          {post.lastRemindedAt && canSeeReminders && (
+            <button
+              onClick={() => setReminderOpen(true)}
+              title="See who was reminded about this post, and when"
+              className="flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-primary"
+            >
+              <Bell className="h-3 w-3" />
+              Reminded {timeAgo(post.lastRemindedAt)}
+            </button>
+          )}
+
           {/* View count. Tapping the eye opens the engagement details, which
               administrators, coordinators and the author may see — everyone
               else just gets the number. */}
@@ -1082,7 +1101,86 @@ function PostCard({
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
       />
+
+      <PostReminderDialog
+        postId={post._id}
+        title={post.title.trim() || (post.poll ? "Poll" : "Announcement")}
+        open={reminderOpen}
+        onOpenChange={setReminderOpen}
+      />
     </article>
+  );
+}
+
+/**
+ * Reminder history for one post — who was notified and when. The server
+ * (posts.reminderLog) returns nothing unless the viewer is the author or holds
+ * a leadership role, so this dialog is safe to render from the card.
+ */
+function PostReminderDialog({
+  postId,
+  title,
+  open,
+  onOpenChange,
+}: {
+  postId: string;
+  title: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const log = useQuery(
+    api.posts.reminderLog,
+    open ? { postId: postId as any } : "skip",
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[80vh] max-w-md overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-base">Reminders</DialogTitle>
+          <DialogDescription className="truncate">{title}</DialogDescription>
+        </DialogHeader>
+
+        {log === undefined ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">Loading…</p>
+        ) : !log || log.reminders.length === 0 ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">
+            No reminders have been sent for this post yet.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {log.reminders.map((r, i) => (
+              <div key={r._id} className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-semibold">
+                    {i === 0 ? "Last reminder" : "Reminder"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {fmtDateTime(new Date(r.sentAt).toISOString())}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Sent by {r.sentByName} to {r.recipientCount}{" "}
+                  {r.recipientCount === 1 ? "member" : "members"}
+                </p>
+                {r.recipientNames.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {r.recipientNames.map((n, j) => (
+                      <span
+                        key={`${n}-${j}`}
+                        className="rounded border border-border bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                      >
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

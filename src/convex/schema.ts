@@ -388,6 +388,17 @@ const schema = defineSchema(
       .index("createdAt", ["createdAt"])
       .index("by_pinned", ["isPinned", "createdAt"]),
 
+    // One row per manual post reminder, so leadership can see who was notified
+    // and when (names are denormalized so the log reads without joins).
+    postReminders: defineTable({
+      postId: v.id("posts"),
+      sentById: v.optional(v.id("users")),
+      sentByName: v.optional(v.string()),
+      sentAt: v.number(),
+      recipientIds: v.array(v.id("users")),
+      recipientNames: v.array(v.string()),
+    }).index("by_post", ["postId"]),
+
     comments: defineTable({
       postId: v.id("posts"),
       parentId: v.optional(v.id("comments")), // set when this is a reply to a comment
