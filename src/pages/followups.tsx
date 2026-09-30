@@ -291,7 +291,10 @@ export function ScheduleDialog({
     const payload = {
       contactId: form.contactId as any,
       type: form.type,
-      date: new Date(form.date).toISOString(),
+      // Send the calendar day as-is. Wrapping it in `toISOString()` adds a time
+      // (…T00:00:00.000Z) that used to stop the reminder from ever matching a
+      // date-only "today"/"tomorrow".
+      date: form.date,
       time: form.time || undefined,
       assignedWorker: form.assignedWorker || undefined,
       notes: form.notes || undefined,

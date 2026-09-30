@@ -5,7 +5,12 @@ import {
   STAGE_ORDER,
   STAGE_LABELS,
 } from "./constants";
-import { getCurrentUser, classScoped, canReadMinistry } from "./helpers";
+import {
+  getCurrentUser,
+  classScoped,
+  canReadMinistry,
+  normalizeDay,
+} from "./helpers";
 
 /** All journey timeline events (for milestone checkmarks on contact cards). */
 export const journeyEventsAll = query({
@@ -82,7 +87,9 @@ export const stats = query({
       live.filter((c) => STAGE_ORDER.indexOf((c.status ?? STAGES.REACHED) as any) >= STAGE_ORDER.indexOf(stage as any)).length;
 
     const pending = liveFollowups.filter((f) => f.status === FOLLOWUP_STATUS.PENDING);
-    const upcomingThisWeek = pending.filter((f) => f.date >= today && f.date <= weekEnd);
+    const upcomingThisWeek = pending.filter(
+      (f) => normalizeDay(f.date) >= today && normalizeDay(f.date) <= weekEnd,
+    );
 
     // Funnel: cumulative count at-or-beyond each stage
     const funnelStages = [
@@ -107,8 +114,8 @@ export const stats = query({
     // Upcoming follow-ups joined with contact names
     const contactMap = new Map(live.map((c) => [c._id, c]));
     const upcomingFollowups = pending
-      .filter((f) => f.date >= today)
-      .sort((a, b) => a.date.localeCompare(b.date))
+      .filter((f) => normalizeDay(f.date) >= today)
+      .sort((a, b) => normalizeDay(a.date).localeCompare(normalizeDay(b.date)))
       .slice(0, 40)
       .map((f) => ({
         ...f,
@@ -138,7 +145,7 @@ export const stats = query({
       contactId?: string;
     }[] = [];
 
-    const overdue = pending.filter((f) => f.date < today);
+    const overdue = pending.filter((f) => normalizeDay(f.date) < today);
     for (const f of overdue.slice(0, 5)) {
       const c = contactMap.get(f.contactId);
       reminders.push({

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
-import { resolveWorkerUser } from "./helpers";
+import { normalizeDay, resolveWorkerUser } from "./helpers";
 
 type UserRow = {
   _id: Id<"users">;
@@ -125,8 +125,9 @@ export const dailyPushNotifications = internalMutation({
       );
       if (recipientIds.length === 0) continue;
 
-      // Day-before reminder
-      if (fu.date === tomorrow) {
+      // Day-before reminder. `normalizeDay` trims the time from rows written
+      // before the date was stored date-only, so the comparison still matches.
+      if (normalizeDay(fu.date) === tomorrow) {
         await ctx.runMutation(internal.notifications.scheduleNotification, {
           kind: "follow_up_reminder",
           dedupeKey: `follow-up:${fu._id}:day-before`,
@@ -142,7 +143,7 @@ export const dailyPushNotifications = internalMutation({
       }
 
       // Morning-of reminder
-      if (fu.date === today) {
+      if (normalizeDay(fu.date) === today) {
         await ctx.runMutation(internal.notifications.scheduleNotification, {
           kind: "follow_up_reminder",
           dedupeKey: `follow-up:${fu._id}:morning`,
@@ -160,7 +161,7 @@ export const dailyPushNotifications = internalMutation({
 
     // ─── 2. Missed follow-up alerts ───────────────────────────────
     // Follow-ups that were due before today and are still pending
-    const missed = pending.filter((f) => f.date < today);
+    const missed = pending.filter((f) => normalizeDay(f.date) < today);
     for (const fu of missed.slice(0, 20)) {
       const contact = contactById.get(fu.contactId);
       if (!contact) continue;

@@ -191,6 +191,15 @@ export const logAudit = async (
 
 export const nowIso = () => new Date().toISOString();
 
+/**
+ * The calendar day of a stored date: both "2026-10-01" and the client's
+ * "2026-10-01T00:00:00.000Z" normalise to "2026-10-01". Uses that a follow-up
+ * date is only ever examined by day — reminders compare it to a date-only
+ * string, so an ISO timestamp stored with a time must be trimmed first.
+ */
+export const normalizeDay = (date: string | null | undefined) =>
+  (date ?? "").slice(0, 10);
+
 /** A user account shape needed to resolve an assigned-worker name. */
 type WorkerCandidate = { _id: string; name?: string | null; memberId?: string | null };
 type MemberCandidate = { _id: string; fullName: string };

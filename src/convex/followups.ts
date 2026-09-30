@@ -17,6 +17,7 @@ import {
   assertClassScope,
   classScoped,
   canReadMinistry,
+  normalizeDay,
   type CurrentUser,
 } from "./helpers";
 import { checkRateLimit } from "./rateLimit";
@@ -61,8 +62,8 @@ export const list = query({
     if (args.status) all = all.filter((f) => f.status === args.status);
     if (args.worker) all = all.filter((f) => f.assignedWorker === args.worker);
     if (args.contactId) all = all.filter((f) => f.contactId === args.contactId);
-    if (args.from) all = all.filter((f) => f.date >= args.from!);
-    if (args.to) all = all.filter((f) => f.date <= args.to!);
+    if (args.from) all = all.filter((f) => normalizeDay(f.date) >= args.from!);
+    if (args.to) all = all.filter((f) => normalizeDay(f.date) <= args.to!);
     if (args.search) {
       const q = args.search.toLowerCase();
       const ids = new Set(
@@ -124,7 +125,9 @@ export const create = mutation({
     const id = await ctx.db.insert("followUps", {
       contactId: args.contactId,
       type: args.type as any,
-      date: args.date,
+      // Store the calendar day only — the client may send a full ISO timestamp,
+      // and reminders compare this against a date-only string.
+      date: normalizeDay(args.date),
       time: args.time,
       assignedWorker: args.assignedWorker,
       createdBy: user._id,
@@ -188,7 +191,7 @@ export const update = mutation({
     assertFollowupOwner(user, f);
     const patch: Record<string, unknown> = {};
     if (args.type !== undefined) patch.type = args.type;
-    if (args.date !== undefined) patch.date = args.date;
+    if (args.date !== undefined) patch.date = normalizeDay(args.date);
     if (args.time !== undefined) {
       if (args.time && !TIME_RE.test(args.time)) throw new ConvexError("Invalid time");
       patch.time = args.time;

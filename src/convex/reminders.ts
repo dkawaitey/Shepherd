@@ -8,7 +8,12 @@ import {
   STAGES,
   STAGE_ORDER,
 } from "./constants";
-import { getCurrentUser, resolveWorkerUser, userRoles } from "./helpers";
+import {
+  getCurrentUser,
+  normalizeDay,
+  resolveWorkerUser,
+  userRoles,
+} from "./helpers";
 import { attendanceSections, fmtShortDate } from "./emailHtml";
 import type {
   WorkerRecipient,
@@ -224,12 +229,12 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
   // digest is the team's schedule, so it shows the whole queue in date order;
   // `next3` is kept only to say how much of it is imminent.
   const scheduled = pending
-    .filter((f) => f.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const next3 = scheduled.filter((f) => f.date <= in3);
+    .filter((f) => normalizeDay(f.date) >= today)
+    .sort((a, b) => normalizeDay(a.date).localeCompare(normalizeDay(b.date)));
+  const next3 = scheduled.filter((f) => normalizeDay(f.date) <= in3);
   const overdue = pending
-    .filter((f) => f.date < today)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .filter((f) => normalizeDay(f.date) < today)
+    .sort((a, b) => normalizeDay(a.date).localeCompare(normalizeDay(b.date)));
 
   // ---- Worker follow-up reminders ----
   const workerMap = new Map<string, WorkerRecipient>();
@@ -276,7 +281,7 @@ export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
       membershipId: contact.membershipId,
       typeLabel: FOLLOWUP_TYPE_LABELS[f.type] ?? f.type,
       date: f.date,
-      overdue: f.date < today,
+      overdue: normalizeDay(f.date) < today,
     });
     workerMap.set(worker._id, entry);
   }
