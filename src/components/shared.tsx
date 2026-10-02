@@ -153,6 +153,18 @@ export function canAddRecords(user?: {
 }
 
 /**
+ * True when the account may add a contact: every signed-in position, mirroring
+ * the server's `requireAccount` on `contacts.create` / `contacts.quickAdd`.
+ * Editing is still limited to administrators, coordinators and class leaders
+ * (`canAddRecords`). Guest (anonymous) accounts are excluded.
+ */
+export function canAddContacts(user?: {
+  isAnonymous?: boolean;
+} | null) {
+  return !!user && !user.isAnonymous;
+}
+
+/**
  * Accounts that may publish an announcement or poll. Mirrors the server's
  * `requireRole([coordinator, worker, leader, classLeader])` in `posts.create` —
  * a plain member (linked profile, no ministry position) can react, comment and

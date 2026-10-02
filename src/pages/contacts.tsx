@@ -35,7 +35,7 @@ import {
   MINISTRIES,
   STAGE_LABELS,
 } from "@/convex/constants";
-import { EmptyState, PageHeader, StatusPill, ContactChannelActions, StagePill, Mark, downloadCsv, downloadPdf, canAddRecords, formatError, fmtDate } from "@/components/shared";
+import { EmptyState, PageHeader, StatusPill, ContactChannelActions, StagePill, Mark, downloadCsv, downloadPdf, canAddContacts, formatError, fmtDate } from "@/components/shared";
 import { WorkerPicker } from "@/components/worker-picker";
 import { isOfflineError, queueEntry } from "@/lib/offline-sync";
 import { cn } from "@/lib/utils";
@@ -46,6 +46,7 @@ import {
   Search,
   UserCheck,
   UserRound,
+  Zap,
 } from "lucide-react";
 
 // ---- helpers ----
@@ -153,10 +154,7 @@ export function QuickAddContact({
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
-    whatsapp: "",
-    community: "",
     klass: "",
-    decision: "",
     area: "",
     areaShortcut: "",
   });
@@ -165,7 +163,7 @@ export function QuickAddContact({
 
   useEffect(() => {
     if (open) {
-      setForm({ fullName: "", phone: "", whatsapp: "", community: "", klass: "", decision: "", area: "", areaShortcut: "" });
+      setForm({ fullName: "", phone: "", klass: "", area: "", areaShortcut: "" });
       setError(null);
     }
   }, [open]);
@@ -191,10 +189,7 @@ export function QuickAddContact({
     const payload = {
       fullName: form.fullName.trim(),
       phone: form.phone || undefined,
-      whatsapp: form.whatsapp || undefined,
-      community: form.community || undefined,
       klass: form.klass || undefined,
-      decision: form.decision || undefined,
       area: form.area || undefined,
       areaShortcut: form.areaShortcut || deriveShortcut(form.area) || undefined,
       dateMet: new Date().toISOString(),
@@ -238,27 +233,9 @@ export function QuickAddContact({
             <Label htmlFor="qa-name">Full name *</Label>
             <Input id="qa-name" value={form.fullName} onChange={(e) => set("fullName", e.target.value)} placeholder="John Mensah" className="mt-1" autoFocus />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="qa-phone">Phone</Label>
-              <Input id="qa-phone" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="024 000 0000" className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="qa-wa">WhatsApp username</Label>
-              <Input id="qa-wa" value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} placeholder="e.g. kofi.mensah" className="mt-1" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="qa-area">Area</Label>
-              <Input id="qa-area" value={form.area} onChange={(e) => set("area", e.target.value)} placeholder="e.g. Adjikpo" className="mt-1" />
-            </div>
-            <div>
-              <Label>Area code</Label>
-              <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">
-                {form.area ? deriveShortcut(form.area) : "…"}
-              </p>
-            </div>
+          <div>
+            <Label htmlFor="qa-phone">Phone</Label>
+            <Input id="qa-phone" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="024 000 0000" className="mt-1" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -273,15 +250,8 @@ export function QuickAddContact({
               </Select>
             </div>
             <div>
-              <Label htmlFor="qa-decision">Decision</Label>
-              <Select value={form.decision || undefined} onValueChange={(v) => set("decision", v)}>
-                <SelectTrigger id="qa-decision" className="mt-1 w-full"><SelectValue placeholder="Select decision" /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(DECISION_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="qa-area">Area</Label>
+              <Input id="qa-area" value={form.area} onChange={(e) => set("area", e.target.value)} placeholder="e.g. Adjikpo" className="mt-1" />
             </div>
           </div>
           {error && (
@@ -708,8 +678,11 @@ export default function Contacts() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   const me = useQuery(api.users.currentUser);
-  const canAdd = canAddRecords(me);
+  // Every position may add a contact; only admins, coordinators and class
+  // leaders may edit them.
+  const canAdd = canAddContacts(me);
 
   const status = searchParams.get("status") ?? "";
   const klass = searchParams.get("klass") ?? "";
@@ -799,9 +772,18 @@ export default function Contacts() {
               <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
             </Button>
             {canAdd && (
-              <Button onClick={() => setAddOpen(true)}>
-                <Plus className="mr-1.5 h-4 w-4" /> Add Contact
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setQuickOpen(true)}
+                  title="Add a contact with just the essentials"
+                >
+                  <Zap className="mr-1.5 h-4 w-4" /> Quick Add
+                </Button>
+                <Button onClick={() => setAddOpen(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" /> Add Contact
+                </Button>
+              </>
             )}
           </>
         }
@@ -891,6 +873,8 @@ export default function Contacts() {
         onOpenChange={setAddOpen}
         onSaved={(id) => navigate(`/contacts/${id}`)}
       />
+
+      <QuickAddContact open={quickOpen} onOpenChange={setQuickOpen} />
     </div>
   );
 }

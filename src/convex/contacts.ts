@@ -7,6 +7,7 @@ import {
   logAudit,
   nowIso,
   requireRole,
+  requireAccount,
   hasRole,
   classScoped,
   assertClassScope,
@@ -211,7 +212,9 @@ export const create = mutation({
   args: { ...contactFields, dateMetRequired: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     await checkRateLimit(ctx, "contacts.create");
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
+    // Any signed-in position may add a contact; capturing an outreach record
+    // is a safe, additive action.
+    const user = await requireAccount(ctx);
     const { dateMetRequired: _unused, ...data } = args;
     data.fullName = validateName(data.fullName);
     if (data.email) data.email = validateEmail(data.email);
@@ -302,7 +305,7 @@ export const quickAdd = mutation({
   },
   handler: async (ctx, args) => {
     await checkRateLimit(ctx, "contacts.quickAdd");
-    const user = await requireRole(ctx, [ROLES.COORDINATOR, ROLES.CLASS_LEADER]);
+    const user = await requireAccount(ctx);
     args.fullName = validateName(args.fullName);
     if (args.phone) args.phone = validatePhone(args.phone);
     if (args.whatsapp) args.whatsapp = validateWhatsapp(args.whatsapp);

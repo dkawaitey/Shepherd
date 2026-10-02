@@ -162,6 +162,23 @@ export const requireAdmin = async (ctx: MutationCtx | QueryCtx) => {
   return requireRole(ctx, []);
 };
 
+/**
+ * Throws unless a signed-in, non-guest account is present — every ministry
+ * position passes, including Ordinary Members.
+ *
+ * Used for safe, additive actions that any signed-in person may take, such as
+ * capturing someone met during outreach. Guest (anonymous) accounts are turned
+ * away because anyone could create one, and reads still gate the contact
+ * database through `canReadMinistry`.
+ */
+export const requireAccount = async (ctx: MutationCtx | QueryCtx) => {
+  const user = await getCurrentUser(ctx);
+  if (!user) throw new ConvexError("Not authenticated");
+  if (user.isAnonymous)
+    throw new ConvexError("You do not have permission to perform this action");
+  return user;
+};
+
 export const isAdmin = (role?: string) => role === ROLES.ADMIN;
 
 /** Validates that a class scope value is one of the four ministry classes. */
