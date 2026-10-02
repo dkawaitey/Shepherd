@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -268,8 +268,13 @@ export function ScheduleDialog({
     selectedContact?.klass ? { klass: selectedContact.klass } : "skip",
   );
 
+  // Tracks the contact whose assigned member was already copied in, so a
+  // manual change to the worker is never overridden by a list refetch.
+  const appliedContactRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (open) {
+      appliedContactRef.current = null;
       setForm((f) => ({
         ...f,
         contactId: presetContactId ?? f.contactId,
@@ -279,6 +284,19 @@ export function ScheduleDialog({
       setError(null);
     }
   }, [open, presetContactId]);
+
+  // The contact's assigned member carries over to the follow-up: whoever owns
+  // the contact is the natural person to make the visit. Applied once per
+  // selected contact, and deferred until the contact list has loaded for a
+  // preset contact (the profile page opens this dialog before contacts load).
+  useEffect(() => {
+    if (!open || !form.contactId) return;
+    if (appliedContactRef.current === form.contactId) return;
+    const contact = (contacts ?? []).find((c) => c._id === form.contactId);
+    if (!contact) return; // contacts still loading
+    appliedContactRef.current = form.contactId;
+    setForm((f) => ({ ...f, assignedWorker: contact.assignedWorker ?? "" }));
+  }, [open, form.contactId, contacts]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
