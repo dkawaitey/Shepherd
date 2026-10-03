@@ -1647,10 +1647,10 @@ function PostMediaFile({
       href={url as string}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 transition-colors hover:bg-muted/80"
+      className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-muted px-3 py-2 transition-colors hover:bg-muted/80"
     >
       <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="truncate text-[11px] text-foreground/80">{media.name}</span>
+      <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/80">{media.name}</span>
     </a>
   );
 }

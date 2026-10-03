@@ -222,10 +222,10 @@ function CommentAttachment({
       href={url as string}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-2 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-[11px] transition-colors hover:bg-muted/70"
+      className="inline-flex w-fit max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border bg-muted/40 px-2.5 py-1.5 text-[11px] transition-colors hover:bg-muted/70"
     >
       <FileIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <span className="max-w-[16rem] truncate">{name}</span>
+      <span className="min-w-0 max-w-[16rem] truncate">{name}</span>
     </a>
   );
 }
