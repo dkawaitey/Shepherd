@@ -63,7 +63,9 @@ import { AttendanceTrendPanel, DriftPill } from "@/components/attendance-trend";
 import {
   PUNCTUAL_GRACE,
   hhmmToMinutes,
+  mergeSessionStarts,
   parseStartTimes,
+  sessionKeyOf,
   type ActivityPunctuality,
   type ParticipationInsight,
   type PunctualitySummary,
@@ -952,7 +954,13 @@ function AttendanceTab({
 }) {
   const me = useQuery(api.users.currentUser);
   const settings = useQuery(api.settings.get);
-  const startTimes = parseStartTimes(settings?.attendance_start_times);
+  // Custom per-session start times override the activity default for their own
+  // session, so the late-mark warning below matches the other readings.
+  const sessionStartRows = useQuery(api.discipleship.listSessionStarts, {});
+  const startTimes = mergeSessionStarts(
+    parseStartTimes(settings?.attendance_start_times),
+    sessionStartRows,
+  );
   const setAttendance = useMutation(api.discipleship.setAttendance);
   const updateAttendance = useMutation(api.discipleship.updateAttendance);
   const deleteAttendance = useMutation(api.discipleship.deleteAttendance);
@@ -1002,7 +1010,10 @@ function AttendanceTab({
   // Late-mark warning: the same threshold the punctuality analysis uses, so the
   // recorder is told at the moment of entry that this will count as late — and
   // only when the ministry has actually set a start time for the activity.
-  const officialStart = startTimes[type];
+  // This session's own start wins (a custom start for the exact day + activity +
+  // program), then the activity's default.
+  const officialStart =
+    startTimes[sessionKeyOf({ date, type, programName: program })] ?? startTimes[type];
   const startMinute = hhmmToMinutes(officialStart);
   const markedMinuteValue = hhmmToMinutes(time);
   const lateBy =

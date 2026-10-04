@@ -16,6 +16,7 @@ import {
 } from "./helpers";
 import { checkRateLimit } from "./rateLimit";
 import { validateText, validateOptionalText } from "./validate";
+import { sessionKeyOf } from "../lib/attendance-trend";
 
 /** Time of day a person was marked, 24h "HH:MM". */
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -396,6 +397,127 @@ export const deleteAttendance = mutation({
       entityId: args.id,
       details: `deleted ${row.date} record`,
     });
+  },
+});
+
+// ================= Custom session start times =================
+
+/**
+ * Set (or change) the custom start time for one attendance session.
+ *
+ * A session is a day + activity + program name — the same identity the
+ * punctuality analysis uses. This records when that session actually began, so
+ * it is judged against its real start rather than the activity's usual time.
+ *
+ * The value lives in its own table, never on the attendance rows, so it can be
+ * changed at any time and only the timing baseline moves: every mark already
+ * recorded for the session keeps its date, status and mark time untouched.
+ */
+export const setSessionStart = mutation({
+  args: {
+    date: v.string(),
+    type: v.string(),
+    programName: v.optional(v.string()),
+    start: v.string(),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [
+      ROLES.ADMIN,
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.CLASS_LEADER,
+    ]);
+    const day = normalizeDay(args.date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      throw new ConvexError("A valid session date is required");
+    }
+    const start = args.start.trim();
+    if (!TIME_RE.test(start)) {
+      throw new ConvexError("Start time must be a valid HH:MM value");
+    }
+    const programName = args.programName?.trim() || undefined;
+    const sessionKey = sessionKeyOf({ date: day, type: args.type, programName });
+    const existing = await ctx.db
+      .query("attendanceSessionStarts")
+      .withIndex("by_session", (q) => q.eq("sessionKey", sessionKey))
+      .first();
+    const data = {
+      sessionKey,
+      date: day,
+      type: args.type,
+      programName,
+      start,
+      note: args.note?.trim() || undefined,
+      updatedBy: user.name,
+      updatedAt: Date.now(),
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, data);
+    } else {
+      await ctx.db.insert("attendanceSessionStarts", data);
+    }
+    await logAudit(ctx, {
+      action: "attendance.sessionStart.set",
+      entityType: "attendanceSessionStarts",
+      entityId: sessionKey,
+      details: `${day} ${args.type}${programName ? ` (${programName})` : ""} -> ${start}`,
+    });
+    return sessionKey;
+  },
+});
+
+/**
+ * Remove a session's custom start time, so it falls back to its activity's
+ * configured time (or its first recorded arrival). The session's recorded
+ * attendance is not touched.
+ */
+export const clearSessionStart = mutation({
+  args: {
+    date: v.string(),
+    type: v.string(),
+    programName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [
+      ROLES.ADMIN,
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.CLASS_LEADER,
+    ]);
+    const day = normalizeDay(args.date);
+    const sessionKey = sessionKeyOf({
+      date: day,
+      type: args.type,
+      programName: args.programName?.trim() || undefined,
+    });
+    const existing = await ctx.db
+      .query("attendanceSessionStarts")
+      .withIndex("by_session", (q) => q.eq("sessionKey", sessionKey))
+      .first();
+    if (!existing) return false;
+    await ctx.db.delete(existing._id);
+    await logAudit(ctx, {
+      action: "attendance.sessionStart.clear",
+      entityType: "attendanceSessionStarts",
+      entityId: sessionKey,
+      details: `cleared ${day} ${args.type}`,
+    });
+    return true;
+  },
+});
+
+/** Custom session start times, most recent first. Readable by any ministry role. */
+export const listSessionStarts = query({
+  args: { from: v.optional(v.string()), to: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!canReadMinistry(user)) return [];
+    let rows = await ctx.db.query("attendanceSessionStarts").collect();
+    if (args.from) rows = rows.filter((r) => r.date >= args.from!);
+    if (args.to) rows = rows.filter((r) => r.date <= args.to!);
+    rows.sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt - a.updatedAt);
+    return rows;
   },
 });
 

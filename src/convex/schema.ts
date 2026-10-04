@@ -251,6 +251,25 @@ const schema = defineSchema(
       .index("memberId", ["memberId"])
       .index("type", ["type"]),
 
+    // ===== Custom session start times =====
+    // A per-session start time, keyed by the day + activity + program a session
+    // is made of, so a session that did not begin at its activity's usual time
+    // is measured against when it actually started.
+    //
+    // Deliberately stored apart from the attendance rows: editing or clearing a
+    // session's start changes only the timing baseline, never a single recorded
+    // mark. Already-recorded attendance keeps its date, status and mark time.
+    attendanceSessionStarts: defineTable({
+      sessionKey: v.string(), // `${day}|${type}|${programName ?? ""}`
+      date: v.string(), // day, YYYY-MM-DD
+      type: v.string(), // attendance activity
+      programName: v.optional(v.string()),
+      start: v.string(), // "HH:MM"
+      note: v.optional(v.string()), // why this session started off-schedule
+      updatedBy: v.optional(v.string()),
+      updatedAt: v.number(),
+    }).index("by_session", ["sessionKey"]),
+
     // ===== Prayer journal =====
     prayerRequests: defineTable({
       contactId: v.optional(v.id("contacts")),

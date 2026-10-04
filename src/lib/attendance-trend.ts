@@ -308,6 +308,26 @@ export function parseStartTimes(json: string | null | undefined): SessionStartTi
 }
 
 /**
+ * Merge custom per-session start times over the configured per-activity times.
+ *
+ * The result is one `configured` map the analysis already understands: activity
+ * keys give the default for every session of that activity, and a session key
+ * (`YYYY-MM-DD|type|program`) overrides a single session. A malformed value is
+ * dropped, exactly as `parseStartTimes` drops one, so bad data can never break
+ * the trend view.
+ */
+export function mergeSessionStarts(
+  configured: SessionStartTimes = {},
+  sessions: { sessionKey: string; start: string }[] | null | undefined = [],
+): SessionStartTimes {
+  const merged: SessionStartTimes = { ...configured };
+  for (const s of sessions ?? []) {
+    if (s && typeof s.start === "string" && HHMM.test(s.start)) merged[s.sessionKey] = s.start;
+  }
+  return merged;
+}
+
+/**
  * Minutes past midnight when a record was marked.
  *
  * An explicit `time` (what the recorder entered) wins. Older records predate
@@ -325,9 +345,19 @@ export function markedMinute(row: TrendRow): number | null {
   return null;
 }
 
-/** A session is one date + activity + program name; two sessions can share a day. */
-const sessionKey = (row: TrendRow) =>
-  `${(row.date || "").slice(0, 10)}|${row.type ?? ""}|${(row.programName ?? "").trim()}`;
+/**
+ * The key identifying one session: its day, activity and program name.
+ *
+ * Two sessions can share a day (a morning and an evening youth meeting), so the
+ * program name is part of the identity. Exported because the attendance UI keys
+ * a custom session start to exactly this value, and the analysis reads it back.
+ */
+export const sessionKeyOf = (input: {
+  date: string;
+  type?: string;
+  programName?: string;
+}): string =>
+  `${(input.date || "").slice(0, 10)}|${input.type ?? ""}|${(input.programName ?? "").trim()}`;
 
 /**
  * When each session began, as minutes past midnight.
@@ -347,8 +377,10 @@ export function sessionStarts(
 ): Map<string, number> {
   const starts = new Map<string, number>();
   for (const row of rows) {
-    const key = sessionKey(row);
-    const official = row.type ? hhmmToMinutes(configured[row.type]) : null;
+    const key = sessionKeyOf(row);
+    // A custom start time set for this exact session wins over the activity's
+    // default, so one session that began off-schedule is measured honestly.
+    const official = hhmmToMinutes(configured[key] ?? (row.type ? configured[row.type] : undefined));
     if (official !== null) {
       starts.set(key, official);
       continue;
@@ -436,14 +468,16 @@ export function punctualitySummary(
     if (row.status !== "present") continue;
     const minute = markedMinute(row);
     if (minute === null) continue;
-    const start = starts.get(sessionKey(row));
+    const key = sessionKeyOf(row);
+    const start = starts.get(key);
     if (start === undefined) continue;
     const delay = Math.max(0, minute - start);
     counts[bandFor(delay)] += 1;
     timed += 1;
     delayTotal += delay;
     if (delay > worstDelay) worstDelay = delay;
-    if (row.type && hhmmToMinutes(configured[row.type]) !== null) fromConfigured += 1;
+    const configuredStart = configured[key] ?? (row.type ? configured[row.type] : undefined);
+    if (hhmmToMinutes(configuredStart) !== null) fromConfigured += 1;
     else fromInferred += 1;
   }
 
@@ -653,7 +687,7 @@ export function effectiveParticipation(
     present += 1;
     const minute = markedMinute(row);
     if (minute === null) continue;
-    const start = starts.get(sessionKey(row));
+    const start = starts.get(sessionKeyOf(row));
     if (start === undefined) continue;
     timed += 1;
     if (Math.max(0, minute - start) <= PUNCTUAL_GRACE) effective += 1;

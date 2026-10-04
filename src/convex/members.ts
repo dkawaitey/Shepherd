@@ -28,13 +28,13 @@ import { Doc } from "./_generated/dataModel";
 import { checkRateLimit } from "./rateLimit";
 import { validateName, validateEmail, validatePhone, validateWhatsapp } from "./validate";
 import {
-  parseStartTimes,
   participationInsight,
   punctualityByType,
   punctualitySummary,
   punctualityVerdictCounts,
   sessionStarts,
 } from "../lib/attendance-trend";
+import { effectiveStartTimes } from "./attendanceStarts";
 
 /** Validate + normalize a member's position / class-leader flag (admin-only
  *  values). Prevents contradictory combinations, e.g. Read-only Leader + Class
@@ -192,17 +192,14 @@ export const list = query({
 
     // Attendance summary per member, plus how recently their account used the
     // app (the member card flags long absences with a small dot).
-    const [attendance, activity, startTimeRow] = await Promise.all([
+    const [attendance, activity, startTimes] = await Promise.all([
       ctx.db.query("attendance").collect(),
       memberActivity(ctx, members),
-      // The ministry's official start time per activity, so the card's
-      // participation and drift figures match the profile and the digests.
-      ctx.db
-        .query("settings")
-        .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
-        .first(),
+      // The effective start times (activity defaults plus any custom session
+      // starts), so the card's participation and drift figures match the
+      // profile and the digests.
+      effectiveStartTimes(ctx),
     ]);
-    const startTimes = parseStartTimes(startTimeRow?.value);
     const starts = sessionStarts(attendance, startTimes);
     const rowsByMember = new Map<string, typeof attendance>();
     for (const a of attendance) {
@@ -235,7 +232,7 @@ export const get = query({
     const member = await ctx.db.get(args.id);
     if (!member || member.isDeleted) return null;
     if (!withinClassScope(user, member.klass)) return null;
-    const [attendance, prayers, notes, activity, allAttendance, startTimeRow] = await Promise.all([
+    const [attendance, prayers, notes, activity, allAttendance, startTimes] = await Promise.all([
       ctx.db.query("attendance").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("prayerRequests").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
       ctx.db.query("notes").withIndex("memberId", (q) => q.eq("memberId", args.id)).collect(),
@@ -243,13 +240,10 @@ export const get = query({
       // Every attendance record, so this member's arrivals can be judged against
       // when each session actually began (its configured start, or its first arrival).
       ctx.db.query("attendance").collect(),
-      // The ministry's official start time per activity, set in Ministry Settings.
-      ctx.db
-        .query("settings")
-        .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
-        .first(),
+      // The effective start times: activity defaults plus any custom session
+      // start, set in Ministry Settings or from the Attendance page.
+      effectiveStartTimes(ctx),
     ]);
-    const startTimes = parseStartTimes(startTimeRow?.value);
     return {
       // The profile header carries the same last-seen dot as the member card.
       member: { ...member, ...(activity.get(member._id) ?? NO_ACTIVITY) },
@@ -666,11 +660,7 @@ export const classPunctuality = query({
     const members = (await ctx.db.query("members").collect()).filter((m) => !m.isDeleted);
     const attendance = await ctx.db.query("attendance").collect();
     const memberRows = attendance.filter((a) => a.subjectType === "member");
-    const startTimeRow = await ctx.db
-      .query("settings")
-      .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
-      .first();
-    const startTimes = parseStartTimes(startTimeRow?.value);
+    const startTimes = await effectiveStartTimes(ctx);
     // Session begins come from the whole ministry's arrivals (contacts and
     // members alike), so a class is judged against when the session really began.
     const starts = sessionStarts(attendance, startTimes);

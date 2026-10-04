@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -51,10 +51,12 @@ import {
 } from "@/components/attendance-trend";
 import {
   lateLevel,
+  mergeSessionStarts,
   parseStartTimes,
   participationInsight,
   punctualitySummary,
   punctualityVerdictCounts,
+  sessionKeyOf,
   sessionStarts,
   trendSummary,
   type PunctualityTrendPoint,
@@ -89,6 +91,191 @@ const punctualityAsTrend = (points: PunctualityTrendPoint[]): TrendPoint[] =>
     percentage: p.onTimeRate,
   }));
 
+/**
+ * Custom session start times.
+ *
+ * A session is one day + activity + program. Giving a session its own start
+ * time records when it actually began, so a program that ran at a different
+ * hour is still measured fairly. It can be set or changed at any time — that
+ * only moves the timing baseline. The attendance already recorded for the
+ * session lives in its own rows and is never altered.
+ */
+function CustomSessionStartsCard({
+  rows,
+  configured,
+  sessionStarts,
+  canEdit,
+}: {
+  rows: any[];
+  configured: Record<string, string>;
+  sessionStarts: any[];
+  canEdit: boolean;
+}) {
+  const setSessionStart = useMutation(api.discipleship.setSessionStart);
+  const clearSessionStart = useMutation(api.discipleship.clearSessionStart);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  // Every distinct session in the recorded history, most recent first.
+  const sessions = useMemo(() => {
+    const map = new Map<
+      string,
+      { key: string; date: string; type: string; programName?: string }
+    >();
+    for (const r of rows) {
+      const date = (r.date || "").slice(0, 10);
+      const key = sessionKeyOf({ date, type: r.type, programName: r.programName });
+      if (date && !map.has(key)) {
+        map.set(key, { key, date, type: r.type, programName: r.programName });
+      }
+    }
+    return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
+  }, [rows]);
+
+  const customByKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of sessionStarts ?? []) m.set(s.sessionKey, s.start);
+    return m;
+  }, [sessionStarts]);
+
+  if (sessions.length === 0) return null;
+
+  const shown = showAll ? sessions : sessions.slice(0, 6);
+
+  const save = async (s: { key: string; date: string; type: string; programName?: string }, value: string) => {
+    if (!value) return;
+    setBusyKey(s.key);
+    try {
+      await setSessionStart({
+        date: s.date,
+        type: s.type,
+        programName: s.programName,
+        start: value,
+      });
+      toast.success("Session start time saved");
+      setDrafts((d) => {
+        const next = { ...d };
+        delete next[s.key];
+        return next;
+      });
+    } catch (err: any) {
+      toast.error(formatError(err, "Could not save the session start time"));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const reset = async (s: { key: string; date: string; type: string; programName?: string }) => {
+    setBusyKey(s.key);
+    try {
+      await clearSessionStart({ date: s.date, type: s.type, programName: s.programName });
+      toast.success("Back to the activity's default start time");
+      setDrafts((d) => {
+        const next = { ...d };
+        delete next[s.key];
+        return next;
+      });
+    } catch (err: any) {
+      toast.error(formatError(err, "Could not reset the session start time"));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  return (
+    <div className="mt-6 rounded-lg border bg-card p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <Clock className="h-4 w-4 text-primary" />
+        <p className="term-label">// custom session start times</p>
+      </div>
+      <p className="mb-3 text-[11px] leading-4 text-muted-foreground">
+        Give a single session its own start time — for a program that began at a
+        different hour. It can be changed at any time; the attendance already
+        recorded for that session is never altered.
+      </p>
+      <div className="space-y-2">
+        {shown.map((s) => {
+          const custom = customByKey.get(s.key);
+          const fallback = configured[s.type] ?? "";
+          const savedValue = custom ?? fallback;
+          const value = drafts[s.key] ?? savedValue;
+          const dirty = drafts[s.key] !== undefined && drafts[s.key] !== savedValue;
+          const busy = busyKey === s.key;
+          return (
+            <div
+              key={s.key}
+              className="flex flex-wrap items-center gap-2 rounded-md border bg-background/40 px-3 py-2"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="text-[12px] font-semibold">{fmtDate(s.date)}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {ATTENDANCE_TYPE_LABELS[s.type] ?? s.type}
+                  </span>
+                  {s.programName && (
+                    <span className="max-w-[10rem] truncate rounded-full border px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                      {s.programName}
+                    </span>
+                  )}
+                  {custom ? (
+                    <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                      Custom
+                    </span>
+                  ) : (
+                    <span className="rounded-full border px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                      {fallback ? "Activity default" : "First arrival"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <Input
+                type="time"
+                className="w-28"
+                value={value}
+                disabled={!canEdit || busy}
+                aria-label={`Start time for ${ATTENDANCE_TYPE_LABELS[s.type] ?? s.type} on ${s.date}`}
+                onChange={(e) => setDrafts((d) => ({ ...d, [s.key]: e.target.value }))}
+              />
+              {canEdit && (
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    disabled={!value || busy || !dirty}
+                    onClick={() => save(s, value)}
+                  >
+                    Save
+                  </Button>
+                  {custom && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => reset(s)}
+                    >
+                      Use default
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {sessions.length > 6 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-2 h-7 text-[11px] text-muted-foreground"
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? "Show fewer sessions" : `Show ${sessions.length - 6} more sessions`}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function Attendance() {
   const [klass, setKlass] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -106,6 +293,8 @@ export default function Attendance() {
   const history = useQuery(api.discipleship.listAttendance, {});
   const classPunctuality = useQuery(api.members.classPunctuality, {});
   const lowAttendance = useQuery(api.members.lowAttendance, {});
+  // Custom per-session start times, kept apart from the recorded attendance.
+  const sessionStartRows = useQuery(api.discipleship.listSessionStarts, {});
   const settings = useQuery(api.settings.get);
   const me = useQuery(api.users.currentUser);
   const markFollowup = useMutation(api.members.markAttendanceFollowup);
@@ -192,8 +381,13 @@ export default function Attendance() {
   }
   // When each session actually began: the ministry's configured start time for
   // the activity, or the earliest present mark across all members as a fallback.
-  const startTimes = parseStartTimes(settings?.attendance_start_times);
+  const configuredStartTimes = parseStartTimes(settings?.attendance_start_times);
+  // A custom start time set for one session wins over the activity's default for
+  // that session only. Editing one moves the timing baseline and nothing else:
+  // the marks already recorded for the session are never touched.
+  const startTimes = mergeSessionStarts(configuredStartTimes, sessionStartRows);
   const starts = sessionStarts(rows, startTimes);
+  const canManageStarts = userCanWrite(me);
   const memberTrends = (members ?? [])
     .map((m) => {
       const mine = rowsByMember.get(m._id) ?? [];
@@ -519,6 +713,13 @@ export default function Attendance() {
         </div>
         </>
       )}
+
+      <CustomSessionStartsCard
+        rows={rows}
+        configured={configuredStartTimes}
+        sessionStarts={sessionStartRows ?? []}
+        canEdit={canManageStarts}
+      />
 
       {/* Team punctuality — the roster below answers "who is late?", this
           answers "how are we doing?". */}

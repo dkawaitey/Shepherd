@@ -23,6 +23,7 @@ import type {
 } from "./emailHtml";
 import {
   effectiveParticipation,
+  mergeSessionStarts,
   participationInsight,
   parseStartTimes,
   punctualitySummary,
@@ -180,22 +181,28 @@ function birthdaysInWindow(
  *    low attendance and new contacts.
  */
 export async function computeDigest(ctx: QueryCtx): Promise<Digest> {
-  const [contacts, followUps, members, users, attendance, settings] = await Promise.all([
-    ctx.db.query("contacts").collect(),
-    ctx.db.query("followUps").collect(),
-    ctx.db.query("members").collect(),
-    ctx.db.query("users").collect(),
-    ctx.db.query("attendance").collect(),
-    ctx.db.query("settings").collect(),
-  ]);
+  const [contacts, followUps, members, users, attendance, settings, sessionStartRows] =
+    await Promise.all([
+      ctx.db.query("contacts").collect(),
+      ctx.db.query("followUps").collect(),
+      ctx.db.query("members").collect(),
+      ctx.db.query("users").collect(),
+      ctx.db.query("attendance").collect(),
+      ctx.db.query("settings").collect(),
+      ctx.db.query("attendanceSessionStarts").collect(),
+    ]);
 
   const settingsMap: Record<string, string> = {};
   for (const s of settings) settingsMap[s.key] = s.value;
   const enabled = settingsMap.reminder_email_enabled !== "false";
 
   // Session starts and configured activity times, shared by every attendance
-  // figure below so the class and ministry digests agree with the app.
-  const startTimes = parseStartTimes(settingsMap.attendance_start_times);
+  // figure below so the class and ministry digests agree with the app. Custom
+  // per-session starts override the activity default for their own session.
+  const startTimes = mergeSessionStarts(
+    parseStartTimes(settingsMap.attendance_start_times),
+    sessionStartRows,
+  );
   const starts = sessionStarts(attendance, startTimes);
 
   const now = new Date();

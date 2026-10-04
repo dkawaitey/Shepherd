@@ -8,11 +8,11 @@ import {
 } from "./constants";
 import { getCurrentUser, classScoped, canReadMinistry } from "./helpers";
 import {
-  parseStartTimes,
   participationInsight,
   quadrantCounts,
   sessionStarts,
 } from "../lib/attendance-trend";
+import { effectiveStartTimes } from "./attendanceStarts";
 
 const monthKey = (ts: number) => {
   const d = new Date(ts);
@@ -26,19 +26,17 @@ export const overview = query({
     if (!canReadMinistry(user)) return null;
     const scope = classScoped(user);
 
-    const [allContacts, allFollowups, allBibleStudies, allAttendance, allPrayers, allMembers, startTimeRow] = await Promise.all([
+    const [allContacts, allFollowups, allBibleStudies, allAttendance, allPrayers, allMembers, startTimes] = await Promise.all([
       ctx.db.query("contacts").collect(),
       ctx.db.query("followUps").collect(),
       ctx.db.query("bibleStudies").collect(),
       ctx.db.query("attendance").collect(),
       ctx.db.query("prayerRequests").collect(),
       ctx.db.query("members").collect(),
-      // The ministry's official start time per activity, so the quadrant view is
-      // measured against the same baseline as the roster and the digests.
-      ctx.db
-        .query("settings")
-        .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
-        .first(),
+      // The effective start times (activity defaults plus any custom session
+      // start), so the quadrant view is measured against the same baseline as
+      // the roster and the digests.
+      effectiveStartTimes(ctx),
     ]);
 
     const live = allContacts.filter((c) => !c.isDeleted && (!scope || c.klass === scope));
@@ -168,7 +166,6 @@ export const overview = query({
     const scopedMembers = allMembers.filter(
       (m) => !m.isDeleted && (!scope || m.klass === scope),
     );
-    const startTimes = parseStartTimes(startTimeRow?.value);
     const starts = sessionStarts(allAttendance, startTimes);
     const memberRows = new Map<string, typeof allAttendance>();
     for (const a of allAttendance) {
