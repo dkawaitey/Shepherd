@@ -663,9 +663,10 @@ function SessionStartTimesCard() {
         <p className="term-label">// session start times</p>
       </div>
       <p className="mb-3 text-[11px] leading-4 text-muted-foreground">
-        When each activity normally begins. Punctuality is measured against these
-        times; leave a field blank and that activity falls back to its first
-        recorded arrival.
+        When each activity normally begins. Each mark is measured against these
+        times as it is recorded and then frozen to that start, so changing one
+        here never re-scores attendance already taken. Leave a field blank and
+        that activity falls back to its first recorded arrival.
       </p>
       <div className="space-y-2">
         {types.map((type) => (

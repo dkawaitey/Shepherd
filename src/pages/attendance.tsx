@@ -191,8 +191,9 @@ function CustomSessionStartsCard({
       </div>
       <p className="mb-3 text-[11px] leading-4 text-muted-foreground">
         Give a single session its own start time — for a program that began at a
-        different hour. It can be changed at any time; the attendance already
-        recorded for that session is never altered.
+        different hour. It can be changed at any time. Each mark is frozen to the
+        start in effect when it was recorded, so editing it never re-scores
+        attendance you have already taken.
       </p>
       <div className="space-y-2">
         {shown.map((s) => {

@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, MutationCtx } from "./_generated/server";
 import { BIBLE_LESSONS, ROLES } from "./constants";
 import {
   getCurrentUser,
@@ -16,7 +16,7 @@ import {
 } from "./helpers";
 import { checkRateLimit } from "./rateLimit";
 import { validateText, validateOptionalText } from "./validate";
-import { sessionKeyOf } from "../lib/attendance-trend";
+import { parseStartTimes, sessionKeyOf } from "../lib/attendance-trend";
 
 /** Time of day a person was marked, 24h "HH:MM". */
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -37,6 +37,36 @@ const normalizeTime = (time?: string) => {
  * same session again edits the same record instead of leaving a duplicate behind.
  */
 const normalizeDay = (date: string) => (date || "").slice(0, 10);
+
+/**
+ * The start time a session's marks should be judged against right now: its own
+ * custom start if one is set, otherwise the activity's configured start.
+ *
+ * Undefined means no start is configured at all, so the analysis falls back to
+ * the session's first arrival (an inferred baseline). The result is snapshotted
+ * onto each mark as it is recorded, so this value may change later without ever
+ * re-scoring a mark already on file.
+ */
+const resolveSessionStart = async (
+  ctx: MutationCtx,
+  args: { date: string; type: string; programName?: string },
+): Promise<string | undefined> => {
+  const sessionKey = sessionKeyOf({
+    date: normalizeDay(args.date),
+    type: args.type,
+    programName: args.programName?.trim() || undefined,
+  });
+  const custom = await ctx.db
+    .query("attendanceSessionStarts")
+    .withIndex("by_session", (q) => q.eq("sessionKey", sessionKey))
+    .first();
+  if (custom?.start) return custom.start;
+  const settingsRow = await ctx.db
+    .query("settings")
+    .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
+    .first();
+  return parseStartTimes(settingsRow?.value)[args.type];
+};
 
 // ================= Bible Studies =================
 
@@ -203,6 +233,9 @@ export const recordAttendance = mutation({
       // Only a present mark carries an arrival time, so absent and excused are
       // stored without one.
       time: args.status === "present" ? normalizeTime(args.time) : undefined,
+      // Freeze the baseline this mark is recorded against, so editing the
+      // session's start later never re-scores it.
+      startTime: await resolveSessionStart(ctx, args),
       remarks: args.remarks?.trim() || undefined,
       recordedBy: user.name,
       createdAt: Date.now(),
@@ -267,6 +300,19 @@ export const setAttendance = mutation({
     const existing = candidates.find((r) => (r.date || "").slice(0, 10) === day);
     const recordedBy = args.recordedBy?.trim() || user.name;
     if (existing) {
+      // Freeze: a mark keeps the baseline it was recorded against. It only
+      // re-resolves when the mark moves to a different session (a changed day,
+      // activity or program), or when it predates the frozen-baseline field.
+      const sameSession =
+        sessionKeyOf({
+          date: existing.date,
+          type: existing.type,
+          programName: existing.programName,
+        }) === sessionKeyOf({ date: day, type: args.type, programName });
+      const startTime =
+        sameSession && existing.startTime
+          ? existing.startTime
+          : await resolveSessionStart(ctx, { date: day, type: args.type, programName });
       await ctx.db.patch(existing._id, {
         date: day,
         status: args.status,
@@ -275,6 +321,7 @@ export const setAttendance = mutation({
         // correction doesn't silently wipe the arrival time behind punctuality —
         // but a mark that isn't present is stored with no time at all.
         time: keepsTime ? time ?? existing.time : undefined,
+        startTime,
         remarks: args.remarks?.trim() || undefined,
         recordedBy,
       });
@@ -289,6 +336,7 @@ export const setAttendance = mutation({
       programName,
       status: args.status,
       time,
+      startTime: await resolveSessionStart(ctx, { date: day, type: args.type, programName }),
       remarks: args.remarks?.trim() || undefined,
       recordedBy,
       createdAt: Date.now(),
@@ -373,6 +421,22 @@ export const updateAttendance = mutation({
     }
     if (args.remarks !== undefined) patch.remarks = args.remarks?.trim() || undefined;
     if (args.recordedBy !== undefined) patch.recordedBy = args.recordedBy?.trim() || user.name;
+    // A correction leaves the frozen baseline as it was; it re-resolves only when
+    // the mark is moved to a different session (a changed day, activity or program).
+    const nextDate = args.date !== undefined ? normalizeDay(args.date) : row.date;
+    const nextType = args.type !== undefined ? args.type : row.type;
+    const nextProgram =
+      args.programName !== undefined ? args.programName?.trim() || undefined : row.programName;
+    if (
+      sessionKeyOf({ date: row.date, type: row.type, programName: row.programName }) !==
+      sessionKeyOf({ date: nextDate, type: nextType, programName: nextProgram })
+    ) {
+      patch.startTime = await resolveSessionStart(ctx, {
+        date: nextDate,
+        type: nextType,
+        programName: nextProgram,
+      });
+    }
     await ctx.db.patch(args.id, patch);
     await logAudit(ctx, {
       action: "attendance.update",
@@ -518,6 +582,44 @@ export const listSessionStarts = query({
     if (args.to) rows = rows.filter((r) => r.date <= args.to!);
     rows.sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt - a.updatedAt);
     return rows;
+  },
+});
+
+/**
+ * One-off: snapshot the baseline in effect onto every attendance mark that
+ * predates the frozen-baseline field, so historical punctuality stops shifting
+ * when a session or activity start is edited later.
+ *
+ * Idempotent — a mark that already carries `startTime` is left alone, and a mark
+ * whose session has no configured start is skipped (it still falls back to its
+ * session's first arrival, exactly as before). Run once per deployment:
+ *   bunx convex run discipleship:backfillAttendanceBaselines
+ */
+export const backfillAttendanceBaselines = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("attendance").collect();
+    const settingsRow = await ctx.db
+      .query("settings")
+      .withIndex("key", (q) => q.eq("key", "attendance_start_times"))
+      .first();
+    const configured = parseStartTimes(settingsRow?.value);
+    const sessions = await ctx.db.query("attendanceSessionStarts").collect();
+    const customByKey = new Map(sessions.map((s) => [s.sessionKey, s.start]));
+    let updated = 0;
+    for (const row of rows) {
+      if (row.startTime) continue;
+      const key = sessionKeyOf({
+        date: row.date,
+        type: row.type,
+        programName: row.programName,
+      });
+      const start = customByKey.get(key) ?? (row.type ? configured[row.type] : undefined);
+      if (!start) continue;
+      await ctx.db.patch(row._id, { startTime: start });
+      updated += 1;
+    }
+    return { scanned: rows.length, updated };
   },
 });
 

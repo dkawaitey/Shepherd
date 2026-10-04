@@ -242,6 +242,12 @@ const schema = defineSchema(
       // Time of day the person was marked ("HH:MM"), used for punctuality.
       // Older records have none and fall back to their creation time.
       time: v.optional(v.string()),
+      // The start time this mark was judged against at the moment it was
+      // recorded: the session's custom start, or its activity's configured
+      // start. Snapshotted so a later change to either never re-scores an
+      // already-recorded mark. Absent when no start was configured at the time
+      // (such a mark still falls back to its session's first arrival).
+      startTime: v.optional(v.string()),
       remarks: v.optional(v.string()),
       recordedBy: v.optional(v.string()),
       createdAt: v.number(),

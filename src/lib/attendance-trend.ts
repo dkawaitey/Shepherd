@@ -18,6 +18,12 @@ export type TrendRow = {
   type?: string;
   /** Time of day the person was marked, "HH:MM". */
   time?: string;
+  /**
+   * The session start this mark was frozen against when it was recorded. When
+   * present it is the mark's baseline outright, so editing a session's start (or
+   * its activity's default) later never re-scores an already-recorded mark.
+   */
+  startTime?: string;
   /** When the record was entered (epoch ms) — the mark time for older rows. */
   createdAt?: number;
   /** Program / session name, which separates two sessions on the same day. */
@@ -469,7 +475,10 @@ export function punctualitySummary(
     const minute = markedMinute(row);
     if (minute === null) continue;
     const key = sessionKeyOf(row);
-    const start = starts.get(key);
+    // A frozen baseline wins: it is the start this mark was recorded against, so
+    // a later edit to the session or activity start cannot re-score it.
+    const frozen = hhmmToMinutes(row.startTime);
+    const start = frozen !== null ? frozen : starts.get(key);
     if (start === undefined) continue;
     const delay = Math.max(0, minute - start);
     counts[bandFor(delay)] += 1;
@@ -477,7 +486,7 @@ export function punctualitySummary(
     delayTotal += delay;
     if (delay > worstDelay) worstDelay = delay;
     const configuredStart = configured[key] ?? (row.type ? configured[row.type] : undefined);
-    if (hhmmToMinutes(configuredStart) !== null) fromConfigured += 1;
+    if (frozen !== null || hhmmToMinutes(configuredStart) !== null) fromConfigured += 1;
     else fromInferred += 1;
   }
 
@@ -687,7 +696,9 @@ export function effectiveParticipation(
     present += 1;
     const minute = markedMinute(row);
     if (minute === null) continue;
-    const start = starts.get(sessionKeyOf(row));
+    // Frozen baseline first, exactly as punctualitySummary treats it.
+    const frozen = hhmmToMinutes(row.startTime);
+    const start = frozen !== null ? frozen : starts.get(sessionKeyOf(row));
     if (start === undefined) continue;
     timed += 1;
     if (Math.max(0, minute - start) <= PUNCTUAL_GRACE) effective += 1;
