@@ -1,5 +1,6 @@
 import { Email } from "@convex-dev/auth/providers/Email";
 import axios from "axios";
+import { ConvexError } from "convex/values";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
 
 /**
@@ -43,7 +44,19 @@ export const emailOtp = Email({
         },
       );
     } catch (error) {
-      throw new Error(JSON.stringify(error));
+      // Log a short, non-sensitive reason server-side only. Never surface the
+      // raw axios error to the client: its `config.headers` carries the API
+      // key, so the old `JSON.stringify(error)` leaked the key into the browser
+      // console and the admin error log. The client gets a clean message.
+      const detail = axios.isAxiosError(error)
+        ? `HTTP ${error.response?.status ?? "-"} (${error.code ?? "network error"})`
+        : error instanceof Error
+          ? error.message
+          : "unknown error";
+      console.error(`[auth:emailOtp] Failed to send verification code: ${detail}`);
+      throw new ConvexError(
+        "Could not send the verification code right now. Please try again.",
+      );
     }
   },
 });

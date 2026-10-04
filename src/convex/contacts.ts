@@ -545,13 +545,23 @@ export const addJourneyEvent = mutation({
   },
 });
 
-/** Duplicate detection by name + phone. */
+/**
+ * Duplicate detection by name + phone.
+ *
+ * Mirrors `contacts.list`: this is a reactive query fired from the add-contact
+ * dialog as the user types, so it must never throw for a viewer who cannot read
+ * ministry records — doing so crashed the whole page. Instead it returns an
+ * empty list (and, like `list`, scopes a class leader to their own class).
+ */
 export const findDuplicates = query({
   args: { fullName: v.optional(v.string()), phone: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    await requireRole(ctx, [ROLES.COORDINATOR, ROLES.WORKER, ROLES.CLASS_LEADER]);
+    const user = await getCurrentUser(ctx);
+    if (!user || !canReadMinistry(user)) return [];
     const all = await ctx.db.query("contacts").collect();
-    const live = all.filter((c) => !c.isDeleted);
+    let live = all.filter((c) => !c.isDeleted);
+    const scope = classScoped(user);
+    if (scope) live = live.filter((c) => c.klass === scope);
     const name = (args.fullName || "").toLowerCase().trim();
     const phone = (args.phone || "").replace(/[^0-9]/g, "");
     if (!name && !phone) return [];
