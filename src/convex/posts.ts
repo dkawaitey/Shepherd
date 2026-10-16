@@ -2047,7 +2047,7 @@ export const update = mutation({
     }
     if (Date.now() - post.createdAt > POST_EDIT_WINDOW_MS) {
       throw new ConvexError(
-        "A post can only be edited within 24 hours of posting it",
+        "This post is locked — edits are only allowed within 24 hours of posting",
       );
     }
 
