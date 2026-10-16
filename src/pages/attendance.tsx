@@ -96,9 +96,10 @@ const punctualityAsTrend = (points: PunctualityTrendPoint[]): TrendPoint[] =>
  *
  * A session is one day + activity + program. Giving a session its own start
  * time records when it actually began, so a program that ran at a different
- * hour is still measured fairly. It can be set or changed at any time — that
- * only moves the timing baseline. The attendance already recorded for the
- * session lives in its own rows and is never altered.
+ * hour is still measured fairly. It can be set or changed at any time, and it
+ * is the baseline for that whole session — the marks already recorded for it as
+ * well as later ones. Only the timing baseline moves: the recorded attendance
+ * (its date, status and mark time) lives in its own rows and is never altered.
  */
 function CustomSessionStartsCard({
   rows,
@@ -191,9 +192,11 @@ function CustomSessionStartsCard({
       </div>
       <p className="mb-3 text-[11px] leading-4 text-muted-foreground">
         Give a single session its own start time — for a program that began at a
-        different hour. It can be changed at any time. Each mark is frozen to the
-        start in effect when it was recorded, so editing it never re-scores
-        attendance you have already taken.
+        different hour. It can be set or changed at any time and is the baseline
+        for that session, including the attendance already taken for it. The
+        marks themselves (date, status, time) are never altered, and changing an
+        activity's default start in Ministry Settings never re-scores recorded
+        attendance.
       </p>
       <div className="space-y-2">
         {shown.map((s) => {

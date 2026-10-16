@@ -19,9 +19,10 @@ export type TrendRow = {
   /** Time of day the person was marked, "HH:MM". */
   time?: string;
   /**
-   * The session start this mark was frozen against when it was recorded. When
-   * present it is the mark's baseline outright, so editing a session's start (or
-   * its activity's default) later never re-scores an already-recorded mark.
+   * The session start this mark was frozen against when it was recorded. It is
+   * the mark's *fallback* baseline: a custom start set for the session itself
+   * governs that session outright, and otherwise this value is used, so a later
+   * change to the activity's default never re-scores an already-recorded mark.
    */
   startTime?: string;
   /** When the record was entered (epoch ms) — the mark time for older rows. */
@@ -285,10 +286,14 @@ export function hhmmToMinutes(value: string | null | undefined): number | null {
 }
 
 /**
- * A ministry's official start time per activity, keyed by attendance type
- * (`youthMeeting` → `"09:00"`). Activities start at different times, so the
- * baseline each arrival is judged against has to come from the activity, not
- * from whoever happened to arrive first.
+ * When sessions begin, as a map of `"HH:MM"` values.
+ *
+ * Two kinds of key live in it: an attendance type for the activity's standing
+ * start time (`youthMeeting` → `"09:00"`), and a session key for one session's
+ * own custom start (`2026-10-04|youthMeeting|` → `"10:00"`). Activities start at
+ * different times, so the baseline each arrival is judged against has to come
+ * from the session, not from whoever happened to arrive first — and a session
+ * key beats the activity's default for that one session.
  */
 export type SessionStartTimes = Record<string, string>;
 
@@ -368,14 +373,19 @@ export const sessionKeyOf = (input: {
 /**
  * When each session began, as minutes past midnight.
  *
- * A configured start time for the activity (Ministry Settings → session start
- * times) is the session's official beginning and wins outright — so a Sunday
- * service at 08:30 and a youth meeting at 09:00 are each measured against their
- * own start, and someone arriving early isn't mistaken for the baseline.
+ * A start configured for the session — its own custom start, or failing that
+ * the activity's default (Ministry Settings → session start times) — is the
+ * session's official beginning, so a Sunday service at 08:30 and a youth meeting
+ * at 09:00 are each measured against their own start and someone arriving early
+ * isn't mistaken for the baseline.
  *
- * With no configured time the session falls back to its first recorded arrival:
- * the earliest present mark for that date/activity/program. That keeps
+ * With no configured time at all the session falls back to its first recorded
+ * arrival: the earliest present mark for that date/activity/program. That keeps
  * punctuality meaningful before any times are set, and after a session is moved.
+ *
+ * A mark's own frozen `startTime` is deliberately read per mark instead (see
+ * `punctualitySummary`), where it can be weighed against the session's custom
+ * start rather than silently overriding it here.
  */
 export function sessionStarts(
   rows: TrendRow[],
@@ -449,9 +459,11 @@ const bandFor = (delay: number): PunctualityBand =>
         : "veryLate";
 
 /**
- * How punctual a member is: each arrival measured against the session's first
- * arrival. Records without a usable time (and sessions with no earlier arrival
- * to compare to) are simply left out, and `timed` reports how many counted.
+ * How punctual a member is: each arrival measured against when the session
+ * began — its own custom start, the activity's default as frozen onto the mark,
+ * or the session's first arrival. Records without a usable time (and sessions
+ * with no baseline at all) are simply left out, and `timed` reports how many
+ * counted.
  */
 export function punctualitySummary(
   rows: TrendRow[],
@@ -475,18 +487,28 @@ export function punctualitySummary(
     const minute = markedMinute(row);
     if (minute === null) continue;
     const key = sessionKeyOf(row);
-    // A frozen baseline wins: it is the start this mark was recorded against, so
-    // a later edit to the session or activity start cannot re-score it.
+    // The baseline a mark is judged against, in order of authority:
+    //   1. a custom start set for this exact session. It is a deliberate
+    //      correction of when the session began, so it governs every mark for
+    //      that session — past and future. Reading the mark's frozen value
+    //      first here instead would leave one session judged against two
+    //      different starts (marks taken before the correction on the old one,
+    //      marks taken after it on the new one) and the custom start would look
+    //      like it did nothing for attendance already taken.
+    //   2. the start frozen onto the mark as it was recorded, so changing the
+    //      activity's default later never re-scores recorded history.
+    //   3. the session's first arrival, before any start is configured.
+    const sessionStart = hhmmToMinutes(configured[key]);
     const frozen = hhmmToMinutes(row.startTime);
-    const start = frozen !== null ? frozen : starts.get(key);
+    const start = sessionStart ?? frozen ?? starts.get(key);
     if (start === undefined) continue;
     const delay = Math.max(0, minute - start);
     counts[bandFor(delay)] += 1;
     timed += 1;
     delayTotal += delay;
     if (delay > worstDelay) worstDelay = delay;
-    const configuredStart = configured[key] ?? (row.type ? configured[row.type] : undefined);
-    if (frozen !== null || hhmmToMinutes(configuredStart) !== null) fromConfigured += 1;
+    const activityStart = hhmmToMinutes(row.type ? configured[row.type] : undefined);
+    if (sessionStart !== null || frozen !== null || activityStart !== null) fromConfigured += 1;
     else fromInferred += 1;
   }
 
@@ -696,9 +718,12 @@ export function effectiveParticipation(
     present += 1;
     const minute = markedMinute(row);
     if (minute === null) continue;
-    // Frozen baseline first, exactly as punctualitySummary treats it.
+    // The session's own custom start first, then the mark's frozen baseline,
+    // then the session's first arrival — exactly as punctualitySummary orders
+    // them, so the rate and the verdict can never disagree.
+    const sessionStart = hhmmToMinutes(configured[sessionKeyOf(row)]);
     const frozen = hhmmToMinutes(row.startTime);
-    const start = frozen !== null ? frozen : starts.get(sessionKeyOf(row));
+    const start = sessionStart ?? frozen ?? starts.get(sessionKeyOf(row));
     if (start === undefined) continue;
     timed += 1;
     if (Math.max(0, minute - start) <= PUNCTUAL_GRACE) effective += 1;

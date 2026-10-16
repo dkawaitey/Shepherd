@@ -40,6 +40,7 @@ import {
   Check,
   FileIcon,
   MessageSquare,
+  Pencil,
   Pin,
   Plus,
   Search,
@@ -65,6 +66,12 @@ import {
 /** How many posts the feed loads at a time — "Load older posts" grows it. */
 const FEED_PAGE_SIZE = 20;
 const MAX_FEED_POSTS = 100;
+/**
+ * How long an announcement stays editable after it is posted. Mirrors
+ * `POST_EDIT_WINDOW_MS` in convex/posts.ts, which is what actually enforces it:
+ * this only decides whether the Edit button is worth showing.
+ */
+const POST_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Shape we send when uploading: every metadata field is set here. */
 type MediaItem = { storageId: string; type: string; name: string; mimeType: string; size: number; width?: number; height?: number; thumbnailStorageId?: string; status: string; uploadedAt: number; };
 
@@ -471,6 +478,8 @@ type FeedPost = {
   media?: StoredMediaItem[];
   isPinned?: boolean;
   createdAt: number;
+  /** Last edit time. Later than `createdAt` only when the post was edited. */
+  updatedAt?: number;
   commentCount: number;
   reactionCount: number;
   reactionKinds: Record<string, number>;
@@ -926,9 +935,17 @@ function PostCard({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const ref = useViewTracker(post._id, true);
   const isAuthor = !!meId && post.authorId === meId;
   const canDelete = isAdmin || isAuthor;
+  // Editing is the author's own, and only while the post is still inside the
+  // 24-hour window — the server enforces the same deadline, so an open tab
+  // whose window has just lapsed still gets a clear refusal rather than a
+  // silent rewrite.
+  const canEdit =
+    canDelete && Date.now() - post.createdAt <= POST_EDIT_WINDOW_MS;
+  const wasEdited = !!post.updatedAt && post.updatedAt > post.createdAt;
   // Engagement details (who viewed, reacted or voted) are open to
   // administrators, coordinators and the author of this post/poll — and the
   // server enforces the same rule (posts.engagementDetails).
@@ -961,6 +978,14 @@ function PostCard({
               </div>
               <div className="text-[10px] text-muted-foreground">
                 {post.author} · {fmtDateTime(new Date(post.createdAt).toISOString())}
+                {wasEdited && (
+                  <span
+                    className="text-muted-foreground/70"
+                    title={`Edited ${fmtDateTime(new Date(post.updatedAt!).toISOString())}`}
+                  >
+                    {" · edited"}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -979,6 +1004,17 @@ function PostCard({
                 onClick={() => setComposeOpen(true)}
               >
                 <Bell className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {canEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-primary"
+                title="Edit this post (within 24 hours of posting)"
+                onClick={() => setEditOpen(true)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
               </Button>
             )}
             {canDelete && (
@@ -1101,7 +1137,127 @@ function PostCard({
         open={composeOpen}
         onOpenChange={setComposeOpen}
       />
+
+      {/* Mounted only while open, so each edit starts from the post as it
+          stands now rather than carrying a cancelled edit into the next one. */}
+      {editOpen && (
+        <PostEditDialog post={post} onClose={() => setEditOpen(false)} />
+      )}
     </article>
+  );
+}
+
+/**
+ * Edit an announcement's title, message and tags.
+ *
+ * The 24-hour limit is the server's (`posts.update`), so an edit started just
+ * before the window lapses is refused with its own message rather than quietly
+ * rejected. Attachments and a poll's options are deliberately not editable —
+ * the poll is already taking votes, and a voice note or file is a recording of
+ * a moment — and the post's reactions, views, comments and votes are untouched
+ * by an edit.
+ */
+function PostEditDialog({
+  post,
+  onClose,
+}: {
+  post: FeedPost;
+  onClose: () => void;
+}) {
+  const update = useMutation(api.posts.update);
+  const [title, setTitle] = useState(post.title);
+  const [body, setBody] = useState(post.body);
+  const [tags, setTags] = useState((post.tags ?? []).join(" "));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // A post that is nothing but an attachment or a poll still needs no text.
+  const hasAttachment = (post.media?.length ?? 0) > 0 || !!post.poll;
+  const canSave =
+    !busy && (title.trim().length > 0 || body.trim().length > 0 || hasAttachment);
+
+  const submit = async () => {
+    if (!canSave) {
+      setError("Add a title or a message");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await update({
+        id: post._id as any,
+        title: title.trim(),
+        body: body.trim(),
+        tags: tags
+          .split(/[,\s]+/)
+          .map((t) => t.trim().replace(/^#/, ""))
+          .filter(Boolean)
+          .slice(0, 5),
+      });
+      toast.success("Post updated");
+      onClose();
+    } catch (err) {
+      setError(formatError(err, "Could not update the post"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-base">Edit post</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2.5">
+          <Input
+            value={title}
+            maxLength={500}
+            placeholder="Title"
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <Textarea
+            value={body}
+            className="min-h-32 text-[13px]"
+            placeholder="What do you want to say?"
+            onChange={(e) => setBody(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <Label className="text-[11px] text-muted-foreground">Tags</Label>
+            <Input
+              value={tags}
+              placeholder="tags"
+              className="h-8 flex-1 text-[12px]"
+              onChange={(e) => setTags(e.target.value)}
+            />
+          </div>
+          <p className="text-[10px] leading-4 text-muted-foreground">
+            Editable for 24 hours after posting. Attachments and a poll keep
+            what they were published with, and an edit never touches reactions,
+            comments or votes.
+          </p>
+          {error && (
+            <p className="flex items-start gap-1.5 text-[11px] text-destructive">
+              <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+              {error}
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!canSave} onClick={submit}>
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

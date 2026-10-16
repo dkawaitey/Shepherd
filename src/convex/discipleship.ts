@@ -44,8 +44,9 @@ const normalizeDay = (date: string) => (date || "").slice(0, 10);
  *
  * Undefined means no start is configured at all, so the analysis falls back to
  * the session's first arrival (an inferred baseline). The result is snapshotted
- * onto each mark as it is recorded, so this value may change later without ever
- * re-scoring a mark already on file.
+ * onto each mark as it is recorded, so a later change to the activity's default
+ * never re-scores a mark already on file. A custom start set for the session
+ * itself stays authoritative for that whole session wherever its marks are read.
  */
 const resolveSessionStart = async (
   ctx: MutationCtx,
@@ -476,6 +477,9 @@ export const deleteAttendance = mutation({
  * The value lives in its own table, never on the attendance rows, so it can be
  * changed at any time and only the timing baseline moves: every mark already
  * recorded for the session keeps its date, status and mark time untouched.
+ * Because the baseline is the session's own, a start set — or corrected — here
+ * is what that session's already-recorded marks are judged against, instead of
+ * leaving them on the activity's default.
  */
 export const setSessionStart = mutation({
   args: {

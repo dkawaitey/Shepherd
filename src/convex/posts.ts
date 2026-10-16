@@ -2005,6 +2005,90 @@ export const addComment = mutation({
   },
 });
 
+/** How long an announcement stays editable after it is posted. */
+export const POST_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Edit an announcement you posted, within 24 hours of posting it.
+ *
+ * Only the author (or an administrator acting on their post) may edit, and only
+ * while the post is inside the window — after that the announcement stands as
+ * published. The deadline is the same for everyone, so correcting a typo the
+ * next morning is intended and quietly rewriting last week's announcement is
+ * not; an unwanted post can still be removed outright.
+ *
+ * Title, message and tags are editable; attachments and a poll are not, because
+ * a poll's options are already being voted on and a voice note or file is a
+ * recording of a moment. The post keeps its identity and its engagement —
+ * reactions, views, comments and votes are untouched — and `updatedAt` moves so
+ * the feed can mark it as edited.
+ */
+export const update = mutation({
+  args: {
+    id: v.id("posts"),
+    title: v.optional(v.string()),
+    body: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [
+      ROLES.COORDINATOR,
+      ROLES.WORKER,
+      ROLES.LEADER,
+      ROLES.CLASS_LEADER,
+    ]);
+    const post = await ctx.db.get(args.id);
+    if (!post) throw new ConvexError("Post not found");
+    // `hasRole` (not the legacy single `user.role`) so a dual-role administrator
+    // is recognised, and an admin "testing as" another role is not — exactly as
+    // `remove` decides.
+    if (!hasRole(user, ROLES.ADMIN) && post.authorId !== user._id) {
+      throw new ConvexError("You can only edit your own posts");
+    }
+    if (Date.now() - post.createdAt > POST_EDIT_WINDOW_MS) {
+      throw new ConvexError(
+        "A post can only be edited within 24 hours of posting it",
+      );
+    }
+
+    const title = (args.title ?? post.title).trim();
+    const body = (args.body ?? post.body).trim();
+    if (title.length > 500) {
+      throw new ConvexError("Title must be 500 characters or fewer");
+    }
+    if (body.length > 10000) {
+      throw new ConvexError("Content must be 10000 characters or fewer");
+    }
+    // The post still needs something to show — the same rule as at creation,
+    // where a standalone poll or an attachment counts on its own.
+    if (!title && !body && !post.media?.length && !post.pollId) {
+      throw new ConvexError("Add a title or a message");
+    }
+
+    const patch: Record<string, unknown> = {
+      title,
+      body,
+      updatedAt: Date.now(),
+    };
+    // Only touched when sent, so an edit that ignores tags leaves them alone.
+    if (args.tags !== undefined) {
+      patch.tags = args.tags
+        .map((t) => t.trim().replace(/^#/, ""))
+        .filter(Boolean)
+        .slice(0, 5);
+    }
+    await ctx.db.patch(args.id, patch);
+
+    await logAudit(ctx, {
+      action: "post.update",
+      entityType: "posts",
+      entityId: args.id,
+      details: title || (post.pollId ? "Poll" : "Announcement"),
+    });
+    return args.id;
+  },
+});
+
 /** Remove own post, or any post as admin. Hard-deletes the post,
  *  its media blobs from Convex storage, and all comments. */
 export const remove = mutation({
