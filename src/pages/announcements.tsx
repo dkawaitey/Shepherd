@@ -1313,11 +1313,14 @@ function PostEditDialog({
         if (!v) onClose();
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="text-base">Edit post</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2.5">
+        {/* The header and the Save/Cancel row stay put; only the fields
+            scroll, so a tall form never pushes the buttons off a short
+            screen (or hides behind the on-screen keyboard). */}
+        <div className="min-h-0 space-y-2.5 overflow-y-auto overscroll-contain pr-1">
           <Input
             value={title}
             maxLength={500}
