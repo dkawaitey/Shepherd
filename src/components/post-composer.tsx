@@ -16,7 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { formatError } from "@/components/shared";
 import { cn } from "@/lib/utils";
+import { POST_CATEGORIES, normalizePostCategory } from "@/convex/constants";
+import { categoryMeta } from "@/lib/post-categories";
 import {
+  classifyMime,
   formatBytes,
   uploadPickedFile,
   uploadVoiceNote,
@@ -63,9 +66,12 @@ let fileSeq = 0;
 export function PostComposerDialog({
   open,
   onOpenChange,
+  /** Pre-file the post, e.g. "constitution" when publishing from that page. */
+  initialCategory,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  initialCategory?: string;
 }) {
   const create = useMutation(api.posts.create);
   const generateUploadUrl = useMutation(api.posts.generateUploadUrl);
@@ -73,6 +79,11 @@ export function PostComposerDialog({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [tags, setTags] = useState("");
+  // "" until the author files the post. A document must be filed; an ordinary
+  // message falls back to "announcement" on the server.
+  const [category, setCategory] = useState(
+    normalizePostCategory(initialCategory) ?? "",
+  );
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [voice, setVoice] = useState<VoiceDraft[]>([]);
   const [busy, setBusy] = useState(false);
@@ -110,6 +121,11 @@ export function PostComposerDialog({
   const attachments = files.length + voice.length;
   const hasContent =
     title.trim().length > 0 || body.trim().length > 0 || attachments > 0;
+  // Documents have to be filed so they can be found again; a photo or a voice
+  // note is content in its own right and may stay an ordinary announcement.
+  const needsCategory = files.some(
+    (f) => classifyMime(f.file.type) === "file",
+  );
 
   const reset = () => {
     for (const f of files) if (f.preview) URL.revokeObjectURL(f.preview);
@@ -117,6 +133,7 @@ export function PostComposerDialog({
     setTitle("");
     setBody("");
     setTags("");
+    setCategory(normalizePostCategory(initialCategory) ?? "");
     setFiles([]);
     setVoice([]);
     setPollOpen(false);
@@ -190,6 +207,10 @@ export function PostComposerDialog({
       setError("Write something, or record a voice note");
       return;
     }
+    if (needsCategory && !category) {
+      setError("Choose a category for the attached files so people can find them");
+      return;
+    }
 
     setBusy(true);
     try {
@@ -217,6 +238,7 @@ export function PostComposerDialog({
             .map((t) => t.trim().replace(/^#/, ""))
             .filter(Boolean)
             .slice(0, 5) || undefined,
+        category: category || undefined,
         media: media.length > 0 ? media : undefined,
         allowReminder: allowReminder || undefined,
         poll: pollOpen
@@ -316,6 +338,48 @@ export function PostComposerDialog({
                 </div>
               )}
             </div>
+          )}
+
+          {/* Filing. One tap, so a document can be found by its category
+              instead of by scrolling back through the feed. */}
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-dashed pt-2.5">
+            <span
+              className={cn(
+                "mr-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                needsCategory && !category
+                  ? "text-[#fbbf24]"
+                  : "text-muted-foreground",
+              )}
+            >
+              File as
+            </span>
+            {POST_CATEGORIES.map((c) => {
+              const { Icon } = categoryMeta(c.value);
+              const active = category === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setCategory(active ? "" : c.value)}
+                  title={`File this post under ${c.label}`}
+                  className={cn(
+                    "flex h-7 items-center gap-1 rounded-full border px-2 text-[10px] font-medium transition-colors",
+                    active
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                  )}
+                >
+                  <Icon className="h-3 w-3" />
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+          {needsCategory && !category && (
+            <p className="text-[10px] leading-4 text-[#fbbf24]">
+              These files need a category — pick the one that fits so they can be
+              found later.
+            </p>
           )}
 
           {/* The composer toolbar. */}

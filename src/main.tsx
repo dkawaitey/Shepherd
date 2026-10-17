@@ -30,6 +30,7 @@ const MemberProfile = lazy(() =>
 const Attendance = lazy(() => import("./pages/attendance.tsx"));
 const PrayerJournal = lazy(() => import("./pages/prayer-journal.tsx"));
 const Announcements = lazy(() => import("./pages/announcements.tsx"));
+const Constitution = lazy(() => import("./pages/constitution.tsx"));
 const Reports = lazy(() => import("./pages/reports.tsx"));
 const Analytics = lazy(() => import("./pages/analytics.tsx"));
 const Settings = lazy(() => import("./pages/settings.tsx"));
@@ -205,6 +206,7 @@ createRoot(document.getElementById("root")!).render(
                     <Route path="/attendance" element={<Attendance />} />
                     <Route path="/prayer-journal" element={<PrayerJournal />} />
                     <Route path="/announcements" element={<Announcements />} />
+                    <Route path="/constitution" element={<Constitution />} />
                     <Route path="/reports" element={<Reports />} />
                     <Route path="/analytics" element={<Analytics />} />
                     <Route path="/settings" element={<Settings />} />

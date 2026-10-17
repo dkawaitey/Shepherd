@@ -17,9 +17,14 @@ import {
 } from "./helpers";
 import {
   CLASS_OPTIONS,
+  CONSTITUTION_CATEGORY,
+  DEFAULT_POST_CATEGORY,
+  POST_CATEGORIES,
   REACTION_KINDS,
   ROLE_LABELS,
   ROLES,
+  normalizePostCategory,
+  postCategory,
   type Role,
 } from "./constants";
 import { checkRateLimit } from "./rateLimit";
@@ -377,6 +382,8 @@ export const list = query({
   args: {
     search: v.optional(v.string()),
     author: v.optional(v.string()),
+    /** Narrow the feed to one category (see POST_CATEGORIES). */
+    category: v.optional(v.string()),
     /** How many posts to load (default 20, max 100). The feed grows this
      *  window when the reader asks for more instead of loading everything. */
     limit: v.optional(v.number()),
@@ -396,8 +403,10 @@ export const list = query({
       return b.createdAt - a.createdAt;
     };
 
+    const category = normalizePostCategory(args.category);
+
     let page: Doc<"posts">[];
-    if (args.search || args.author) {
+    if (args.search || args.author || category) {
       // Filtered browsing inspects the posts table, which holds one row per
       // announcement. Engagement is still only loaded for the returned page.
       let posts = await ctx.db.query("posts").collect();
@@ -411,6 +420,8 @@ export const list = query({
         );
       }
       if (args.author) posts = posts.filter((p) => p.author === args.author);
+      // Old posts have no category and count as announcements.
+      if (category) posts = posts.filter((p) => postCategory(p.category) === category);
       posts.sort(byPinnedThenRecent);
       page = posts.slice(0, limit);
     } else {
@@ -447,6 +458,64 @@ export const list = query({
         poll: await pollFor(ctx, p, user._id),
       })),
     );
+  },
+});
+
+/** How many earlier constitution versions the constitution page offers. */
+const CONSTITUTION_VERSION_LIMIT = 5;
+
+/**
+ * The youth constitution, as the page dedicated to it reads it.
+ *
+ * The constitution is just an announcement filed under the "constitution"
+ * category: publishing a new version is the same action as any other post, and
+ * leadership needs no separate editor. This resolves the newest version plus a
+ * few earlier ones, with each attachment's URL so the reader can open the
+ * document inline rather than being handed a file to download.
+ *
+ * Two bounded reads, whatever the size of the feed: one range over the
+ * category index, then storage URLs for those few documents.
+ */
+export const constitution = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isAnonymous) return { current: null, versions: [] };
+
+    const rows = await ctx.db
+      .query("posts")
+      .withIndex("by_category", (q) =>
+        q.eq("category", CONSTITUTION_CATEGORY),
+      )
+      .order("desc")
+      .take(CONSTITUTION_VERSION_LIMIT);
+
+    const withDocuments = await Promise.all(
+      rows.map(async (post) => ({
+        _id: post._id,
+        title: post.title,
+        body: post.body,
+        author: post.author ?? null,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        media: await Promise.all(
+          (post.media ?? []).map(async (m) => ({
+            storageId: m.storageId,
+            type: m.type,
+            name: m.name,
+            mimeType: m.mimeType ?? null,
+            size: m.size ?? null,
+            duration: m.duration ?? null,
+            url: await ctx.storage.getUrl(m.storageId as any),
+          })),
+        ),
+      })),
+    );
+
+    return {
+      current: withDocuments[0] ?? null,
+      versions: withDocuments.slice(1),
+    };
   },
 });
 
@@ -864,6 +933,8 @@ export const create = mutation({
     title: v.optional(v.string()),
     body: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
+    /** What the post is filed under (POST_CATEGORIES in constants.ts). */
+    category: v.optional(v.string()),
     media: v.optional(v.array(v.object({
       storageId: v.string(),
       type: v.string(),
@@ -927,6 +998,24 @@ export const create = mutation({
       for (const m of args.media) {
         validateMediaItem(m);
       }
+    }
+
+    // A file is meant to be found again, so the author has to say what it is.
+    // Photos and voice notes keep the default; a document does not, because a
+    // feed of uncategorised documents is a feed nobody can search.
+    const category = normalizePostCategory(args.category);
+    if (args.category && !category) {
+      throw new ConvexError(
+        `That post category is not one we recognise — use ${POST_CATEGORIES.map((c) => c.label).join(", ")}`,
+      );
+    }
+    // Decide from the file's own type rather than the label the client sent,
+    // so a document cannot slip into the feed uncategorised.
+    const hasDocument = (args.media ?? []).some(
+      (m) => classifyMime(acceptedMime(m.name, m.mimeType) ?? "") === "file",
+    );
+    if (hasDocument && !category) {
+      throw new ConvexError("Choose a category for the attached files");
     }
 
     const now = Date.now();
@@ -1020,6 +1109,7 @@ export const create = mutation({
       body,
       tags: args.tags,
       media: args.media,
+      category: category ?? DEFAULT_POST_CATEGORY,
       isPinned: false,
       allowReminder: args.allowReminder ?? false,
       // Denormalized engagement counters start at zero.
@@ -2017,9 +2107,9 @@ export const POST_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
  * next morning is intended and quietly rewriting last week's announcement is
  * not; an unwanted post can still be removed outright.
  *
- * Title, message and tags are editable; attachments and a poll are not, because
- * a poll's options are already being voted on and a voice note or file is a
- * recording of a moment. The post keeps its identity and its engagement —
+ * Title, message, tags and category are editable; attachments and a poll are
+ * not, because a poll's options are already being voted on and a voice note or
+ * file is a recording of a moment. The post keeps its identity and its engagement —
  * reactions, views, comments and votes are untouched — and `updatedAt` moves so
  * the feed can mark it as edited.
  */
@@ -2029,6 +2119,8 @@ export const update = mutation({
     title: v.optional(v.string()),
     body: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
+    /** Re-file the post under another category. */
+    category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [
@@ -2076,6 +2168,13 @@ export const update = mutation({
         .map((t) => t.trim().replace(/^#/, ""))
         .filter(Boolean)
         .slice(0, 5);
+    }
+    if (args.category !== undefined) {
+      const category = normalizePostCategory(args.category);
+      if (!category) {
+        throw new ConvexError("That post category is not one we recognise");
+      }
+      patch.category = category;
     }
     await ctx.db.patch(args.id, patch);
 

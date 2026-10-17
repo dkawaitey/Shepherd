@@ -27,8 +27,15 @@ import {
   fmtDateTime,
   formatError,
 } from "@/components/shared";
-import { CLASS_OPTIONS, ROLE_LABELS, ROLES } from "@/convex/constants";
+import {
+  CLASS_OPTIONS,
+  POST_CATEGORIES,
+  ROLE_LABELS,
+  ROLES,
+  normalizePostCategory,
+} from "@/convex/constants";
 import { REACTION_PALETTE, reactionMeta } from "@/lib/reactions";
+import { categoryMeta } from "@/lib/post-categories";
 import { canPublishPosts, userHasRole, userIsAdmin } from "@/components/shared";
 import { PollComposer } from "@/components/poll-composer";
 import { PollScheduleDialog } from "@/components/poll-schedule";
@@ -87,6 +94,10 @@ type StoredMediaItem = Pick<MediaItem, "storageId" | "type" | "name"> &
 export default function Announcements() {
   const [search, setSearch] = useState("");
   const [author, setAuthor] = useState("");
+  // Category filter; the constitution page links here with ?category=constitution.
+  const [searchParams] = useSearchParams();
+  const urlCategory = normalizePostCategory(searchParams.get("category")) ?? "";
+  const [category, setCategory] = useState(urlCategory);
   const [createOpen, setCreateOpen] = useState(false);
   // The standalone poll composer (a poll is its own announcement).
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
@@ -96,7 +107,6 @@ export default function Announcements() {
 
   // Deep link from a notification: /announcements?post=<id>[&c=<commentId>]
   // opens that thread and scrolls to the post (or the exact comment/reply).
-  const [searchParams] = useSearchParams();
   const urlPost = searchParams.get("post");
   const urlComment = searchParams.get("c");
   useEffect(() => {
@@ -116,6 +126,7 @@ export default function Announcements() {
   const posts = useQuery(api.posts.list, {
     search: search || undefined,
     author: author || undefined,
+    category: category || undefined,
     limit,
   });
   const me = useQuery(api.users.currentUser);
@@ -129,10 +140,16 @@ export default function Announcements() {
   const canPublish = canPublishPosts(me);
   const removePost = useMutation(api.posts.remove);
 
-  // A new search or author filter starts from the first page again.
+  // A new search, author or category filter starts from the first page again.
   useEffect(() => {
     setLimit(FEED_PAGE_SIZE);
-  }, [search, author]);
+  }, [search, author, category]);
+
+  // Keep the filter in step with the URL, so a link from another page (the
+  // constitution) lands on the right slice of the feed.
+  useEffect(() => {
+    setCategory(urlCategory);
+  }, [urlCategory]);
 
   // Author list comes from its own bounded query, not from the loaded page, so
   // filters keep working when older posts aren't loaded yet.
@@ -157,7 +174,7 @@ export default function Announcements() {
         }
       />
 
-      <div className="mb-5 grid gap-2 sm:grid-cols-[1fr_220px]">
+      <div className="mb-2.5 grid gap-2 sm:grid-cols-[1fr_220px]">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -179,6 +196,44 @@ export default function Announcements() {
         </select>
       </div>
 
+      {/* Files are filed by category, so this is how a form, a report or the
+          constitution is found without scrolling the whole feed. */}
+      <div className="mb-5 flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setCategory("")}
+          className={cn(
+            "h-7 rounded-full border px-2.5 text-[10px] font-semibold transition-colors",
+            !category
+              ? "border-primary/50 bg-primary/10 text-primary"
+              : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary",
+          )}
+        >
+          Everything
+        </button>
+        {POST_CATEGORIES.map((c) => {
+          const { Icon } = categoryMeta(c.value);
+          const active = category === c.value;
+          return (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setCategory(active ? "" : c.value)}
+              title={`Show only ${c.label.toLowerCase()} posts`}
+              className={cn(
+                "flex h-7 items-center gap-1 rounded-full border px-2.5 text-[10px] font-semibold transition-colors",
+                active
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary",
+              )}
+            >
+              <Icon className="h-3 w-3" />
+              {c.label}
+            </button>
+          );
+        })}
+      </div>
+
       {posts === undefined ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -186,17 +241,38 @@ export default function Announcements() {
           ))}
         </div>
       ) : posts.length === 0 ? (
-        <EmptyState
-          title="No posts yet"
-          message="Post the first update for the team — a testimony, an announcement or an encouragement."
-          action={
-            canPublish ? (
-              <Button onClick={openComposer}>
-                <Plus className="mr-1.5 h-4 w-4" /> New post
-              </Button>
-            ) : null
-          }
-        />
+        // "Nothing here" means something different under a filter, so the
+        // filtered view offers the way back instead of the empty-feed prompt.
+        category ? (
+          <EmptyState
+            title={`No ${categoryMeta(category).label.toLowerCase()} posts yet`}
+            message="Nothing has been filed here yet. Show everything, or publish the first post in this category."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="outline" onClick={() => setCategory("")}>
+                  Show everything
+                </Button>
+                {canPublish && (
+                  <Button onClick={openComposer}>
+                    <Plus className="mr-1.5 h-4 w-4" /> New post
+                  </Button>
+                )}
+              </div>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="No posts yet"
+            message="Post the first update for the team — a testimony, an announcement or an encouragement."
+            action={
+              canPublish ? (
+                <Button onClick={openComposer}>
+                  <Plus className="mr-1.5 h-4 w-4" /> New post
+                </Button>
+              ) : null
+            }
+          />
+        )
       ) : (
         <div className="space-y-4">
           {posts.map((p) => (
@@ -209,6 +285,7 @@ export default function Announcements() {
               isClassLeader={isClassLeader}
               isOpen={expanded === p._id}
               onToggle={() => setExpanded(expanded === p._id ? null : p._id)}
+              onCategory={(c) => setCategory(c)}
               onRemove={async () => {
                 await removePost({ id: p._id });
                 toast.success("Post removed");
@@ -231,7 +308,13 @@ export default function Announcements() {
         </div>
       )}
 
-      <PostComposerDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {/* Composing while a filter is on files the post where the author is
+          looking, so a new form lands with the other forms. */}
+      <PostComposerDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        initialCategory={category || undefined}
+      />
       <PollComposer
         open={pollComposerOpen}
         onOpenChange={setPollComposerOpen}
@@ -475,6 +558,8 @@ type FeedPost = {
   title: string;
   body: string;
   tags?: string[];
+  /** What the post is filed under — see POST_CATEGORIES. */
+  category?: string;
   media?: StoredMediaItem[];
   isPinned?: boolean;
   createdAt: number;
@@ -921,6 +1006,7 @@ function PostCard({
   isClassLeader,
   isOpen,
   onToggle,
+  onCategory,
   onRemove,
 }: {
   post: FeedPost;
@@ -930,6 +1016,8 @@ function PostCard({
   isClassLeader: boolean;
   isOpen: boolean;
   onToggle: () => void;
+  /** Narrow the feed to this post's category. */
+  onCategory?: (category: string) => void;
   onRemove: () => Promise<void>;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -954,6 +1042,8 @@ function PostCard({
   const canManagePoll = canSeeDetails;
   // The reminder log is for the author and leadership (see posts.reminderLog).
   const canSeeReminders = canSeeDetails || isClassLeader;
+  const category = categoryMeta(post.category);
+  const CategoryIcon = category.Icon;
 
   // A post reminder re-notifies people, so it is the author's to send and
   // only when they opted into the button while composing.
@@ -972,9 +1062,20 @@ function PostCard({
               <UserRound className="h-3.5 w-3.5 text-primary" />
             </span>
             <div>
-              <div className="text-[13px] font-bold">
+              <div className="flex flex-wrap items-center gap-1.5 text-[13px] font-bold">
                 {/* A standalone poll carries no title of its own. */}
-                {post.title.trim() || (post.poll ? "Poll" : "Announcement")}
+                <span>
+                  {post.title.trim() || (post.poll ? "Poll" : "Announcement")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onCategory?.(category.value)}
+                  title={`Show only ${category.label.toLowerCase()} posts`}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                >
+                  <CategoryIcon className="h-2.5 w-2.5" />
+                  {category.label}
+                </button>
               </div>
               <div className="text-[10px] text-muted-foreground">
                 {post.author} · {fmtDateTime(new Date(post.createdAt).toISOString())}
@@ -1168,6 +1269,7 @@ function PostEditDialog({
   const [title, setTitle] = useState(post.title);
   const [body, setBody] = useState(post.body);
   const [tags, setTags] = useState((post.tags ?? []).join(" "));
+  const [category, setCategory] = useState(categoryMeta(post.category).value);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1193,6 +1295,7 @@ function PostEditDialog({
           .map((t) => t.trim().replace(/^#/, ""))
           .filter(Boolean)
           .slice(0, 5),
+        category,
       });
       toast.success("Post updated");
       onClose();
@@ -1235,6 +1338,31 @@ function PostEditDialog({
               className="h-8 flex-1 text-[12px]"
               onChange={(e) => setTags(e.target.value)}
             />
+          </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">File as</Label>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {POST_CATEGORIES.map((c) => {
+                const { Icon } = categoryMeta(c.value);
+                const active = category === c.value;
+                return (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => setCategory(c.value)}
+                    className={cn(
+                      "flex h-7 items-center gap-1 rounded-full border px-2 text-[10px] font-medium transition-colors",
+                      active
+                        ? "border-primary/50 bg-primary/10 text-primary"
+                        : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                    )}
+                  >
+                    <Icon className="h-3 w-3" />
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <p className="text-[10px] leading-4 text-muted-foreground">
             Editable for 24 hours after posting. Attachments and a poll keep

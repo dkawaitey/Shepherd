@@ -46,6 +46,52 @@ export const ROLE_NOTES: Record<Role, string> = {
   [ROLES.CLASS_LEADER]: "Manage one class: contacts, workers, follow-ups, prayers, notes",
 };
 
+/**
+ * What an announcement is filed under.
+ *
+ * A post is a message first, but it is also how documents reach the team — a
+ * form, a report, the youth constitution. The author files it under one of
+ * these so the feed can be narrowed to just the documents someone is looking
+ * for, and the Constitution page can find the constitution itself.
+ */
+export const POST_CATEGORIES = [
+  { value: "announcement", label: "Announcement" },
+  { value: "constitution", label: "Constitution" },
+  { value: "form", label: "Form" },
+  { value: "report", label: "Report" },
+  { value: "minutes", label: "Minutes" },
+  { value: "resource", label: "Resource" },
+  { value: "media", label: "Photos & video" },
+] as const;
+
+export type PostCategory = (typeof POST_CATEGORIES)[number]["value"];
+
+export const POST_CATEGORY_VALUES: readonly string[] = POST_CATEGORIES.map(
+  (c) => c.value,
+);
+
+/** A post with no category is an ordinary announcement. */
+export const DEFAULT_POST_CATEGORY: PostCategory = "announcement";
+
+/** The category the dedicated Constitution page reads. */
+export const CONSTITUTION_CATEGORY: PostCategory = "constitution";
+
+export const POST_CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
+  POST_CATEGORIES.map((c) => [c.value, c.label]),
+);
+
+/** Canonical category value, or undefined when it is not one we recognise. */
+export const normalizePostCategory = (
+  value?: string | null,
+): string | undefined => {
+  const v = (value ?? "").trim().toLowerCase();
+  return POST_CATEGORY_VALUES.includes(v) ? v : undefined;
+};
+
+/** The category a stored post is shown under (older posts have none). */
+export const postCategory = (value?: string | null): string =>
+  normalizePostCategory(value) ?? DEFAULT_POST_CATEGORY;
+
 // ===== Ministry positions (Member Directory) =====
 // The member's ministry position is the source of truth for system permissions:
 // the linked user account inherits the corresponding system roles automatically.

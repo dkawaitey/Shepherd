@@ -386,6 +386,10 @@ const schema = defineSchema(
       body: v.string(),
       tags: v.optional(v.array(v.string())),
       media: v.optional(v.array(mediaValidator)),
+      /** What the post is filed under — see POST_CATEGORIES in constants.ts.
+       *  Optional because posts written before categories default to
+       *  "announcement" when read. */
+      category: v.optional(v.string()),
       isPinned: v.optional(v.boolean()),
       isDeleted: v.optional(v.boolean()),
       createdAt: v.number(),
@@ -411,7 +415,10 @@ const schema = defineSchema(
       reminderCount: v.optional(v.number()),
     })
       .index("createdAt", ["createdAt"])
-      .index("by_pinned", ["isPinned", "createdAt"]),
+      .index("by_pinned", ["isPinned", "createdAt"])
+      // The Constitution page reads the newest post filed under one category,
+      // so that lookup stays a bounded range read instead of a table walk.
+      .index("by_category", ["category", "createdAt"]),
 
     // One row per manual post reminder, so leadership can see who was notified
     // and when (names are denormalized so the log reads without joins).
