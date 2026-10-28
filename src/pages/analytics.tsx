@@ -31,12 +31,12 @@ export default function Analytics() {
       <div className="mx-auto max-w-6xl">
         <PageHeader title="Analytics" code="anl" />
         {report === null ? (
-          <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+          <div className="panel p-6 text-center text-sm text-muted-foreground">
             You don't have access to ministry records yet. Ask an administrator to
             set your ministry position or link your account to your member record.
           </div>
         ) : (
-          <div className="h-64 animate-pulse rounded-lg border bg-card" />
+          <div className="h-64 animate-pulse panel" />
         )}
       </div>
     );
@@ -94,7 +94,7 @@ export default function Analytics() {
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader title="Analytics" code="anl" />
 
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-3">
+      <div className="flex flex-wrap items-end gap-3 panel p-3">
         <div>
           <Label>From</Label>
           <Input type="date" className="mt-1" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -108,12 +108,12 @@ export default function Analytics() {
       {/* Metric cards */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {metrics.map((m) => (
-          <div key={m.label} className="rounded-lg border bg-card p-4">
+          <div key={m.label} className="panel p-4">
             <div className="flex items-center gap-2">
               <m.icon className="h-4 w-4 text-muted-foreground" />
               <span className="term-label">{m.label}</span>
             </div>
-            <div className={cn("mt-2 font-mono text-3xl font-bold tabular-nums", m.tone)}>{m.value}</div>
+            <div className={cn("mt-2 stat-figure text-[28px]", m.tone)}>{m.value}</div>
             <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">{m.note}</p>
           </div>
         ))}
@@ -121,7 +121,7 @@ export default function Analytics() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Funnel drop-off */}
-        <div className="rounded-lg border bg-card p-4">
+        <div className="panel p-4">
           <p className="term-label mb-4">// funnel drop-off</p>
           <div className="space-y-3">
             {funnel.map((f, i) => {
@@ -156,7 +156,7 @@ export default function Analytics() {
         </div>
 
         {/* Volunteer performance */}
-        <div className="rounded-lg border bg-card p-4">
+        <div className="panel p-4">
           <p className="term-label mb-4">// volunteer performance</p>
           {report.workers.length === 0 ? (
             <p className="py-8 text-center text-[11px] text-muted-foreground">
@@ -202,7 +202,7 @@ export default function Analytics() {
       />
 
       {/* Monthly conversion */}
-      <div className="rounded-lg border bg-card p-4">
+      <div className="panel p-4">
         <div className="mb-4 flex items-center justify-between">
           <p className="term-label">// monthly reach & conversion</p>
           <Award className="h-4 w-4 text-muted-foreground" />

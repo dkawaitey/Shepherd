@@ -225,11 +225,11 @@ export default function ErrorLogPage() {
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-lg border bg-card p-4">
+          <div key={card.label} className="panel p-4">
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
               {card.label}
             </p>
-            <p className={cn("mt-1 text-2xl font-bold tabular-nums", card.tone)}>
+            <p className={cn("mt-1 stat-figure text-[24px]", card.tone)}>
               {card.value}
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">{card.note}</p>
@@ -237,7 +237,7 @@ export default function ErrorLogPage() {
         ))}
       </div>
 
-      <div className="mb-4 rounded-lg border bg-card p-3">
+      <div className="mb-4 panel p-3">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">
             <Label htmlFor="el-search">Search</Label>
@@ -321,7 +321,7 @@ export default function ErrorLogPage() {
       {!data ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg border bg-card" />
+            <div key={i} className="h-24 animate-pulse panel" />
           ))}
         </div>
       ) : entries.length === 0 ? (
@@ -341,7 +341,7 @@ export default function ErrorLogPage() {
               <div
                 key={entry._id}
                 className={cn(
-                  "rounded-lg border bg-card p-3.5 transition-colors",
+                  "panel p-3.5 transition-colors",
                   !entry.resolved && "border-status-red/30",
                 )}
               >

@@ -74,7 +74,7 @@ export default function Settings() {
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Settings" code="cfg" />
 
-      <div className="mb-5 flex gap-1.5 overflow-x-auto rounded-lg border bg-card p-1.5">
+      <div className="mb-5 flex gap-1.5 overflow-x-auto panel p-1.5">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -153,7 +153,7 @@ function UsersTab() {
   return (
     <div className="space-y-4">
 
-      <div className="overflow-x-auto rounded-lg border bg-card">
+      <div className="overflow-x-auto panel">
         <table className="w-full min-w-[760px] text-left text-[11px]">
           <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -528,7 +528,7 @@ function ProfileTab() {
 
   return (
     <div className="max-w-md space-y-4">
-      <div className="rounded-lg border bg-card p-4">
+      <div className="panel p-4">
         <div className="space-y-3">
           <div>
             <Label htmlFor="p-name">Full name</Label>
@@ -565,7 +565,7 @@ function ProfileTab() {
       </div>
 
       {record && (
-        <div className="rounded-lg border bg-card p-4">
+        <div className="panel p-4">
           <div className="mb-3 flex items-center gap-2">
             <ContactRound className="h-4 w-4 text-primary" />
             <span className="text-sm font-semibold">My ministry record</span>
@@ -608,7 +608,7 @@ function MinistryTab() {
 
   return (
     <div className="max-w-lg space-y-4">
-      <div className="rounded-lg border bg-card p-4">
+      <div className="panel p-4">
         <div className="space-y-3">
           {list.map((f) => (
             <div key={f.key}>
@@ -657,7 +657,7 @@ function SessionStartTimesCard() {
   const valueFor = (type: string) => times[type] ?? saved[type] ?? "";
 
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="panel p-4">
       <div className="mb-1 flex items-center gap-2">
         <Clock className="h-4 w-4 text-primary" />
         <p className="term-label">// session start times</p>
@@ -744,7 +744,7 @@ function EmailRemindersSection() {
   const c = preview?.counts;
 
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="panel p-4">
       <div className="mb-3 flex items-center gap-2">
         <MailCheck className="h-4 w-4 text-primary" />
         <p className="term-label">// email notifications</p>
@@ -931,7 +931,7 @@ function NotificationsTab() {
           </a>
         </div>
       )}
-      <div className="rounded-lg border bg-card p-4">
+      <div className="panel p-4">
         <div className="mb-3 flex items-center gap-2">
           <Bell className="h-4 w-4 text-primary" />
           <p className="term-label">// device push notifications</p>
@@ -1324,7 +1324,7 @@ function AuditTab() {
         </Button>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-lg border bg-card">
+      <div className="overflow-x-auto panel">
         <table className="w-full min-w-[640px] text-left text-[11px]">
           <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
             <tr>

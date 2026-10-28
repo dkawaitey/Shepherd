@@ -3,10 +3,12 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 14px);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -25,6 +27,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -42,124 +46,153 @@
   --color-status-amber: var(--status-amber);
   --color-status-red: var(--status-red);
   --color-status-grey: var(--status-grey);
-  --font-sans: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
-    Menlo, Consolas, "Liberation Mono", monospace;
+  /* Body copy is a humanist sans; the mono face is reserved for labels,
+     figures and anything that should read like a ledger entry. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
     Menlo, Consolas, "Liberation Mono", monospace;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua",
+    Palatino, Georgia, ui-serif, serif;
 }
 
-/* Glassmorphism theme — sage/moss green frosted surfaces.
-   Semi-transparent cards float over ambient gradient backgrounds.
-   Light mode: warm cream with white glass. Dark mode: deep green-black with dark glass. */
+/* ── "Sanctuary" palette ──────────────────────────────────────────────
+   Deep evergreen ink on warm parchment, with a brass accent borrowed from
+   the ministry's gold foil. Panels are frosted paper: translucent, hairline
+   bordered, lit from the top edge. */
 :root {
-  --radius: 0.75rem;
-  --background: #f0efe8;
-  --foreground: #20261c;
-  --card: rgba(255, 255, 255, 0.55);
-  --card-foreground: #20261c;
-  --popover: rgba(255, 255, 255, 0.7);
-  --popover-foreground: #20261c;
-  --primary: #55724c;
-  --primary-foreground: #f6f6f0;
-  --secondary: rgba(233, 236, 225, 0.6);
-  --secondary-foreground: #2a3226;
-  --muted: rgba(238, 240, 230, 0.6);
-  --muted-foreground: #5c6654;
-  --accent: rgba(230, 235, 218, 0.5);
-  --accent-foreground: #2a3226;
-  --destructive: #d04444;
-  --border: rgba(221, 225, 209, 0.7);
-  --input: rgba(211, 217, 200, 0.5);
-  --ring: #7d996f;
-  --chart-1: #8faf8a;
-  --chart-2: #c8912f;
+  --radius: 0.875rem;
+  --background: #f2f0e6;
+  --foreground: #1b2118;
+  --card: rgba(255, 255, 255, 0.7);
+  --card-foreground: #1b2118;
+  --popover: rgba(255, 255, 255, 0.85);
+  --popover-foreground: #1b2118;
+  --primary: #3f5c39;
+  --primary-foreground: #f7f6ee;
+  --secondary: rgba(231, 231, 216, 0.7);
+  --secondary-foreground: #28321f;
+  --muted: rgba(233, 233, 219, 0.65);
+  --muted-foreground: #5b6452;
+  --accent: rgba(224, 228, 205, 0.62);
+  --accent-foreground: #28321f;
+  --destructive: #c53d3d;
+  --border: rgba(52, 66, 44, 0.14);
+  --input: rgba(52, 66, 44, 0.18);
+  --ring: #6b8a5e;
+  --gold: #a8792a;
+  --gold-foreground: #2a1f08;
+  --chart-1: #6f8f6a;
+  --chart-2: #b8892f;
   --chart-3: #a8b98e;
-  --chart-4: #6f8f6a;
-  --chart-5: #55724c;
-  --sidebar: rgba(241, 240, 233, 0.65);
-  --sidebar-foreground: #2a3226;
-  --sidebar-primary: #55724c;
-  --sidebar-primary-foreground: #f6f6f0;
-  --sidebar-accent: rgba(229, 234, 221, 0.5);
-  --sidebar-accent-foreground: #22291d;
-  --sidebar-border: rgba(223, 226, 211, 0.5);
-  --sidebar-ring: #7d996f;
-  --status-green: #2f7d3e;
-  --status-amber: #a16207;
-  --status-red: #c02b2b;
-  --status-grey: #6b7280;
+  --chart-4: #4f6f49;
+  --chart-5: #3f5c39;
+  --sidebar: rgba(250, 249, 242, 0.72);
+  --sidebar-foreground: #28321f;
+  --sidebar-primary: #3f5c39;
+  --sidebar-primary-foreground: #f7f6ee;
+  --sidebar-accent: rgba(63, 92, 57, 0.08);
+  --sidebar-accent-foreground: #1e2718;
+  --sidebar-border: rgba(52, 66, 44, 0.1);
+  --sidebar-ring: #6b8a5e;
+  --status-green: #2c7139;
+  --status-amber: #96620a;
+  --status-red: #b3282f;
+  --status-grey: #67706a;
   /* Opaque fills used when the frost is switched off (see the
      coarse-pointer block below) so surfaces stay readable without blur. */
-  --surface-card: #ffffff;
+  --surface-card: #fdfdf8;
   --surface-popover: #ffffff;
-  --surface-sidebar: #f1f0e9;
+  --surface-sidebar: #f7f6ee;
+  --panel-shadow: 0 1px 2px rgba(28, 38, 24, 0.05),
+    0 10px 30px -18px rgba(28, 38, 24, 0.35);
+  --panel-shadow-hover: 0 1px 2px rgba(28, 38, 24, 0.06),
+    0 18px 42px -22px rgba(28, 38, 24, 0.45);
+  --panel-highlight: rgba(255, 255, 255, 0.7);
 }
 
-/* Dark mode — deep green-black glass surfaces. */
 .dark {
-  --background: #0b0e09;
-  --foreground: #e7ece1;
-  --card: rgba(20, 24, 19, 0.6);
-  --card-foreground: #e7ece1;
-  --popover: rgba(23, 27, 19, 0.75);
-  --popover-foreground: #e7ece1;
-  --primary: #9db392;
-  --primary-foreground: #0d100b;
-  --secondary: rgba(27, 33, 24, 0.6);
-  --secondary-foreground: #d8dfd1;
-  --muted: rgba(25, 31, 22, 0.55);
-  --muted-foreground: #93a08a;
-  --accent: rgba(32, 39, 27, 0.55);
-  --accent-foreground: #dbe3d5;
+  --background: #080b07;
+  --foreground: #e8ede2;
+  --card: rgba(21, 27, 20, 0.66);
+  --card-foreground: #e8ede2;
+  --popover: rgba(24, 30, 22, 0.92);
+  --popover-foreground: #e8ede2;
+  --primary: #a8c39a;
+  --primary-foreground: #0b0f09;
+  --secondary: rgba(29, 36, 26, 0.7);
+  --secondary-foreground: #dae2d3;
+  --muted: rgba(26, 33, 24, 0.6);
+  --muted-foreground: #94a18a;
+  --accent: rgba(35, 44, 30, 0.62);
+  --accent-foreground: #dde5d7;
   --destructive: #e5484d;
-  --border: rgba(38, 45, 33, 0.6);
-  --input: rgba(43, 51, 39, 0.5);
-  --ring: #9db392;
+  --border: rgba(226, 240, 214, 0.1);
+  --input: rgba(226, 240, 214, 0.14);
+  --ring: #a8c39a;
+  --gold: #d9a441;
+  --gold-foreground: #1b1405;
   --chart-1: #8faf8a;
   --chart-2: #d9a441;
   --chart-3: #a8b98e;
   --chart-4: #6f8f6a;
   --chart-5: #86b26f;
-  --sidebar: rgba(12, 15, 10, 0.7);
-  --sidebar-foreground: #d5dccd;
-  --sidebar-primary: #9db392;
-  --sidebar-primary-foreground: #0d100b;
-  --sidebar-accent: rgba(26, 33, 23, 0.6);
-  --sidebar-accent-foreground: #e7ece1;
-  --sidebar-border: rgba(34, 41, 29, 0.5);
-  --sidebar-ring: #9db392;
+  --sidebar: rgba(10, 14, 9, 0.72);
+  --sidebar-foreground: #d6ded0;
+  --sidebar-primary: #a8c39a;
+  --sidebar-primary-foreground: #0b0f09;
+  --sidebar-accent: rgba(168, 195, 154, 0.12);
+  --sidebar-accent-foreground: #ecf1e7;
+  --sidebar-border: rgba(226, 240, 214, 0.07);
+  --sidebar-ring: #a8c39a;
   --status-green: #86efac;
   --status-amber: #fbbf24;
   --status-red: #f87171;
   --status-grey: #9ca3af;
-  --surface-card: #141813;
-  --surface-popover: #171b13;
-  --surface-sidebar: #0c0f0a;
+  --surface-card: #131813;
+  --surface-popover: #171d15;
+  --surface-sidebar: #0a0e09;
+  --panel-shadow: 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 18px 40px -24px rgba(0, 0, 0, 0.9);
+  --panel-shadow-hover: 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 26px 54px -26px rgba(0, 0, 0, 0.95);
+  --panel-highlight: rgba(255, 255, 255, 0.06);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+  }
   body {
-    @apply bg-background text-foreground;
-    letter-spacing: -0.01em;
+    @apply bg-background text-foreground antialiased;
+    letter-spacing: -0.011em;
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
-    /* Ambient gradient background — gives glassmorphism depth */
+    /* Ambient light: warm dawn glow top-left, moss bottom-right, and a faint
+       brass bloom where the two meet. */
     background-image:
-      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(143, 175, 138, 0.12), transparent 60%),
-      radial-gradient(ellipse 70% 50% at 80% 85%, rgba(168, 185, 142, 0.1), transparent 55%),
-      radial-gradient(ellipse 50% 40% at 55% 45%, rgba(200, 145, 47, 0.04), transparent 50%);
+      radial-gradient(ellipse 70% 55% at 12% -5%, rgba(143, 175, 138, 0.24), transparent 62%),
+      radial-gradient(ellipse 60% 50% at 92% 8%, rgba(214, 193, 150, 0.2), transparent 60%),
+      radial-gradient(ellipse 80% 60% at 78% 100%, rgba(110, 140, 100, 0.2), transparent 65%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 35%);
     background-attachment: fixed;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .dark body {
     background-image:
-      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(157, 179, 146, 0.08), transparent 60%),
-      radial-gradient(ellipse 70% 50% at 80% 85%, rgba(134, 178, 111, 0.06), transparent 55%),
-      radial-gradient(ellipse 50% 40% at 55% 45%, rgba(217, 164, 65, 0.03), transparent 50%);
+      radial-gradient(ellipse 70% 55% at 10% -8%, rgba(120, 160, 110, 0.16), transparent 60%),
+      radial-gradient(ellipse 55% 45% at 94% 4%, rgba(217, 164, 65, 0.1), transparent 58%),
+      radial-gradient(ellipse 85% 60% at 72% 104%, rgba(80, 120, 80, 0.14), transparent 65%);
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.025em;
   }
   button:not([disabled]),
   [role="button"]:not([disabled]) {
@@ -170,8 +203,8 @@
     touch-action: manipulation;
   }
   ::selection {
-    background: #8faf8a;
-    color: #0d100b;
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -181,23 +214,37 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #c9cfbc;
+    background: rgba(63, 92, 57, 0.24);
     border-radius: 6px;
-    border: 2px solid var(--background);
+    border: 2px solid transparent;
+    background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #8faf8a;
+    background: rgba(63, 92, 57, 0.45);
+    background-clip: content-box;
   }
   .dark ::-webkit-scrollbar-thumb {
-    background: #2b3327;
+    background: rgba(226, 240, 214, 0.16);
+    background-clip: content-box;
   }
   .dark ::-webkit-scrollbar-thumb:hover {
-    background: #8faf8a;
+    background: rgba(226, 240, 214, 0.3);
+    background-clip: content-box;
   }
 }
 
 @layer utilities {
-  /* Terminal prompt styling: chevron drawn as an SVG icon, not a font glyph */
+  /* ── Typographic system ── */
+  .display-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  /* Small caps label — the app's one piece of type that always stays mono. */
+  /* Wrapped in :where() so any utility class on the element still wins. */
+  :where(.term-label) {
+    @apply font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] text-muted-foreground;
+  }
   .term-prompt::before {
     content: "";
     display: inline-block;
@@ -209,10 +256,75 @@
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18l6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18l6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
   }
-  .term-label {
-    @apply text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground;
+
+  /* ── Panels ──
+     The workhorse surface: frosted paper with a hairline border and a lit
+     top edge. `panel` replaces the old `rounded-lg border bg-card p-4`
+     repetition so every page shares one depth model. */
+  :where(.panel) {
+    position: relative;
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border);
+    background-color: var(--card);
+    box-shadow: var(--panel-shadow), inset 0 1px 0 var(--panel-highlight);
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+    backdrop-filter: blur(14px) saturate(1.35);
   }
-  /* Terminal window chrome */
+  :where(.panel-flat) {
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border);
+    background-color: var(--card);
+  }
+  /* Interactive panels lift a little and warm their border. */
+  :where(.panel-link) {
+    transition:
+      transform 180ms cubic-bezier(0.2, 0.7, 0.3, 1),
+      box-shadow 180ms ease,
+      border-color 180ms ease,
+      background-color 180ms ease;
+  }
+  @media (hover: hover) {
+    :where(.panel-link):hover {
+      transform: translateY(-2px);
+      border-color: color-mix(in oklab, var(--primary) 38%, var(--border));
+      box-shadow: var(--panel-shadow-hover),
+        inset 0 1px 0 var(--panel-highlight);
+    }
+  }
+  :where(.panel-link):active {
+    transform: translateY(0) scale(0.995);
+  }
+  /* A soft brass wash for emphasis panels (hero, empty states). */
+  .panel-wash {
+    background-image:
+      radial-gradient(ellipse 60% 90% at 0% 0%, rgba(168, 195, 154, 0.32), transparent 60%),
+      radial-gradient(ellipse 70% 110% at 100% 10%, rgba(214, 193, 150, 0.28), transparent 62%);
+  }
+
+  .stat-figure {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .figure-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Hairline divider that fades out at both ends. */
+  .rule-fade {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--border),
+      transparent
+    );
+  }
+
+  /* ── Existing terminal-shell utilities (kept for the pages that use them) ── */
   .term-window {
     @apply overflow-hidden rounded-lg border bg-card;
   }
@@ -223,24 +335,23 @@
     @apply h-2.5 w-2.5 rounded-full;
   }
   .term-grid {
-    background-image: linear-gradient(#e6e9db 1px, transparent 1px),
-      linear-gradient(90deg, #e6e9db 1px, transparent 1px);
+    background-image: linear-gradient(
+        color-mix(in oklab, var(--border) 80%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--border) 80%, transparent) 1px,
+        transparent 1px
+      );
     background-size: 22px 22px;
   }
-  .dark .term-grid {
-    background-image: linear-gradient(#1a2016 1px, transparent 1px),
-      linear-gradient(90deg, #1a2016 1px, transparent 1px);
-  }
-  /* Fixed-dark terminal shell — stays a real terminal in both themes. */
-  /* ── Glass morphism utilities ── */
-  /* All glass utilities: force GPU compositing to prevent Android touch issues.
-     backdrop-filter creates a new compositing layer that can swallow touch
-     events on Android unless the element is explicitly promoted.
-     Note: this promotion is deliberately undone on touch devices — see the
-     coarse-pointer block at the end of these utilities. Every card, popover,
-     the sticky topbar and the sidebar carry a permanent blur layer, and mobile
-     GPUs mis-composite that many stacked backdrop-filter layers (stale/smeared
-     content while scrolling), so phones get flat, opaque surfaces instead. */
+
+  /* ── Glass surfaces ──
+     Force GPU compositing to prevent Android touch issues (a backdrop-filter
+     layer can otherwise swallow touch events). This promotion is undone on
+     touch devices below, where the frost is dropped entirely: stacking a blur
+     layer per card exhausts the mobile compositor and paints stale content. */
   .glass-card,
   .glass-sidebar,
   .glass-topbar,
@@ -252,80 +363,62 @@
   }
 
   .glass-card {
-    backdrop-filter: blur(16px) saturate(1.4);
-    -webkit-backdrop-filter: blur(16px) saturate(1.4);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    box-shadow:
-      0 4px 24px rgba(0, 0, 0, 0.04),
-      inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  }
-  .dark .glass-card {
-    border-color: rgba(255, 255, 255, 0.06);
-    box-shadow:
-      0 4px 24px rgba(0, 0, 0, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    border: 1px solid color-mix(in oklab, var(--border) 90%, transparent);
+    box-shadow: var(--panel-shadow), inset 0 1px 0 var(--panel-highlight);
   }
 
   .glass-sidebar {
-    backdrop-filter: blur(20px) saturate(1.5);
-    -webkit-backdrop-filter: blur(20px) saturate(1.5);
-    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(22px) saturate(1.6);
+    -webkit-backdrop-filter: blur(22px) saturate(1.6);
+    border-right: 1px solid var(--sidebar-border);
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.35);
   }
   .dark .glass-sidebar {
-    border-right-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.04);
   }
 
   .glass-topbar {
-    backdrop-filter: blur(14px) saturate(1.3);
-    -webkit-backdrop-filter: blur(14px) saturate(1.3);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
   }
   .dark .glass-topbar {
-    border-bottom-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
   .glass-badge {
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-  .dark .glass-badge {
-    border-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
   }
 
   .glass-dialog {
-    backdrop-filter: blur(24px) saturate(1.5);
-    -webkit-backdrop-filter: blur(24px) saturate(1.5);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(26px) saturate(1.6);
+    -webkit-backdrop-filter: blur(26px) saturate(1.6);
+    border: 1px solid color-mix(in oklab, var(--border) 90%, var(--foreground) 6%);
     box-shadow:
-      0 8px 40px rgba(0, 0, 0, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  }
-  .dark .glass-dialog {
-    border-color: rgba(255, 255, 255, 0.06);
-    box-shadow:
-      0 8px 40px rgba(0, 0, 0, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      0 32px 70px -28px rgba(12, 20, 10, 0.55),
+      0 2px 8px rgba(12, 20, 10, 0.08),
+      inset 0 1px 0 var(--panel-highlight);
   }
 
-  /* Touch devices: drop the frost entirely.
-     Stacking dozens of backdrop-filter layers (one per card) plus a permanent
-     will-change promotion exhausts the mobile compositor, which then paints
-     stale layers over each other — duplicated, smeared content while scrolling.
-     Flat opaque surfaces render identically on every device and cost nothing. */
   @media (hover: none), (pointer: coarse) {
     .glass-card,
     .glass-sidebar,
     .glass-topbar,
     .glass-badge,
-    .glass-dialog {
+    .glass-dialog,
+    .panel {
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
       will-change: auto;
       transform: none;
       -webkit-transform: none;
     }
-    /* These relied on the blur to stay readable over what scrolls beneath. */
+    .panel,
     .glass-card {
       background-color: var(--surface-card);
     }
@@ -335,24 +428,5 @@
     .glass-topbar {
       background-color: var(--background);
     }
-  }
-
-  /* ── Terminal shell (unchanged opaque theme) ── */
-  .term-shell.term-window {
-    background-color: #0f130d;
-    border-color: #2a3226;
-  }
-  .term-shell.term-window .term-titlebar {
-    background-color: #171c13;
-    border-color: #262d21;
-  }
-  .term-shell .term-body {
-    background-color: #0f130d;
-  }
-  .term-shell .text-muted-foreground {
-    color: #87937e;
-  }
-  .term-shell .text-primary {
-    color: #9db392;
   }
 }

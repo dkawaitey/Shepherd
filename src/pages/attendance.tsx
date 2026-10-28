@@ -185,7 +185,7 @@ function CustomSessionStartsCard({
   };
 
   return (
-    <div className="mt-6 rounded-lg border bg-card p-4">
+    <div className="mt-6 panel p-4">
       <div className="mb-1 flex items-center gap-2">
         <Clock className="h-4 w-4 text-primary" />
         <p className="term-label">// custom session start times</p>
@@ -463,7 +463,7 @@ export default function Attendance() {
 
       {/* History filters — narrow the list by class, status, activity or a
           free-text search over member, program and recorder. */}
-      <div className="mb-5 rounded-lg border bg-card p-4">
+      <div className="mb-5 panel p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="term-label">// attendance history</p>
           {filtersActive && (
@@ -597,7 +597,7 @@ export default function Attendance() {
         />
       ) : (
         <>
-        <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="overflow-hidden panel">
           {/* Phones: one card per record, so every field stays readable. */}
           <ul className="divide-y sm:hidden">
             {shownRows.map((r) => {
@@ -741,7 +741,7 @@ export default function Attendance() {
 
       {/* Per-member time-trend analysis over the recorded history. */}
       {memberTrends.length > 0 && (
-        <div className="mt-6 overflow-hidden rounded-lg border bg-card">
+        <div className="mt-6 overflow-hidden panel">
           <div className="flex flex-col gap-1 border-b px-4 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 shrink-0 text-primary" />
@@ -955,7 +955,7 @@ export default function Attendance() {
           <p className="term-label">members needing follow-up — low attendance</p>
         </div>
         {lowAttendance === undefined ? (
-          <div className="h-20 animate-pulse rounded-lg border bg-card" />
+          <div className="h-20 animate-pulse panel" />
         ) : lowAttendance.length === 0 ? (
           <p className="rounded-lg border border-dashed bg-card py-6 text-center text-[11px] text-muted-foreground">
             Everyone has attended recently.
@@ -1010,7 +1010,7 @@ export default function Attendance() {
             {recentFollowups.map((m) => (
               <div
                 key={m._id}
-                className="flex flex-wrap items-start justify-between gap-2 rounded-lg border bg-card px-4 py-3"
+                className="flex flex-wrap items-start justify-between gap-2 panel px-4 py-3"
               >
                 <div className="min-w-0">
                   <Link

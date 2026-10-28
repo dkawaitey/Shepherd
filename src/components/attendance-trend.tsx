@@ -216,7 +216,7 @@ export function TeamPunctualityCard({
   const verdict = PUNCTUALITY_META[summary.verdict];
 
   return (
-    <div className={cn("rounded-lg border bg-card p-4", className)}>
+    <div className={cn("panel p-4", className)}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <Users className="h-4 w-4 text-primary" />
@@ -366,7 +366,7 @@ export function ClassPunctualityCard({
   const totalTimed = rows.reduce((n, r) => n + r.summary.timed, 0);
 
   return (
-    <div className={cn("rounded-lg border bg-card", className)}>
+    <div className={cn("panel", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" />
@@ -510,7 +510,7 @@ export function AttendanceTrendPanel({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border bg-card p-4">
+      <div className="panel p-4">
         <div className="mb-3 flex items-center gap-2">
           <Activity className="h-4 w-4 text-muted-foreground" />
           <p className="term-label">attendance trend</p>
@@ -535,7 +535,7 @@ export function AttendanceTrendPanel({
   const presentCount = rows.filter((r) => r.status === "present").length;
 
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="panel p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-primary" />
@@ -1206,7 +1206,7 @@ export function ParticipationQuadrantCard({
 }) {
   if (total === 0) return null;
   return (
-    <div className={cn("rounded-lg border bg-card", className)}>
+    <div className={cn("panel", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-primary" />

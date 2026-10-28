@@ -500,7 +500,7 @@ export default function Followups() {
       />
 
       {/* Status tabs */}
-      <div className="mb-4 flex flex-wrap gap-1.5 rounded-lg border bg-card p-1.5">
+      <div className="mb-4 flex flex-wrap gap-1.5 panel p-1.5">
         {tabs.map((t) => (
           <button
             key={t.value}
@@ -570,7 +570,7 @@ export default function Followups() {
       {followups === undefined ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-lg border bg-card" />
+            <div key={i} className="h-14 animate-pulse panel" />
           ))}
         </div>
       ) : followups.length === 0 ? (

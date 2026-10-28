@@ -302,12 +302,12 @@ export default function AccessReview() {
           { label: "No access", value: stats.noAccess, icon: ShieldAlert, tone: "#fbbf24" },
           { label: "Guest accounts", value: stats.guests, icon: UserX, tone: "#f87171" },
         ].map((tile) => (
-          <div key={tile.label} className="rounded-lg border bg-card p-4">
+          <div key={tile.label} className="panel p-4">
             <div className="flex items-center justify-between">
               <span className="term-label">{tile.label}</span>
               <tile.icon className="h-4 w-4" style={{ color: tile.tone }} />
             </div>
-            <div className="mt-2 text-2xl font-bold tabular-nums">{tile.value}</div>
+            <div className="mt-2 stat-figure text-[24px]">{tile.value}</div>
           </div>
         ))}
       </div>
@@ -339,7 +339,7 @@ export default function AccessReview() {
       </div>
 
       {rows === undefined ? (
-        <div className="h-64 animate-pulse rounded-lg border bg-card" />
+        <div className="h-64 animate-pulse panel" />
       ) : visible.length === 0 ? (
         <EmptyState
           title={filter === "attention" ? "Nothing to clean up" : "No accounts match"}
@@ -350,7 +350,7 @@ export default function AccessReview() {
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-card">
+        <div className="overflow-x-auto panel">
           <table className="w-full min-w-[680px] text-left text-[11px]">
             <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
               <tr>

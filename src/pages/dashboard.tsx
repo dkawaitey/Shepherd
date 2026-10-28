@@ -43,19 +43,20 @@ import {
   Lock,
   ArrowLeft,
   ArrowRight,
+  Megaphone,
 } from "lucide-react";
 import { Link } from "react-router";
 import { PollComposer } from "@/components/poll-composer";
 
 const CARDS = [
-  { key: "totalReached", label: "Total People Reached", to: "/contacts", icon: ContactRound, accent: "#9db392" },
-  { key: "activeFollowups", label: "Active Follow-ups", to: "/followups?status=pending", icon: CalendarCheck, accent: "#fbbf24" },
-  { key: "newConverts", label: "New Converts", to: "/contacts?status=newConvert", icon: Target, accent: "#86b26f" },
-  { key: "baptized", label: "Baptized Members", to: "/contacts?status=baptized", icon: Baby, accent: "#a8c49d" },
-  { key: "joinedChurch", label: "Joined Church", to: "/contacts?status=joinedChurch", icon: Church, accent: "#bcd2b0" },
-  { key: "completedDiscipleship", label: "Completed Discipleship", to: "/contacts?status=completedDiscipleship", icon: Award, accent: "#c2d4a8" },
-  { key: "missedFollowups", label: "Missed Follow-ups", to: "/followups?status=missed", icon: TriangleAlert, accent: "#f87171" },
-  { key: "upcomingVisitsThisWeek", label: "Upcoming Visits This Week", to: "/followups?status=pending", icon: Flame, accent: "#fbbf24" },
+  { key: "totalReached", label: "Total People Reached", to: "/contacts", icon: ContactRound, accent: "#6f8f6a" },
+  { key: "activeFollowups", label: "Active Follow-ups", to: "/followups?status=pending", icon: CalendarCheck, accent: "#b8892f" },
+  { key: "newConverts", label: "New Converts", to: "/contacts?status=newConvert", icon: Target, accent: "#4f6f49" },
+  { key: "baptized", label: "Baptized Members", to: "/contacts?status=baptized", icon: Baby, accent: "#7d9b74" },
+  { key: "joinedChurch", label: "Joined Church", to: "/contacts?status=joinedChurch", icon: Church, accent: "#a8792a" },
+  { key: "completedDiscipleship", label: "Completed Discipleship", to: "/contacts?status=completedDiscipleship", icon: Award, accent: "#8faf8a" },
+  { key: "missedFollowups", label: "Missed Follow-ups", to: "/followups?status=missed", icon: TriangleAlert, accent: "#c53d3d" },
+  { key: "upcomingVisitsThisWeek", label: "Upcoming Visits This Week", to: "/followups?status=pending", icon: Flame, accent: "#c8912f" },
 ];
 
 /** "2d" / "5h" / "12m" until a poll's deadline. */
@@ -248,7 +249,7 @@ export default function Dashboard() {
         <div className="h-8 w-64 animate-pulse rounded bg-muted" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-lg border bg-card" />
+            <div key={i} className="h-28 animate-pulse rounded-xl border bg-card/60" />
           ))}
         </div>
       </div>
@@ -261,7 +262,7 @@ export default function Dashboard() {
   if (stats === null) {
     return (
       <div className="mx-auto max-w-2xl py-10">
-        <div className="rounded-lg border bg-card p-6 text-center">
+        <div className="panel p-7 text-center">
           <TriangleAlert className="mx-auto h-6 w-6 text-primary" />
           <h1 className="mt-3 text-lg font-bold tracking-tight">
             No ministry access yet
@@ -285,14 +286,57 @@ export default function Dashboard() {
   const maxFunnel = Math.max(1, stats.funnel[0]?.count ?? 1);
   const maxGender = Math.max(1, ...stats.gender.map((g) => g.count));
 
+  const todayLabel = new Date().toLocaleDateString("en", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <ChevronRight className="h-5 w-5 shrink-0 text-primary" />
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
-            Serve Your Creator Now, {firstName}
-          </h1>
+    <div className="mx-auto max-w-6xl space-y-5">
+      {/* Hero — the greeting, the date, and the two things a leader reaches
+          for first. The arcs are a quiet sanctuary motif, not decoration for
+          its own sake: they echo the sidebar mark. */}
+      <div className="panel panel-wash relative overflow-hidden px-5 py-6 sm:px-7 sm:py-7">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 220 220"
+          fill="none"
+          className="pointer-events-none absolute -top-20 -right-16 h-64 w-64 text-primary/20 sm:-top-24 sm:-right-10 sm:h-80 sm:w-80"
+        >
+          <circle cx="150" cy="60" r="34" stroke="currentColor" strokeWidth="0.75" />
+          <circle cx="150" cy="60" r="58" stroke="currentColor" strokeWidth="0.75" opacity="0.6" />
+          <circle cx="150" cy="60" r="84" stroke="currentColor" strokeWidth="0.75" opacity="0.35" />
+          <circle cx="150" cy="60" r="112" stroke="currentColor" strokeWidth="0.75" opacity="0.18" />
+          <path d="M60 200h140" stroke="currentColor" strokeWidth="0.75" opacity="0.4" />
+        </svg>
+        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-gold">
+              {todayLabel}
+            </p>
+            <h1 className="display-title mt-2 text-[27px] leading-[1.06] sm:text-[36px]">
+              Serve Your Creator Now,{" "}
+              <span className="text-primary">{firstName}</span>
+            </h1>
+            <p className="mt-2.5 max-w-lg text-[12.5px] leading-6 text-muted-foreground">
+              {stats.cards.activeFollowups === 0
+                ? "Every follow-up is caught up. A good moment to reach someone new."
+                : `${stats.cards.activeFollowups} follow-up${stats.cards.activeFollowups === 1 ? "" : "s"} still waiting, and ${stats.cards.upcomingVisitsThisWeek} visit${stats.cards.upcomingVisitsThisWeek === 1 ? "" : "s"} this week.`}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild size="lg" className="shadow-[0_10px_24px_-12px_rgba(20,40,16,0.7)]">
+              <Link to="/announcements">
+                <Megaphone className="h-4 w-4" /> Share an update
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link to="/followups?status=pending">
+                Follow-ups <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -304,18 +348,25 @@ export default function Dashboard() {
             <button
               key={c.key}
               onClick={() => navigate(c.to)}
-              className="group rounded-lg border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+              className="panel panel-link group overflow-hidden p-4 text-left"
             >
-              <div className="flex items-center justify-between">
-                <span className="term-label">{c.label}</span>
-                <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary" style={{ color: c.accent }} />
+              <div className="flex items-start justify-between gap-2">
+                <span className="term-label leading-4">{c.label}</span>
+                <span
+                  className="grid size-7 shrink-0 place-items-center rounded-lg shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] transition-transform duration-200 group-hover:scale-105 dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)]"
+                  style={{ backgroundColor: `${c.accent}1f`, color: c.accent }}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </span>
               </div>
-              <div className="mt-2 font-mono text-3xl font-bold tabular-nums" style={{ color: c.accent }}>
-                {stats.cards[c.key as keyof typeof stats.cards]}
-              </div>
-              <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground group-hover:text-primary">
-                open
-                <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
+              <div className="mt-3 flex items-end justify-between gap-2">
+                <span className="stat-figure text-[30px]" style={{ color: c.accent }}>
+                  {stats.cards[c.key as keyof typeof stats.cards]}
+                </span>
+                <span className="mb-0.5 inline-flex items-center gap-1 rounded-full border border-border/70 px-1.5 py-0.5 text-[9px] text-muted-foreground transition-colors group-hover:border-primary/30 group-hover:text-primary">
+                  open
+                  <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
+                </span>
               </div>
             </button>
           );
@@ -324,7 +375,7 @@ export default function Dashboard() {
 
       {/* Open polls. Every card is clickable, like the stat cards above: it
           opens the poll in the announcements feed. */}
-      <div className="rounded-lg border bg-card p-4">
+      <div className="panel p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
@@ -361,7 +412,7 @@ export default function Dashboard() {
                 <Link
                   key={p.postId}
                   to={`/announcements?post=${p.postId}`}
-                  className="group flex flex-col gap-1.5 rounded-md border bg-muted/20 p-3 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-muted/40 hover:shadow-md"
+                  className="group flex flex-col gap-1.5 rounded-xl border border-border/70 bg-card/50 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card hover:shadow-[0_12px_24px_-18px_rgba(12,20,10,0.6)]"
                 >
                   <span className="flex items-start justify-between gap-2">
                     <span className="line-clamp-2 text-[12px] font-semibold group-hover:text-primary">
@@ -372,7 +423,7 @@ export default function Dashboard() {
                         <CheckCircle2 className="h-2.5 w-2.5" /> answered
                       </span>
                     ) : (
-                      <span className="shrink-0 rounded-full border border-[#f59e0b]/40 bg-[#2e2408] px-1.5 py-0.5 text-[9px] font-medium text-status-amber">
+                      <span className="shrink-0 rounded-full border border-status-amber/30 bg-status-amber/10 px-1.5 py-0.5 text-[9px] font-medium text-status-amber">
                         answer it
                       </span>
                     )}
@@ -418,7 +469,7 @@ export default function Dashboard() {
                 <Link
                   key={p.postId}
                   to={`/announcements?post=${p.postId}`}
-                  className="group flex flex-col gap-1.5 rounded-md border bg-muted/20 p-3 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-muted/40 hover:shadow-md"
+                  className="group flex flex-col gap-1.5 rounded-xl border border-border/70 bg-card/50 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card hover:shadow-[0_12px_24px_-18px_rgba(12,20,10,0.6)]"
                 >
                   <span className="flex items-start justify-between gap-2">
                     <span className="line-clamp-2 text-[12px] font-semibold group-hover:text-primary">
@@ -456,9 +507,9 @@ export default function Dashboard() {
                               {o.count} · {pct}%
                             </span>
                           </span>
-                          <span className="mt-0.5 block h-1.5 overflow-hidden rounded-sm bg-muted">
+                          <span className="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-muted/70">
                             <span
-                              className="block h-full rounded-sm bg-[#8faf8a]"
+                              className="block h-full rounded-full bg-gradient-to-r from-primary/50 to-primary"
                               style={{ width: `${Math.max(o.count > 0 ? pct : 0, o.count > 0 ? 4 : 0)}%` }}
                             />
                           </span>
@@ -484,7 +535,7 @@ export default function Dashboard() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Funnel */}
-        <div className="rounded-lg border bg-card p-4 lg:col-span-2">
+        <div className="panel p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <p className="term-label">conversion funnel</p>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -496,9 +547,9 @@ export default function Dashboard() {
                   <span className="text-muted-foreground">{f.label}</span>
                   <span className="font-mono font-semibold tabular-nums">{f.count}</span>
                 </div>
-                <div className="h-3 overflow-hidden rounded-sm bg-muted">
+                <div className="h-2.5 overflow-hidden rounded-full bg-muted/70">
                   <div
-                    className="h-full rounded-sm bg-[#8faf8a] transition-all"
+                    className="h-full rounded-full bg-gradient-to-r from-primary/55 to-primary transition-all"
                     style={{ width: `${Math.max(2, (f.count / maxFunnel) * 100)}%` }}
                   />
                 </div>
@@ -513,7 +564,7 @@ export default function Dashboard() {
         {/* Right column */}
         <div className="space-y-4">
           {/* Gender */}
-          <div className="rounded-lg border bg-card p-4">
+          <div className="panel p-5">
             <p className="term-label mb-3">gender distribution</p>
             <div className="space-y-3">
               {stats.gender.map((g) => (
@@ -522,9 +573,14 @@ export default function Dashboard() {
                     <span className="text-muted-foreground">{g.label}</span>
                     <span className="font-mono font-semibold tabular-nums">{g.count}</span>
                   </div>
-                  <div className="h-3 overflow-hidden rounded-sm bg-muted">
+                  <div className="h-2.5 overflow-hidden rounded-full bg-muted/70">
                     <div
-                      className={cn("h-full rounded-sm", g.label === "Male" ? "bg-[#9db392]" : "bg-[#a8b98e]")}
+                      className={cn(
+                        "h-full rounded-full bg-gradient-to-r",
+                        g.label === "Male"
+                          ? "from-primary/50 to-primary"
+                          : "from-gold/35 to-gold/70",
+                      )}
                       style={{ width: `${(g.count / maxGender) * 100}%` }}
                     />
                   </div>
@@ -534,17 +590,17 @@ export default function Dashboard() {
           </div>
 
           {/* Prayer summary */}
-          <div className="rounded-lg border bg-card p-4">
+          <div className="panel p-5">
             <div className="mb-3 flex items-center justify-between">
               <p className="term-label">prayer journal summary</p>
               <HeartHandshake className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="mb-3 grid grid-cols-2 gap-2 text-center">
-              <div className="rounded-md border border-[#f59e0b]/40 bg-[#2e2408] py-2">
+              <div className="rounded-xl border border-status-amber/25 bg-status-amber/[0.07] py-2.5">
                 <div className="font-mono text-lg font-bold text-status-amber">{stats.prayers.activeCount}</div>
                 <div className="text-[9px] uppercase tracking-wide text-status-amber">active requests</div>
               </div>
-              <div className="rounded-md border border-[#86efac]/40 bg-[#15291c] py-2">
+              <div className="rounded-xl border border-status-green/25 bg-status-green/[0.07] py-2.5">
                 <div className="font-mono text-lg font-bold text-status-green">{stats.prayers.answeredCount}</div>
                 <div className="text-[9px] uppercase tracking-wide text-status-green">answered</div>
               </div>
@@ -577,7 +633,7 @@ export default function Dashboard() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Follow-up calendar */}
-        <div className="rounded-lg border bg-card p-4 lg:col-span-2">
+        <div className="panel p-5 lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
             <p className="term-label">follow-up schedule</p>
             <span className="text-[10px] text-muted-foreground">
@@ -588,7 +644,7 @@ export default function Dashboard() {
         </div>
 
         {/* Reminders */}
-        <div className="rounded-lg border bg-card p-4">
+        <div className="panel p-5">
           <div className="mb-3 flex items-center justify-between">
             <p className="term-label">reminders</p>
             <Bell className="h-4 w-4 text-muted-foreground" />
@@ -603,7 +659,7 @@ export default function Dashboard() {
                 <Link
                   key={i}
                   to={r.link}
-                  className="block rounded-md border border-[#f59e0b]/40 bg-[#2e2408]/80 p-2.5 transition-colors hover:border-[#f59e0b]/70"
+                  className="block rounded-xl border border-status-amber/25 bg-status-amber/[0.07] p-2.5 transition-colors hover:border-status-amber/45 hover:bg-status-amber/10"
                 >
                   <div className="text-[11px] font-bold text-status-amber">{r.title}</div>
                   <div className="mt-0.5 text-[10px] leading-4 text-status-amber/80">{r.message}</div>
@@ -630,7 +686,7 @@ export default function Dashboard() {
       </div>
 
       {/* Latest team updates */}
-      <div className="rounded-lg border bg-card p-4">
+      <div className="panel p-5">
         <div className="mb-3 flex items-center justify-between">
           <p className="term-label">latest updates</p>
           <Link to="/announcements" className="group inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
@@ -698,7 +754,7 @@ export default function Dashboard() {
       </div>
 
       {/* Upcoming this week */}
-      <div className="rounded-lg border bg-card p-4">
+      <div className="panel p-5">
         <div className="mb-3 flex items-center justify-between">
           <p className="term-label">upcoming follow-ups</p>
           <ClipboardCheck className="h-4 w-4 text-muted-foreground" />

@@ -237,7 +237,7 @@ export default function Announcements() {
       {posts === undefined ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-36 animate-pulse rounded-lg border bg-card" />
+            <div key={i} className="h-36 animate-pulse panel " />
           ))}
         </div>
       ) : posts.length === 0 ? (
@@ -673,7 +673,7 @@ function PollResultChart({
           <div
             key={o.id}
             className={cn(
-              "overflow-hidden rounded-lg border bg-card",
+              "overflow-hidden panel ",
               winner ? "border-primary/50 ring-1 ring-primary/20" : "border-border",
             )}
           >
@@ -1053,7 +1053,7 @@ function PostCard({
     <article
       ref={ref}
       id={`post-${post._id}`}
-      className="scroll-mt-20 overflow-hidden rounded-lg border bg-card"
+      className="scroll-mt-20 overflow-hidden panel "
     >
       <div className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">

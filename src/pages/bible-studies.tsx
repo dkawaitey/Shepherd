@@ -80,10 +80,10 @@ export default function BibleStudies() {
           message="Pick a person from the list to see their lesson progress and record completions."
         />
       ) : bible === undefined ? (
-        <div className="h-40 animate-pulse rounded-lg border bg-card" />
+        <div className="h-40 animate-pulse panel" />
       ) : (
         <div className="space-y-4">
-          <div className="rounded-lg border bg-card p-4">
+          <div className="panel p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <Link to={`/contacts/${contactId}`} className="text-sm font-bold hover:text-primary hover:underline">
@@ -103,7 +103,7 @@ export default function BibleStudies() {
           <div className="grid gap-3 sm:grid-cols-2">
             {bible.map((b) => {
               return (
-                <div key={b.lesson} className="rounded-lg border bg-card p-3.5">
+                <div key={b.lesson} className="panel p-3.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5">
                       <span

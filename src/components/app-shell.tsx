@@ -2,7 +2,6 @@ import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import {
-  canAddRecords,
   effectiveUserRoles,
   formatRoles,
   formatError,
@@ -10,7 +9,7 @@ import {
 } from "@/components/shared";
 import { ROLES, ROLE_LABELS, Role } from "@/convex/constants";
 import { TestAsDialog } from "@/components/test-as-dialog";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -56,35 +55,41 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
 import { RouteErrorBoundary } from "@/components/error-boundary";
 
+/** Sidebar sections, in reading order. */
+const GROUPS = ["Ministry", "Community", "Insight", "System"] as const;
+type Group = (typeof GROUPS)[number];
+
 type NavItem = {
   to: string;
   label: string;
   icon: LucideIcon;
   code: string;
+  group: Group;
   adminOnly?: boolean;
   /** Ministry records are limited to accounts that hold a ministry role. */
   ministryOnly?: boolean;
 };
 
 const NAV: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, code: "D" },
-  { to: "/contacts", label: "Contacts", icon: ContactRound, code: "C", ministryOnly: true },
-  { to: "/followups", label: "Follow-ups", icon: ClipboardCheck, code: "F", ministryOnly: true },
-  { to: "/discipleship", label: "Discipleship", icon: Sparkle, code: "DS", ministryOnly: true },
-  { to: "/bible-studies", label: "Bible Studies", icon: BookMarked, code: "B", ministryOnly: true },
-  { to: "/members", label: "Members", icon: UserRound, code: "M", ministryOnly: true },
-  { to: "/attendance", label: "Attendance", icon: CalendarCheck, code: "A", ministryOnly: true },
-  { to: "/prayer-journal", label: "Prayer Journal", icon: Heart, code: "P", ministryOnly: true },
-  { to: "/announcements", label: "Announcements", icon: Megaphone, code: "AN" },
-  { to: "/constitution", label: "Constitution", icon: ScrollText, code: "CN" },
-  { to: "/reports", label: "Reports", icon: FileBarChart, code: "R", ministryOnly: true },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, code: "ANL", ministryOnly: true },
-  { to: "/settings", label: "Settings", icon: Settings, code: "S" },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, code: "D", group: "Ministry" },
+  { to: "/contacts", label: "Contacts", icon: ContactRound, code: "C", group: "Ministry", ministryOnly: true },
+  { to: "/followups", label: "Follow-ups", icon: ClipboardCheck, code: "F", group: "Ministry", ministryOnly: true },
+  { to: "/discipleship", label: "Discipleship", icon: Sparkle, code: "DS", group: "Ministry", ministryOnly: true },
+  { to: "/bible-studies", label: "Bible Studies", icon: BookMarked, code: "B", group: "Ministry", ministryOnly: true },
+  { to: "/members", label: "Members", icon: UserRound, code: "M", group: "Ministry", ministryOnly: true },
+  { to: "/attendance", label: "Attendance", icon: CalendarCheck, code: "A", group: "Ministry", ministryOnly: true },
+  { to: "/prayer-journal", label: "Prayer Journal", icon: Heart, code: "P", group: "Ministry", ministryOnly: true },
+  { to: "/announcements", label: "Announcements", icon: Megaphone, code: "AN", group: "Community" },
+  { to: "/constitution", label: "Constitution", icon: ScrollText, code: "CN", group: "Community" },
+  { to: "/reports", label: "Reports", icon: FileBarChart, code: "R", group: "Insight", ministryOnly: true },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, code: "ANL", group: "Insight", ministryOnly: true },
+  { to: "/settings", label: "Settings", icon: Settings, code: "S", group: "System" },
   {
     to: "/access",
     label: "Access",
     icon: UserCog,
     code: "AC",
+    group: "System",
     adminOnly: true,
     ministryOnly: true,
   },
@@ -93,6 +98,7 @@ const NAV: NavItem[] = [
     label: "Error Log",
     icon: ShieldAlert,
     code: "EL",
+    group: "System",
     adminOnly: true,
     ministryOnly: true,
   },
@@ -117,59 +123,120 @@ function hasMinistryAccess(user: {
   return effectiveUserRoles(user).length > 0;
 }
 
+function Brand() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="relative grid size-9 shrink-0 place-items-center rounded-xl border border-border/70 bg-gradient-to-br from-primary/12 to-gold/12 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+        <img
+          src="/sidebar-logo.png"
+          alt=""
+          className="size-6 object-contain dark:hidden"
+        />
+        <img
+          src="/sidebarr-logo.png"
+          alt=""
+          className="hidden size-6 object-contain dark:block"
+        />
+      </div>
+      <div className="min-w-0">
+        <div className="display-title truncate text-[15px] leading-none text-foreground">
+          Shepherd
+        </div>
+        <div className="mt-1 truncate font-mono text-[8.5px] uppercase tracking-[0.16em] text-muted-foreground/80">
+          Youth Ministry
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { user } = useAuth();
 
+  const isActive = (to: string) =>
+    location.pathname === to || location.pathname.startsWith(to + "/");
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <img
-          src="/sidebar-logo.png"
-          alt="Shepherd"
-          className="h-8 w-8 object-contain dark:hidden"
-        />
-        <img
-          src="/sidebarr-logo.png"
-          alt="Shepherd"
-          className="hidden h-8 w-8 object-contain dark:block"
-        />
-        <span className="text-sm font-bold tracking-tight">Shepherd</span>
+      <div className="px-4 pt-5 pb-4">
+        <Brand />
       </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-        {NAV.map((item) => {
-          // Ministry records need a real (non-guest) account; guests only get
-          // announcements and their own settings.
-          if (item.ministryOnly && !hasMinistryAccess(user)) return null;
-          // Analytics, access review and the error log are administrator-only.
-          if ((item.adminOnly || item.to === "/analytics") && !userIsAdmin(user))
-            return null;
-          const Icon = item.icon;
-          const active =
-            location.pathname === item.to ||
-            location.pathname.startsWith(item.to + "/");
+      <div className="rule-fade mx-4" />
+      <nav className="flex-1 overflow-y-auto px-2.5 py-3">
+        {GROUPS.map((group) => {
+          const items = NAV.filter((item) => {
+            if (item.group !== group) return false;
+            // Ministry records need a real (non-guest) account; guests only get
+            // announcements and their own settings.
+            if (item.ministryOnly && !hasMinistryAccess(user)) return false;
+            // Analytics, access review and the error log are administrator-only.
+            if ((item.adminOnly || item.to === "/analytics") && !userIsAdmin(user))
+              return false;
+            return true;
+          });
+          if (items.length === 0) return null;
           return (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={onNavigate}
-              className={cn(
-                "group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-                active
-                  ? "bg-primary/10 font-medium text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-              <span className="flex-1">{item.label}</span>
-              <span className={cn("text-[10px] text-muted-foreground/60", !active && "opacity-0 group-hover:opacity-100")}>
-                [{item.code}]
-              </span>
-            </Link>
+            <div key={group} className="mb-1.5">
+              <p className="term-label px-2.5 pt-2 pb-1.5 text-[9px] text-muted-foreground/65">
+                {group}
+              </p>
+              <div className="space-y-0.5">
+                {items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.to);
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "group relative flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] tracking-[-0.01em] transition-[background-color,color,box-shadow] duration-150",
+                        active
+                          ? "bg-primary/[0.09] font-medium text-primary ring-1 ring-primary/12"
+                          : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+                      )}
+                    >
+                      {active && (
+                        <span className="absolute top-1/2 -left-2.5 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+                      )}
+                      <Icon
+                        className={cn(
+                          "h-4 w-4 shrink-0 transition-colors",
+                          active
+                            ? "text-primary"
+                            : "text-muted-foreground/85 group-hover:text-foreground",
+                        )}
+                      />
+                      <span className="flex-1 truncate">{item.label}</span>
+                      <span
+                        className={cn(
+                          "font-mono text-[8.5px] uppercase tracking-[0.1em] transition-opacity",
+                          active
+                            ? "text-primary/60"
+                            : "text-muted-foreground/40 opacity-0 group-hover:opacity-100",
+                        )}
+                      >
+                        {item.code}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </nav>
-
+      <div className="rule-fade mx-4" />
+      <div className="px-4 py-4">
+        <p className="font-mono text-[8.5px] uppercase tracking-[0.16em] text-muted-foreground/60">
+          Gethsemane · Ghana
+        </p>
+        <p className="mt-1 text-[11px] leading-4 text-muted-foreground/80">
+          Discipleship management
+        </p>
+      </div>
     </div>
   );
 }
@@ -249,43 +316,45 @@ export function AppShell() {
 
       {/* Mobile sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-64 p-0">
+        <SheetContent side="left" className="w-[17rem] p-0">
           <SidebarContent onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
 
-      {/* Content backdrop — ambient texture that shows through glass panels */}
-      <div
-        className="pointer-events-none fixed inset-0 z-0 hidden md:block"
-        aria-hidden="true"
-        style={{
-          backgroundImage:
-            "radial-gradient(ellipse 50% 40% at 15% 20%, rgba(143,175,138,0.15), transparent 60%), radial-gradient(ellipse 45% 35% at 85% 75%, rgba(168,185,142,0.12), transparent 55%), radial-gradient(ellipse 35% 30% at 50% 50%, rgba(200,145,47,0.05), transparent 50%)",
-        }}
-      />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col md:pl-60">
         {/* Topbar */}
-        <header className="glass-topbar sticky top-0 z-20 flex h-14 items-center gap-3 bg-background/80 px-4 md:px-6">
-          <Button variant="ghost" size="icon" className="-ml-1 md:hidden" onClick={() => setMobileOpen(true)}>
+        <header className="glass-topbar sticky top-0 z-20 flex h-14 items-center gap-3 bg-background/70 px-4 md:h-16 md:px-7">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="-ml-1.5 md:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open navigation"
+          >
             <Menu className="h-5 w-5" />
           </Button>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">
-              {current?.label ?? location.pathname}
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <div className="min-w-0">
+              <div className="truncate font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground/70">
+                {current?.group ?? "Shepherd"}
+              </div>
+              <div className="truncate text-[14px] font-semibold tracking-[-0.02em]">
+                {current?.label ?? location.pathname}
+              </div>
             </div>
           </div>
 
-
-          <ThemeToggle />
-
-          <NotificationBell />
+          <div className="flex items-center gap-0.5 rounded-full border border-border/60 bg-card/40 p-0.5">
+            <ThemeToggle />
+            <NotificationBell />
+          </div>
 
           {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2 px-1.5">
-                <Avatar className="h-7 w-7">
-                  <AvatarFallback className="bg-accent text-xs font-bold text-accent-foreground">
+              <Button variant="ghost" className="gap-2 rounded-full px-1.5">
+                <Avatar className="size-7">
+                  <AvatarFallback className="bg-gradient-to-br from-primary/25 to-gold/20 text-[11px] font-bold text-primary">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
@@ -294,7 +363,7 @@ export function AppShell() {
                 </span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuLabel>
                 <div className="truncate text-sm font-semibold">
                   {user?.name || "Ministry worker"}
@@ -302,7 +371,7 @@ export function AppShell() {
                 <div className="truncate text-[11px] font-normal text-muted-foreground">
                   {user?.email}
                 </div>
-                <Badge variant="secondary" className="mt-1.5 text-[10px]">
+                <Badge variant="secondary" className="mt-2 text-[10px]">
                   {formatRoles(user)}
                 </Badge>
               </DropdownMenuLabel>
@@ -330,7 +399,7 @@ export function AppShell() {
         </header>
 
         {offline.pending.length > 0 && (
-          <div className="flex items-center justify-between gap-3 border-b border-[#f59e0b]/40 bg-[#2e2408] px-4 py-2 text-[11px] text-[#fbbf24] md:px-6">
+          <div className="flex items-center justify-between gap-3 border-b border-status-amber/25 bg-status-amber/[0.08] px-4 py-2 text-[11px] text-status-amber md:px-7">
             <span className="flex min-w-0 items-center gap-2">
               <CloudOff className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">
@@ -353,7 +422,7 @@ export function AppShell() {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-6 px-2 text-[10px]"
+                className="h-6 px-2 text-[10px] text-status-amber hover:bg-status-amber/10 hover:text-status-amber"
                 onClick={() => {
                   offline.discard();
                   toast.success("Offline records discarded");
@@ -366,7 +435,7 @@ export function AppShell() {
         )}
 
         {user?.testAs && (
-          <div className="flex items-center justify-between gap-3 border-b border-[#f59e0b]/40 bg-[#2e2408] px-4 py-2 text-[11px] text-[#fbbf24] md:px-6">
+          <div className="flex items-center justify-between gap-3 border-b border-status-amber/25 bg-status-amber/[0.08] px-4 py-2 text-[11px] text-status-amber md:px-7">
             <span className="flex min-w-0 items-center gap-2">
               <FlaskConical className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">
@@ -381,7 +450,7 @@ export function AppShell() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 shrink-0 px-2 text-[10px]"
+              className="h-6 shrink-0 px-2 text-[10px] text-status-amber hover:bg-status-amber/10 hover:text-status-amber"
               onClick={endTest}
             >
               End test
@@ -390,7 +459,7 @@ export function AppShell() {
         )}
 
         {showPushBanner && (
-          <div className="flex items-center justify-between gap-3 border-b border-primary/20 bg-primary/5 px-4 py-2 text-[11px] text-foreground md:px-6">
+          <div className="flex items-center justify-between gap-3 border-b border-primary/20 bg-primary/[0.06] px-4 py-2 text-[11px] text-foreground md:px-7">
             <span className="flex min-w-0 items-center gap-2">
               <BellRing className="h-3.5 w-3.5 shrink-0 text-primary" />
               <span className="truncate">
@@ -421,7 +490,7 @@ export function AppShell() {
           </div>
         )}
 
-        <main className="flex-1 px-4 py-6 md:px-6">
+        <main className="flex-1 px-4 py-6 md:px-7 md:py-8">
           {/* A crashed page shows a recovery card here instead of blanking the
               whole app — the sidebar, topbar and notifications stay usable. */}
           <RouteErrorBoundary>

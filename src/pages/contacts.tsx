@@ -74,7 +74,7 @@ function ContactCard({
   return (
     <div
       onClick={() => navigate(`/contacts/${contact._id}`)}
-      className="group cursor-pointer rounded-lg border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+      className="group cursor-pointer panel p-4 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -790,7 +790,7 @@ export default function Contacts() {
       />
 
       {/* Filters */}
-      <div className="mb-5 grid gap-2 rounded-lg border bg-card p-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mb-5 grid gap-2 panel p-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="relative lg:col-span-2">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -849,7 +849,7 @@ export default function Contacts() {
       {contacts === undefined ? (
         <div className="space-y-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-36 animate-pulse rounded-lg border bg-card" />
+            <div key={i} className="h-36 animate-pulse panel" />
           ))}
         </div>
       ) : contacts.length === 0 ? (

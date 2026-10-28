@@ -1,11 +1,9 @@
 import { cn } from "@/lib/utils";
 import { parseWhatsappTargets, whatsappHref, type ChatTarget } from "@/lib/whatsapp";
 import {
-  FOLLOWUP_STATUS_COLORS,
   ROLE_LABELS,
   ROLES,
   STAGE_LABELS,
-  FollowupStatus,
   Role,
   Stage,
 } from "@/convex/constants";
@@ -13,7 +11,6 @@ import { ReactNode } from "react";
 import {
   Check,
   ChevronDown,
-  ChevronRight,
   Circle,
   Inbox,
   MessageCircle,
@@ -188,22 +185,22 @@ export function StatusPill({
   className?: string;
 }) {
   const colors: Record<string, string> = {
-    pending: "bg-[#2e2408] text-[#fbbf24] border-[#f59e0b]/40",
-    completed: "bg-[#15291c] text-[#86efac] border-[#4ade80]/30",
-    missed: "bg-[#331215] text-[#fca5a5] border-[#f87171]/40",
-    cancelled: "bg-[#1f251d] text-[#a3adb9] border-[#9ca3af]/40",
-    active: "bg-[#2e2408] text-[#fbbf24] border-[#f59e0b]/40",
-    answered: "bg-[#15291c] text-[#86efac] border-[#4ade80]/30",
-    closed: "bg-[#1f251d] text-[#a3adb9] border-[#9ca3af]/40",
-    present: "bg-[#15291c] text-[#86efac] border-[#4ade80]/30",
-    absent: "bg-[#331215] text-[#fca5a5] border-[#f87171]/40",
-    excused: "bg-[#2e2408] text-[#fbbf24] border-[#f59e0b]/40",
-    male: "bg-[#141c2e] text-[#93b4f8] border-[#6366f1]/40",
-    female: "bg-[#2e1422] text-[#f2a6cf] border-[#ec4899]/40",
-    inProgress: "bg-[#2e2408] text-[#fbbf24] border-[#f59e0b]/40",
-    notStarted: "bg-[#1f251d] text-[#a3adb9] border-[#9ca3af]/40",
-    activeMember: "bg-[#15291c] text-[#86efac] border-[#4ade80]/30",
-    inactive: "bg-[#1f251d] text-[#a3adb9] border-[#9ca3af]/40",
+    pending: "bg-status-amber/10 text-status-amber border-status-amber/30",
+    completed: "bg-status-green/10 text-status-green border-status-green/30",
+    missed: "bg-status-red/10 text-status-red border-status-red/30",
+    cancelled: "bg-status-grey/10 text-status-grey border-status-grey/30",
+    active: "bg-status-amber/10 text-status-amber border-status-amber/30",
+    answered: "bg-status-green/10 text-status-green border-status-green/30",
+    closed: "bg-status-grey/10 text-status-grey border-status-grey/30",
+    present: "bg-status-green/10 text-status-green border-status-green/30",
+    absent: "bg-status-red/10 text-status-red border-status-red/30",
+    excused: "bg-status-amber/10 text-status-amber border-status-amber/30",
+    male: "bg-primary/10 text-primary border-primary/25",
+    female: "bg-gold/12 text-gold border-gold/30",
+    inProgress: "bg-status-amber/10 text-status-amber border-status-amber/30",
+    notStarted: "bg-status-grey/10 text-status-grey border-status-grey/30",
+    activeMember: "bg-status-green/10 text-status-green border-status-green/30",
+    inactive: "bg-status-grey/10 text-status-grey border-status-grey/30",
   };
   const statusLabels: Record<string, string> = {
     pending: "Pending",
@@ -224,25 +221,12 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        "inline-flex items-center gap-1.5 rounded-full border px-2 py-[3px] text-[10px] font-semibold uppercase tracking-[0.06em]",
         colors[status] ?? "bg-muted text-muted-foreground border-border",
         className,
       )}
     >
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{
-          background:
-            FOLLOWUP_STATUS_COLORS[status as FollowupStatus] ??
-            (status === "answered" || status === "completed" || status === "present"
-              ? "#86efac"
-              : status === "pending" || status === "active" || status === "excused"
-                ? "#fbbf24"
-                : status === "missed" || status === "absent"
-                  ? "#f87171"
-                  : "#9ca3af"),
-        }}
-      />
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
       {label}
     </span>
   );
@@ -253,7 +237,7 @@ export function StagePill({ stage, className }: { stage?: string; className?: st
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded border border-primary/30 bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground",
+        "inline-flex items-center rounded-full border border-primary/20 bg-primary/[0.07] px-2 py-0.5 text-[10px] font-medium tracking-[0.01em] text-primary",
         className,
       )}
     >
@@ -274,24 +258,27 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <div className="flex items-center gap-2">
-          <ChevronRight className="h-5 w-5 shrink-0 text-primary" />
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h1>
+    <div className="mb-6 flex flex-col gap-4 sm:mb-7 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2.5">
           {code && (
-            <span className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline">
+            <span className="rounded-md border border-gold/30 bg-gold/10 px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.16em] text-gold">
               {code}
             </span>
           )}
+          <h1 className="display-title text-[26px] leading-[1.1] text-foreground sm:text-[31px]">
+            {title}
+          </h1>
         </div>
         {description && (
-          <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
+          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-muted-foreground">
             {description}
           </p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      )}
     </div>
   );
 }
@@ -306,13 +293,17 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-14 text-center">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-md bg-muted">
-        <Inbox className="h-5 w-5 text-muted-foreground" />
+    <div className="panel flex flex-col items-center justify-center px-6 py-14 text-center">
+      <div className="mb-4 grid size-12 place-items-center rounded-2xl border border-border/80 bg-gradient-to-br from-primary/12 to-gold/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+        <Inbox className="h-5 w-5 text-primary" />
       </div>
-      <p className="text-sm font-semibold">{title}</p>
-      {message && <p className="mt-1 max-w-sm text-xs text-muted-foreground">{message}</p>}
-      {action && <div className="mt-4">{action}</div>}
+      <p className="display-title text-[17px] text-foreground">{title}</p>
+      {message && (
+        <p className="mt-1.5 max-w-sm text-[12.5px] leading-6 text-muted-foreground">
+          {message}
+        </p>
+      )}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }

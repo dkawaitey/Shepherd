@@ -42,12 +42,12 @@ export default function Discipleship() {
             <Link
               key={s.stage}
               to={`/contacts?status=${s.stage}`}
-              className="group rounded-lg border bg-card p-3.5 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+              className="group panel p-3.5 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
             >
               <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 {s.label}
               </div>
-              <div className="mt-1 font-mono text-2xl font-bold tabular-nums text-primary">
+              <div className="mt-1 stat-figure text-[24px] text-primary">
                 {s.count}
               </div>
               <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground group-hover:text-primary">
@@ -61,7 +61,7 @@ export default function Discipleship() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Bible study progress */}
-        <div className="rounded-lg border bg-card p-4">
+        <div className="panel p-4">
           <div className="mb-4 flex items-center justify-between">
             <p className="term-label">// bible study curriculum</p>
             <BookMarked className="h-4 w-4 text-muted-foreground" />
@@ -84,7 +84,7 @@ export default function Discipleship() {
         </div>
 
         {/* Recent journey activity */}
-        <div className="rounded-lg border bg-card p-4">
+        <div className="panel p-4">
           <div className="mb-4 flex items-center justify-between">
             <p className="term-label">// recent journey activity</p>
             <Sparkle className="h-4 w-4 text-muted-foreground" />

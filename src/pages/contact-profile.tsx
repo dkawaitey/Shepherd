@@ -127,8 +127,8 @@ export default function ContactProfile() {
     return (
       <div className="mx-auto max-w-5xl">
         <div className="space-y-3">
-          <div className="h-24 animate-pulse rounded-lg border bg-card" />
-          <div className="h-64 animate-pulse rounded-lg border bg-card" />
+          <div className="h-24 animate-pulse panel" />
+          <div className="h-64 animate-pulse panel" />
         </div>
       </div>
     );
@@ -158,7 +158,7 @@ export default function ContactProfile() {
         </Button>
       </div>
 
-      <div className="mb-6 overflow-hidden rounded-lg border bg-card">
+      <div className="mb-6 overflow-hidden panel">
         <div className="border-b bg-muted/40 px-5 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -314,7 +314,7 @@ export default function ContactProfile() {
                 <EmptyState title="No follow-ups yet" message="Schedule a home visit, call or Bible study to begin the journey." />
               ) : (
                 followUps.map((f) => (
-                  <div key={f._id} className="rounded-lg border bg-card p-3.5">
+                  <div key={f._id} className="panel p-3.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-semibold">{FOLLOWUP_TYPE_LABELS[f.type]}</span>
                       <StatusPill status={f.status} />
@@ -652,7 +652,7 @@ function TimelineTab({
       <div className="space-y-5">
         {canEdit && (
           <>
-            <section className="rounded-lg border bg-card p-4">
+            <section className="panel p-4">
               <p className="term-label mb-3">// update spiritual stage (manual)</p>
               <div className="space-y-3">
                 <div>
@@ -690,7 +690,7 @@ function TimelineTab({
               </div>
             </section>
 
-            <section className="rounded-lg border bg-card p-4">
+            <section className="panel p-4">
               <p className="term-label mb-3">// add timeline event</p>
               <div className="space-y-3">
                 <div>
@@ -767,7 +767,7 @@ function BibleStudiesTab({
           const row = rows[i];
           const status = row?.status ?? "notStarted";
           return (
-            <div key={lesson} className="rounded-lg border bg-card p-3.5">
+            <div key={lesson} className="panel p-3.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className={cn(
@@ -972,7 +972,7 @@ function AttendanceTab({
     <div className="space-y-4">
       {canEdit && (
         <form
-          className="rounded-lg border bg-card p-3.5"
+          className="panel p-3.5"
           onSubmit={async (e) => {
             e.preventDefault();
             await setAttendance({
@@ -1131,7 +1131,7 @@ function PrayerTab({
     <div className="space-y-4">
       {canEdit && (
         <form
-          className="space-y-3 rounded-lg border bg-card p-3.5"
+          className="space-y-3 panel p-3.5"
           onSubmit={async (e) => {
             e.preventDefault();
             if (!title.trim() || !summary.trim()) return;
@@ -1155,7 +1155,7 @@ function PrayerTab({
       ) : (
         <div className="space-y-3">
           {rows.map((p) => (
-            <div key={p._id} className="rounded-lg border bg-card p-3.5">
+            <div key={p._id} className="panel p-3.5">
               <div className="flex flex-wrap items-center gap-2">
                 <Heart className="h-3.5 w-3.5 text-primary" />
                 <span className="text-[13px] font-semibold">{p.title}</span>
@@ -1242,7 +1242,7 @@ function NotesTab({
     <div className="space-y-4">
       {canEdit && (
         <form
-          className="space-y-3 rounded-lg border bg-card p-3.5"
+          className="space-y-3 panel p-3.5"
           onSubmit={async (e) => {
             e.preventDefault();
             if (!content.trim()) return;
@@ -1287,7 +1287,7 @@ function NotesTab({
       ) : (
         <div className="space-y-3">
           {rows.map((n) => (
-            <div key={n._id} className="rounded-lg border bg-card p-3.5">
+            <div key={n._id} className="panel p-3.5">
               <div className="flex items-center gap-2">
                 <span className="rounded border border-primary/30 bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
                   {NOTE_TYPE_LABELS[n.type]}

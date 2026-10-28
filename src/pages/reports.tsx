@@ -109,7 +109,7 @@ export default function Reports() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-3">
+      <div className="flex flex-wrap items-end gap-3 panel p-3">
         <div>
           <Label htmlFor="r-from">From</Label>
           <Input id="r-from" type="date" className="mt-1" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -124,9 +124,9 @@ export default function Reports() {
       </div>
 
       {report === undefined ? (
-        <div className="h-64 animate-pulse rounded-lg border bg-card" />
+        <div className="h-64 animate-pulse panel" />
       ) : report === null ? (
-        <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+        <div className="panel p-6 text-center text-sm text-muted-foreground">
           You don't have access to ministry records yet. Ask an administrator to
           set your ministry position or link your account to your member record.
         </div>
@@ -144,12 +144,12 @@ export default function Reports() {
               { icon: Flame, label: "Cancelled", value: report.counts.cancelled, color: "#fbbf24" },
               { icon: TrendingUp, label: "Active Follow-ups", value: report.counts.pending, color: "#fbbf24" },
             ].map((c) => (
-              <div key={c.label} className="rounded-lg border bg-card p-4">
+              <div key={c.label} className="panel p-4">
                 <div className="flex items-center justify-between">
                   <span className="term-label">{c.label}</span>
                   <c.icon className="h-4 w-4" style={{ color: c.color }} />
                 </div>
-                <div className="mt-2 font-mono text-2xl font-bold tabular-nums" style={{ color: c.color }}>
+                <div className="mt-2 stat-figure text-[24px]" style={{ color: c.color }}>
                   {c.value}
                 </div>
               </div>
@@ -157,7 +157,7 @@ export default function Reports() {
           </div>
 
           {/* Rates */}
-          <div className="rounded-lg border bg-card p-4">
+          <div className="panel p-4">
             <p className="term-label mb-4">// key rates</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[
@@ -184,7 +184,7 @@ export default function Reports() {
           </div>
 
           {/* Monthly trend */}
-          <div className="rounded-lg border bg-card p-4">
+          <div className="panel p-4">
             <p className="term-label mb-4">// monthly trend (last 6 months)</p>
             <div className="grid grid-cols-6 gap-2">
               {report.monthly.map((m) => {
@@ -215,7 +215,7 @@ export default function Reports() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Worker productivity */}
-            <div className="rounded-lg border bg-card p-4">
+            <div className="panel p-4">
               <p className="term-label mb-3">// volunteer activity</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-[11px]">
@@ -251,7 +251,7 @@ export default function Reports() {
             </div>
 
             {/* Bible study progress */}
-            <div className="rounded-lg border bg-card p-4">
+            <div className="panel p-4">
               <p className="term-label mb-3">// bible study progress</p>
               <div className="space-y-2">
                 {report.bsByLesson.map((b) => (
@@ -284,7 +284,7 @@ export default function Reports() {
           </div>
 
           {/* Funnel */}
-          <div className="rounded-lg border bg-card p-4">
+          <div className="panel p-4">
             <p className="term-label mb-3">// conversion funnel (all time)</p>
             <div className="space-y-2">
               {report.funnel.map((f, i) => (

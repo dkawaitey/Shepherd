@@ -171,7 +171,7 @@ export default function Members() {
       {/* Class dashboards */}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {(classStats ?? []).map((cs: any) => (
-          <div key={cs.klass} className="rounded-lg border bg-card p-4">
+          <div key={cs.klass} className="panel p-4">
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-bold">{cs.klass} Class</span>
               <button
@@ -218,7 +218,7 @@ export default function Members() {
       </div>
 
       {/* Filters */}
-      <div className="mb-4 grid gap-2 rounded-lg border bg-card p-3 sm:grid-cols-4">
+      <div className="mb-4 grid gap-2 panel p-3 sm:grid-cols-4">
         <div className="relative sm:col-span-2">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -250,7 +250,7 @@ export default function Members() {
       {members === undefined ? (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg border bg-card" />
+            <div key={i} className="h-24 animate-pulse panel" />
           ))}
         </div>
       ) : members.length === 0 ? (
@@ -264,7 +264,7 @@ export default function Members() {
             <Link
               key={m._id}
               to={`/members/${m._id}`}
-              className="group rounded-lg border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+              className="group panel p-4 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -656,7 +656,7 @@ export function MemberProfile() {
   const removeMember = useMutation(api.members.remove);
 
   if (!data) {
-    return <div className="h-64 animate-pulse rounded-lg border bg-card" />;
+    return <div className="h-64 animate-pulse panel" />;
   }
   const { member, attendance, prayers, notes } = data;
   const linked = (accounts ?? []).find((a) => a.memberId === member._id);
@@ -711,7 +711,7 @@ export function MemberProfile() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="overflow-hidden panel">
         {/* Header */}
         <div className="border-b bg-muted/40 px-4 py-4 sm:px-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -834,7 +834,7 @@ export function MemberProfile() {
               ].map((s) => (
                 <div key={s.label} className="rounded-md border bg-card p-3">
                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</div>
-                  <div className="mt-1 font-mono text-2xl font-bold" style={{ color: progressColor(s.value) }}>
+                  <div className="mt-1 stat-figure text-[24px]" style={{ color: progressColor(s.value) }}>
                     {s.value}%
                   </div>
                   <Progress value={s.value} className="mt-2 h-1.5" />
@@ -843,7 +843,7 @@ export function MemberProfile() {
             </div>
 
             {/* Details */}
-            <div className="grid gap-x-6 gap-y-2 rounded-lg border bg-card p-4 text-[12px] sm:grid-cols-2">
+            <div className="grid gap-x-6 gap-y-2 panel p-4 text-[12px] sm:grid-cols-2">
               {[
                 ["Gender", member.gender ? member.gender[0].toUpperCase() + member.gender.slice(1) : "—"],
                 ["Phone", member.phone || "—"],
@@ -864,7 +864,7 @@ export function MemberProfile() {
 
             {/* Linked user account (admin only) */}
             {isAdmin && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 panel p-4">
                 <div className="min-w-0">
                   <p className="term-label">// linked account</p>
                   <p className="text-[11px] text-muted-foreground">
@@ -1124,7 +1124,7 @@ function AttendanceTab({
 
       {/* Record attendance */}
       {canRecord && (
-        <form className="rounded-lg border bg-card p-4" onSubmit={submit}>
+        <form className="panel p-4" onSubmit={submit}>
           <p className="term-label mb-3">
             {editingId ? "// edit attendance record" : "// record attendance"}
           </p>
@@ -1472,7 +1472,7 @@ function MemberPrayerTab({
     <div className="space-y-4 p-5">
       {canEdit && (
         <form
-          className="space-y-3 rounded-lg border bg-card p-3.5"
+          className="space-y-3 panel p-3.5"
           onSubmit={async (e) => {
             e.preventDefault();
             if (!title.trim() || !summary.trim()) return;
@@ -1496,7 +1496,7 @@ function MemberPrayerTab({
       ) : (
         <div className="space-y-3">
           {rows.map((p) => (
-            <div key={p._id} className="rounded-lg border bg-card p-3.5">
+            <div key={p._id} className="panel p-3.5">
               <div className="flex flex-wrap items-center gap-2">
                 <Heart className="h-3.5 w-3.5 text-primary" />
                 <span className="text-[13px] font-semibold">{p.title}</span>
@@ -1588,7 +1588,7 @@ function MemberNotesTab({
     <div className="space-y-4 p-5">
       {canEdit && (
         <form
-          className="space-y-3 rounded-lg border bg-card p-3.5"
+          className="space-y-3 panel p-3.5"
           onSubmit={async (e) => {
             e.preventDefault();
             if (!content.trim()) return;
@@ -1633,7 +1633,7 @@ function MemberNotesTab({
       ) : (
         <div className="space-y-3">
           {rows.map((n) => (
-            <div key={n._id} className="rounded-lg border bg-card p-3.5">
+            <div key={n._id} className="panel p-3.5">
               <div className="flex items-center gap-2">
                 <span className="rounded border border-primary/30 bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
                   {NOTE_TYPE_LABELS[n.type]}

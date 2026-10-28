@@ -72,7 +72,7 @@ export default function PrayerJournal() {
             <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: c.color }}>
               {c.label}
             </div>
-            <div className="mt-1 font-mono text-2xl font-bold tabular-nums" style={{ color: c.color }}>
+            <div className="mt-1 stat-figure text-[24px]" style={{ color: c.color }}>
               {c.value}
             </div>
             <div className="text-[10px] text-muted-foreground" style={{ color: c.color }}>
@@ -116,7 +116,7 @@ export default function PrayerJournal() {
       {prayers === undefined ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg border bg-card" />
+            <div key={i} className="h-24 animate-pulse panel" />
           ))}
         </div>
       ) : prayers.length === 0 ? (
@@ -127,7 +127,7 @@ export default function PrayerJournal() {
       ) : (
         <div className="space-y-3">
           {prayers.map((p) => (
-            <div key={p._id} className="rounded-lg border bg-card p-4">
+            <div key={p._id} className="panel p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Heart className="h-4 w-4 text-primary" />
                 <span className="text-[13px] font-bold">{p.title}</span>
