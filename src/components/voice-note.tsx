@@ -10,9 +10,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /** Longest single voice note we record (server caps audio at 12 MB). */
 export const MAX_VOICE_SECONDS = 180;
 /** Bars in the live "recording" waveform. */
-const LIVE_BARS = 44;
+const LIVE_BARS = 32;
 /** Bars in a player waveform. */
-const PLAY_BARS = 48;
+const PLAY_BARS = 40;
 /** Playback speeds the little speed chip cycles through. */
 const SPEEDS = [1, 1.5, 2];
 
@@ -116,31 +116,50 @@ function fallbackPeaks(seed: string, bars = PLAY_BARS) {
 
 /* ─────────────────────────── waveform bars ──────────────────────────── */
 
+/**
+ * The waveform itself: capsule bars mirrored around the centre line, so the
+ * strip reads as an oscilloscope envelope rather than a bar chart. Quiet
+ * passages collapse to a row of dots on the axis, which is what makes the
+ * shape of a spoken note recognisable at a glance.
+ */
 function WaveBars({
   bars,
   tone,
   animate = false,
+  glow = false,
 }: {
   bars: number[];
   tone: "idle" | "active" | "recording";
   animate?: boolean;
+  glow?: boolean;
 }) {
   return (
-    <div className="flex h-full items-center gap-[2px]" aria-hidden>
+    <div
+      className={cn(
+        "flex h-full items-center gap-[2px]",
+        glow &&
+          (tone === "recording"
+            ? "drop-shadow-[0_0_4px_rgba(208,68,68,0.45)]"
+            : "drop-shadow-[0_0_5px_rgba(143,175,138,0.65)]"),
+      )}
+      aria-hidden
+    >
       {bars.map((h, i) => (
         <motion.span
           key={i}
-          initial={animate ? { scaleY: 0.25, opacity: 0.5 } : false}
+          initial={animate ? { scaleY: 0.25, opacity: 0.4 } : false}
           animate={{ scaleY: 1, opacity: 1 }}
-          transition={{ duration: 0.35, delay: animate ? i * 0.006 : 0 }}
+          transition={{ duration: 0.35, delay: animate ? i * 0.008 : 0 }}
           className={cn(
             "min-w-px flex-1 origin-center rounded-full",
-            animate ? "transition-[height] duration-100 ease-out" : "transition-[height] duration-200",
+            animate
+              ? "transition-[height] duration-100 ease-out"
+              : "transition-[height] duration-200",
             tone === "active" && "bg-primary",
-            tone === "idle" && "bg-muted-foreground/35",
-            tone === "recording" && "bg-destructive/80",
+            tone === "idle" && "bg-muted-foreground/25",
+            tone === "recording" && "bg-destructive/85",
           )}
-          style={{ height: `${Math.max(9, Math.round(h * 100))}%` }}
+          style={{ height: `${Math.max(11, Math.round(h * 100))}%` }}
         />
       ))}
     </div>
@@ -286,8 +305,9 @@ export function AudioWavePlayer({
   return (
     <div
       className={cn(
-        "group/voice flex items-center gap-3 rounded-2xl border border-border/70 bg-gradient-to-r from-muted/50 to-muted/20 backdrop-blur-sm transition-colors",
-        playing && "border-primary/40 from-primary/10 to-primary/[0.04]",
+        "group/voice relative flex items-center gap-3 overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-r from-muted/45 via-muted/20 to-muted/10 backdrop-blur-sm transition-colors duration-300",
+        playing &&
+          "border-primary/45 from-primary/[0.14] via-primary/[0.06] to-transparent shadow-[0_2px_18px_-10px_rgba(85,114,76,0.75)]",
         compact ? "px-2.5 py-1.5" : "px-3 py-2.5",
         className,
       )}
@@ -328,15 +348,16 @@ export function AudioWavePlayer({
         aria-label={playing ? "Pause voice note" : "Play voice note"}
         title={playing ? "Pause" : `Play ${name}`}
         className={cn(
-          "relative flex shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform hover:scale-105",
+          "relative flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/85 text-primary-foreground shadow-[0_2px_10px_-2px_rgba(85,114,76,0.65)] transition-transform hover:scale-105",
+          playing && "ring-2 ring-primary/25",
           compact ? "h-8 w-8" : "h-10 w-10",
         )}
       >
         {playing && (
           <motion.span
             className="absolute inset-0 rounded-full bg-primary/40"
-            initial={{ scale: 1, opacity: 0.6 }}
-            animate={{ scale: 1.55, opacity: 0 }}
+            initial={{ scale: 1, opacity: 0.55 }}
+            animate={{ scale: 1.6, opacity: 0 }}
             transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
           />
         )}
@@ -370,34 +391,46 @@ export function AudioWavePlayer({
           }}
           className={cn(
             "relative cursor-pointer select-none",
-            compact ? "h-7" : "h-9",
+            compact ? "h-8" : "h-10",
           )}
         >
-          <WaveBars bars={bars} tone="idle" animate />
+          {/* The axis the bars are mirrored across, so the strip reads as a
+              scope rather than as a row of columns. */}
+          <span className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border/70" />
+
+          {/* The whole note, quiet. */}
+          <div className="absolute inset-0">
+            <WaveBars bars={bars} tone="idle" animate />
+          </div>
+
           {/* The played portion, revealed with a clip so no bar re-mounts. */}
           <div
-            className="absolute inset-0 transition-[clip-path] duration-75 ease-linear"
+            className="absolute inset-0 transition-[clip-path] duration-100 ease-linear"
             style={{ clipPath: `inset(0 ${100 - progress * 100}% 0 0)` }}
           >
-            <WaveBars bars={bars} tone="active" />
+            <WaveBars bars={bars} tone="active" glow />
           </div>
-          {/* Caret under the playhead. */}
+
+          {/* Playhead: a lit needle with a bead on the axis. */}
           <span
             className={cn(
-              "pointer-events-none absolute top-0 bottom-0 w-px rounded bg-primary/70 transition-[left] duration-75 ease-linear",
+              "pointer-events-none absolute top-0 bottom-0 w-[2px] -translate-x-1/2 rounded-full bg-primary shadow-[0_0_10px_rgba(143,175,138,0.85)] transition-[left] duration-100 ease-linear",
               progress === 0 && "opacity-0",
             )}
             style={{ left: `${progress * 100}%` }}
-          />
+          >
+            <span className="absolute top-1/2 left-1/2 h-[5px] w-[5px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground/85" />
+          </span>
         </div>
 
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1 flex items-center gap-1.5">
           {/* How long the recording is — the number a reader wants before
               deciding to press play. */}
           <span
             title={`Voice note · ${formatClock(duration)}`}
             className={cn(
-              "flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-card/60 font-semibold tabular-nums text-foreground/80",
+              "flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-card/70 font-semibold tabular-nums text-foreground/80 transition-colors",
+              playing && "border-primary/40 bg-primary/10 text-primary",
               compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
             )}
           >
@@ -409,16 +442,15 @@ export function AudioWavePlayer({
           {(playing || current > 0) && (
             <motion.span
               className={cn(
-                "tabular-nums text-muted-foreground",
+                "flex items-center gap-1 font-semibold tabular-nums",
                 compact ? "text-[9px]" : "text-[10px]",
               )}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
               {formatClock(current)}
-              <span className="text-muted-foreground/50">
-                {" / "}
-                {formatClock(duration)}
+              <span className="font-normal text-muted-foreground/60">
+                -{formatClock(Math.max(0, duration - current))}
               </span>
             </motion.span>
           )}
@@ -429,7 +461,10 @@ export function AudioWavePlayer({
         type="button"
         onClick={cycleSpeed}
         title="Playback speed"
-        className="flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-card/60 px-2 py-1 text-[10px] font-medium tabular-nums text-muted-foreground transition-colors hover:text-primary"
+        className={cn(
+          "flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-card/70 px-2 py-1 text-[10px] font-medium tabular-nums text-muted-foreground transition-colors hover:text-primary",
+          speed !== 1 && "border-primary/40 bg-primary/10 text-primary",
+        )}
       >
         <Gauge className="h-3 w-3" />
         {speed}×
@@ -721,42 +756,67 @@ export function VoiceRecorder({
 
   if (status === "recording") {
     const remaining = Math.max(0, maxSeconds - Math.floor(seconds));
+    const elapsed = Math.min(1, seconds / maxSeconds);
+    const liveBars =
+      levels.length >= LIVE_BARS
+        ? levels.slice(levels.length - LIVE_BARS)
+        : levels;
     return (
       <div
         className={cn(
-          "flex items-center gap-2 rounded-2xl border border-destructive/40 bg-destructive/5 px-2.5 py-1.5",
+          "relative flex items-center gap-2.5 overflow-hidden rounded-2xl border border-destructive/35 bg-gradient-to-r from-destructive/[0.10] via-destructive/[0.04] to-transparent px-2.5 py-2",
           className,
         )}
       >
-        <motion.span
-          className="h-2 w-2 shrink-0 rounded-full bg-destructive"
-          animate={{ opacity: [1, 0.25, 1], scale: [1, 0.85, 1] }}
-          transition={{ duration: 1.1, repeat: Infinity }}
-        />
-        <div className="h-7 min-w-0 flex-1">
-          <WaveBars
-            bars={
-              levels.length >= LIVE_BARS
-                ? levels.slice(levels.length - LIVE_BARS)
-                : levels
-            }
-            tone="recording"
-            animate
+        {/* Record light: a breathing halo, a ring that ripples outward, and a
+            bright core — it reads as "live" at a glance. */}
+        <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+          <motion.span
+            className="absolute inset-0 rounded-full bg-destructive/15"
+            animate={{ scale: [0.85, 1.1, 0.85], opacity: [0.55, 0.2, 0.55] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
           />
-        </div>
-        <span className="shrink-0 text-[11px] font-semibold tabular-nums text-destructive">
-          {formatClock(seconds)}
+          <motion.span
+            className="absolute h-4 w-4 rounded-full border border-destructive/45"
+            animate={{ scale: [0.9, 1.6], opacity: [0.8, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
+          />
+          <span className="relative h-2 w-2 rounded-full bg-destructive shadow-[0_0_8px_rgba(208,68,68,0.9)]" />
         </span>
-        {remaining <= 15 && (
-          <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-            {formatClock(remaining)} left
-          </span>
-        )}
+
+        <div className="min-w-0 flex-1">
+          {/* Live scope, mirrored around its axis like the player. */}
+          <div className="relative h-7">
+            <span className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-destructive/20" />
+            <div className="absolute inset-0">
+              <WaveBars bars={liveBars} tone="recording" animate glow />
+            </div>
+          </div>
+
+          {/* Elapsed time, and how much of the limit is spent. */}
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="shrink-0 text-[11px] font-semibold tabular-nums text-destructive">
+              {formatClock(seconds)}
+            </span>
+            <span className="relative h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-destructive/15">
+              <span
+                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-destructive/60 to-destructive transition-[width] duration-200 ease-linear"
+                style={{ width: `${elapsed * 100}%` }}
+              />
+            </span>
+            {remaining <= 15 && (
+              <span className="shrink-0 text-[10px] font-medium tabular-nums text-destructive/80">
+                {formatClock(remaining)} left
+              </span>
+            )}
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={cancel}
           title="Discard recording"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-destructive/25 bg-card/60 text-destructive/70 transition-colors hover:border-destructive/50 hover:text-destructive"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -765,7 +825,7 @@ export function VoiceRecorder({
           whileTap={{ scale: 0.94 }}
           onClick={stop}
           title="Stop and attach"
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-destructive px-3 text-[11px] font-semibold text-white transition-colors hover:bg-destructive/90"
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-destructive to-destructive/85 px-3 text-[11px] font-semibold text-white shadow-[0_2px_10px_-2px_rgba(208,68,68,0.7)] transition-colors hover:from-destructive/90"
         >
           <span className="h-2.5 w-2.5 rounded-[3px] bg-white" />
           Stop
