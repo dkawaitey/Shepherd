@@ -262,10 +262,16 @@ export function ScheduleDialog({
   // Assigned workers are suggested from the class the selected contact
   // belongs to, so the name lines up with a real class member. Declared after
   // `form` (its dependency) so the render never touches it in its dead zone.
+  //
+  // The query is never skipped: a contact recorded before classes were handed
+  // out has no `klass`, and skipping used to leave this picker on "Loading
+  // members..." forever with nothing to choose. Without a class we fall back
+  // to the whole roster (still scoped server-side by the viewer's role).
   const selectedContact = (contacts ?? []).find((c) => c._id === form.contactId);
+  const contactKlass = selectedContact?.klass;
   const classMembers = useQuery(
     api.members.list,
-    selectedContact?.klass ? { klass: selectedContact.klass } : "skip",
+    contactKlass ? { klass: contactKlass } : {},
   );
 
   // Tracks the contact whose assigned member was already copied in, so a
@@ -403,12 +409,13 @@ export function ScheduleDialog({
                 onChange={(v) => setForm((f) => ({ ...f, assignedWorker: v }))}
                 members={classMembers ?? []}
                 loading={classMembers === undefined}
+                placeholder="Select a member"
               />
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {selectedContact?.klass
-                ? `Members of ${selectedContact.klass}'s class`
-                : "Select a contact to see its class members"}
+              {contactKlass
+                ? `Members of ${contactKlass}'s class`
+                : "All members — pick a contact above to narrow this to its class"}
             </p>
           </div>
           <div>
