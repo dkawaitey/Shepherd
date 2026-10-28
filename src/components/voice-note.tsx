@@ -25,6 +25,32 @@ export function formatClock(seconds: number) {
 
 /* ──────────────────────────── audio analysis ─────────────────────────── */
 
+/* ─────────────────────────── the iOS audio session ───────────────────── */
+
+/**
+ * Whether a page may make noise is decided by its audio session on iOS, not by
+ * the <audio> element. The default ("ambient") session obeys the Ring/Silent
+ * switch, and a session still in play-and-record after a mic recording can send
+ * playback to the earpiece — in both cases the timeline advances while nothing
+ * is heard. Asking for "playback" while a voice note plays is what an audio app
+ * does: it is audible with the phone silenced and always comes out of the
+ * speaker. Safari exposes this as `navigator.audioSession` (iOS 16.4+), so it is
+ * a progressive enhancement — playback is untouched where it does not exist.
+ */
+type AudioSessionType = "auto" | "playback" | "ambient" | "play-and-record";
+
+function setAudioSessionType(type: AudioSessionType) {
+  if (typeof navigator === "undefined") return;
+  const session = (navigator as Navigator & { audioSession?: { type: string } })
+    .audioSession;
+  if (!session) return;
+  try {
+    if (session.type !== type) session.type = type;
+  } catch {
+    // Some transitions are rejected; the note still plays on the default route.
+  }
+}
+
 /** One shared context, used only to decode audio into peaks (never to play). */
 let decodeCtx: AudioContext | null = null;
 function getDecodeContext(): AudioContext | null {
@@ -206,6 +232,7 @@ export function AudioWavePlayer({
       stopLoop();
       const el = audioRef.current;
       if (el) el.pause();
+      setAudioSessionType("auto");
     };
   }, [stopLoop]);
 
@@ -216,18 +243,25 @@ export function AudioWavePlayer({
       el.pause();
       setPlaying(false);
       stopLoop();
+      setAudioSessionType("auto");
       return;
     }
     if (el.ended || (duration > 0 && el.currentTime >= duration - 0.05)) {
       el.currentTime = 0;
     }
-    el.playbackRate = speed;
+    // Claim the session inside the tap itself, before play(), so iOS starts the
+    // note on the speaker instead of the silent/mic route it was left on.
+    setAudioSessionType("playback");
     try {
       await el.play();
+      // Rate is applied after playback has started: iOS ignores a rate set on a
+      // paused element, which is also why the speed chip looked inert there.
+      el.playbackRate = speed;
       setPlaying(true);
       startLoop();
     } catch {
       setPlaying(false);
+      setAudioSessionType("auto");
     }
   };
 
@@ -258,6 +292,8 @@ export function AudioWavePlayer({
         className,
       )}
     >
+      {/* Clipped, not `display: none`: iOS keeps a hidden media element out of
+          the render tree, which has historically cost it its audio output. */}
       <audio
         ref={audioRef}
         src={src}
@@ -266,12 +302,23 @@ export function AudioWavePlayer({
           const d = e.currentTarget.duration;
           if (Number.isFinite(d) && d > 0) setDuration(d);
         }}
+        onPlay={() => {
+          setPlaying(true);
+          startLoop();
+        }}
+        onPause={() => {
+          // Also fires when iOS interrupts us (a call, Siri, another app), so the
+          // button never claims a note is playing while it is silent.
+          setPlaying(false);
+          stopLoop();
+        }}
         onEnded={() => {
           setPlaying(false);
           stopLoop();
           setCurrent(0);
+          setAudioSessionType("auto");
         }}
-        className="hidden"
+        className="sr-only"
       />
 
       <motion.button
@@ -558,6 +605,9 @@ export function VoiceRecorder({
     const ctx = audioCtxRef.current;
     audioCtxRef.current = null;
     if (ctx && ctx.state !== "closed") void ctx.close().catch(() => undefined);
+    // The mic left iOS in play-and-record; hand the session back so the note we
+    // just recorded (and everything after it) plays through the speaker.
+    setAudioSessionType("auto");
   }, []);
 
   const stop = useCallback(() => {
