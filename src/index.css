@@ -430,3 +430,25 @@
     }
   }
 }
+
+/* Indeterminate bar on the route-transition splash (main.tsx). Mirrors the
+   splash inlined in index.html so a cold open and an in-app navigation read as
+   the same load. */
+@keyframes shepherd-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+.shepherd-progress {
+  animation: shepherd-progress 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shepherd-progress {
+    animation-duration: 2.6s;
+  }
+}

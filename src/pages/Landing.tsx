@@ -12,6 +12,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
+import { preloadWhenIdle } from "@/lib/route-loaders";
+import { useEffect } from "react";
 
 /** The six things the ministry reaches for most, in the order of the journey. */
 const FEATURES = [
@@ -52,6 +54,12 @@ export default function Landing() {
   const navigate = useNavigate();
 
   const openApp = () => navigate(isAuthenticated ? "/dashboard" : "/auth");
+
+  // Sign-in is the first tap almost every visitor makes, so its chunk is
+  // fetched while the page is idle instead of during the tap.
+  useEffect(() => {
+    preloadWhenIdle(isAuthenticated ? ["/dashboard"] : ["/auth"]);
+  }, [isAuthenticated]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">

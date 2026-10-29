@@ -54,6 +54,7 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
 import { RouteErrorBoundary } from "@/components/error-boundary";
+import { preloadRoute, preloadWhenIdle } from "@/lib/route-loaders";
 
 /** Sidebar sections, in reading order. */
 const GROUPS = ["Ministry", "Community", "Insight", "System"] as const;
@@ -190,6 +191,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                       key={item.to}
                       to={item.to}
                       onClick={onNavigate}
+                      // Start the page's download as soon as the pointer or a
+                      // finger lands on the link, not after the tap resolves.
+                      onPointerEnter={() => preloadRoute(item.to)}
+                      onTouchStart={() => preloadRoute(item.to)}
+                      onFocus={() => preloadRoute(item.to)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "group relative flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] tracking-[-0.01em] transition-[background-color,color,box-shadow] duration-150",
@@ -254,6 +260,26 @@ export function AppShell() {
   const push = usePushNotifications(!!user);
   const pushSupported = typeof Notification !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
   const showPushBanner = user && pushSupported && !push.subscribed && push.permission !== "denied" && !pushDismissed;
+
+  // Warm the chunks this worker is likely to open next, once the page they came
+  // for has painted. Tapping a nav entry then swaps straight to the page
+  // instead of downloading its module behind a loading splash.
+  const canMinistry = hasMinistryAccess(user);
+  const admin = userIsAdmin(user);
+  const userId = user?._id;
+  useEffect(() => {
+    if (!userId) return;
+    const next = NAV.filter((item) => {
+      if (item.ministryOnly && !canMinistry) return false;
+      if ((item.adminOnly || item.to === "/analytics") && !admin) return false;
+      return item.to !== location.pathname;
+    })
+      .slice(0, 6)
+      .map((item) => item.to);
+    preloadWhenIdle(next);
+    // Only the account and what it may open decide the list; the current path
+    // is read so the page already on screen is not fetched twice.
+  }, [userId, canMinistry, admin, location.pathname]);
 
   const endTest = () => {
     setTestAs({ role: undefined })

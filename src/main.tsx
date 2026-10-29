@@ -2,47 +2,64 @@ import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { AppShell } from "@/components/app-shell";
-import { useAuth } from "@/hooks/use-auth";
 import { InstallPrompt } from "@/components/install-prompt";
 import { ThemeProvider } from "@/components/theme-provider";
 import { installErrorLogging, reportAppError } from "@/lib/error-log";
+import { routeLoaders } from "@/lib/route-loaders";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
+import { ConvexReactClient, useConvexAuth } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 
-// Lazy load route components for better code splitting
-const Landing = lazy(() => import("./pages/Landing.tsx"));
-const AuthPage = lazy(() => import("./pages/Auth.tsx"));
-const Dashboard = lazy(() => import("./pages/dashboard.tsx"));
-const Contacts = lazy(() => import("./pages/contacts.tsx"));
-const ContactProfile = lazy(() => import("./pages/contact-profile.tsx"));
-const Followups = lazy(() => import("./pages/followups.tsx"));
-const Discipleship = lazy(() => import("./pages/discipleship.tsx"));
-const BibleStudies = lazy(() => import("./pages/bible-studies.tsx"));
-const Members = lazy(() => import("./pages/members.tsx"));
-const MemberProfile = lazy(() =>
-  import("./pages/members.tsx").then((m) => ({ default: m.MemberProfile })),
-);
-const Attendance = lazy(() => import("./pages/attendance.tsx"));
-const PrayerJournal = lazy(() => import("./pages/prayer-journal.tsx"));
-const Announcements = lazy(() => import("./pages/announcements.tsx"));
-const Constitution = lazy(() => import("./pages/constitution.tsx"));
-const Reports = lazy(() => import("./pages/reports.tsx"));
-const Analytics = lazy(() => import("./pages/analytics.tsx"));
-const Settings = lazy(() => import("./pages/settings.tsx"));
-const ErrorLog = lazy(() => import("./pages/error-log.tsx"));
-const AccessReview = lazy(() => import("./pages/access-review.tsx"));
-const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+// Lazy route components. The modules live in one shared table so links can warm
+// the chunk they are about to open — see lib/route-loaders.
+const Landing = lazy(routeLoaders["/"]);
+const AuthPage = lazy(routeLoaders["/auth"]);
+const Dashboard = lazy(routeLoaders["/dashboard"]);
+const Contacts = lazy(routeLoaders["/contacts"]);
+const ContactProfile = lazy(routeLoaders["/contacts/:id"]);
+const Followups = lazy(routeLoaders["/followups"]);
+const Discipleship = lazy(routeLoaders["/discipleship"]);
+const BibleStudies = lazy(routeLoaders["/bible-studies"]);
+const Members = lazy(routeLoaders["/members"]);
+const MemberProfile = lazy(routeLoaders["/members/:id"]);
+const Attendance = lazy(routeLoaders["/attendance"]);
+const PrayerJournal = lazy(routeLoaders["/prayer-journal"]);
+const Announcements = lazy(routeLoaders["/announcements"]);
+const Constitution = lazy(routeLoaders["/constitution"]);
+const Reports = lazy(routeLoaders["/reports"]);
+const Analytics = lazy(routeLoaders["/analytics"]);
+const Settings = lazy(routeLoaders["/settings"]);
+const ErrorLog = lazy(routeLoaders["/error-log"]);
+const AccessReview = lazy(routeLoaders["/access"]);
+const NotFound = lazy(routeLoaders["*"]);
 
-// Simple loading fallback for route transitions
+/**
+ * Route-transition splash. It matches the boot splash inlined in index.html, so
+ * a cold open and an in-app navigation look like one continuous load instead of
+ * a blank screen followed by a jump.
+ */
 function RouteLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="grid min-h-screen place-items-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <img
+          src="/sidebar-logo.png"
+          alt=""
+          className="size-10 animate-pulse object-contain dark:hidden"
+        />
+        <img
+          src="/sidebarr-logo.png"
+          alt=""
+          className="hidden size-10 animate-pulse object-contain dark:block"
+        />
+        <div className="h-[3px] w-28 overflow-hidden rounded-full bg-muted">
+          <div className="shepherd-progress h-full w-1/3 rounded-full bg-primary/70" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -51,9 +68,13 @@ function RouteLoading() {
  * The landing page is only for visitors. Signed-in users opening the app (or
  * the installed PWA, whose start_url is "/") go straight into the dashboard
  * instead of seeing the marketing page again.
+ *
+ * Only the session is consulted here — `useAuth` also waits for the profile
+ * query, which meant a first-time visitor sat on a splash for a second
+ * round trip before the marketing page could paint at all.
  */
 function LandingRoute() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated } = useConvexAuth();
 
   if (isLoading) return <RouteLoading />;
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
