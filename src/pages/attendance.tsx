@@ -201,10 +201,10 @@ function CustomSessionStartsCard({
           return (
             <div
               key={s.key}
-              className="flex flex-wrap items-center gap-2 rounded-md border bg-background/40 px-3 py-2"
+              className="flex flex-col gap-2 rounded-md border bg-background/40 px-3 py-2.5 sm:flex-row sm:items-center"
             >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <div className="min-w-0 sm:flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="text-[12px] font-semibold">{fmtDate(s.date)}</span>
                   <span className="text-[11px] text-muted-foreground">
                     {ATTENDANCE_TYPE_LABELS[s.type] ?? s.type}
@@ -225,35 +225,37 @@ function CustomSessionStartsCard({
                   )}
                 </div>
               </div>
-              <Input
-                type="time"
-                className="w-28"
-                value={value}
-                disabled={!canEdit || busy}
-                aria-label={`Start time for ${ATTENDANCE_TYPE_LABELS[s.type] ?? s.type} on ${s.date}`}
-                onChange={(e) => setDrafts((d) => ({ ...d, [s.key]: e.target.value }))}
-              />
-              {canEdit && (
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    size="sm"
-                    disabled={!value || busy || !dirty}
-                    onClick={() => save(s, value)}
-                  >
-                    Save
-                  </Button>
-                  {custom && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Input
+                  type="time"
+                  className="h-8 w-[6.5rem]"
+                  value={value}
+                  disabled={!canEdit || busy}
+                  aria-label={`Start time for ${ATTENDANCE_TYPE_LABELS[s.type] ?? s.type} on ${s.date}`}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [s.key]: e.target.value }))}
+                />
+                {canEdit && (
+                  <>
                     <Button
                       size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => reset(s)}
+                      disabled={!value || busy || !dirty}
+                      onClick={() => save(s, value)}
                     >
-                      Use default
+                      Save
                     </Button>
-                  )}
-                </div>
-              )}
+                    {custom && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => reset(s)}
+                      >
+                        Use default
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           );
         })}

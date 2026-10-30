@@ -1322,9 +1322,11 @@ function AuditTab() {
         </Button>
         </div>
       </div>
+      {/* Phones turn each row into a stacked block — badge and person on one
+          line, timestamp under them — so nothing has to be read across. */}
       <div className="overflow-x-auto panel">
-        <table className="w-full text-left text-[11px] md:min-w-[640px]">
-          <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
+        <table className="w-full text-left text-[11px] max-sm:block md:min-w-[640px]">
+          <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground max-sm:hidden">
             <tr>
               <th className="px-3 py-2">Time</th>
               <th className="px-3 py-2">User</th>
@@ -1333,11 +1335,11 @@ function AuditTab() {
               <th className="hidden px-3 py-2 md:table-cell">Details</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-sm:block">
             {logs === undefined
               ? Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-t">
-                    <td colSpan={5} className="px-3 py-2"><div className="h-3 animate-pulse rounded bg-muted" /></td>
+                  <tr key={i} className="border-t max-sm:block max-sm:px-3 max-sm:py-2">
+                    <td colSpan={5} className="px-3 py-2 max-sm:block max-sm:p-0"><div className="h-3 animate-pulse rounded bg-muted" /></td>
                   </tr>
                 ))
               : filtered.map((l) => {
@@ -1346,11 +1348,19 @@ function AuditTab() {
                   return (
                     <tr
                       key={l._id}
-                      className={cn("border-t align-top", promoted && "bg-status-green/5")}
+                      className={cn(
+                        "border-t align-top",
+                        promoted && "bg-status-green/5",
+                        "max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-2 max-sm:gap-y-0.5 max-sm:px-3 max-sm:py-2",
+                      )}
                     >
-                      <td className="px-3 py-2 text-muted-foreground sm:whitespace-nowrap">{fmtDateTime(new Date(l.createdAt).toISOString())}</td>
-                      <td className="px-3 py-2">{l.userName ?? "—"}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 text-muted-foreground sm:whitespace-nowrap max-sm:order-3 max-sm:basis-full max-sm:p-0 max-sm:text-[10px]">
+                        {fmtDateTime(new Date(l.createdAt).toISOString())}
+                      </td>
+                      <td className="px-3 py-2 max-sm:order-2 max-sm:min-w-0 max-sm:flex-1 max-sm:p-0">
+                        {l.userName ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 max-sm:order-1 max-sm:p-0">
                         <span
                           className={cn(
                             "rounded px-1.5 py-0.5 font-mono text-[9px]",
@@ -1363,15 +1373,25 @@ function AuditTab() {
                         </span>
                       </td>
                       <td className="hidden px-3 py-2 md:table-cell">{l.entityType}</td>
-                      <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">{l.details ?? "—"}</td>
+                      <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">
+                        {l.details ?? "—"}
+                      </td>
                     </tr>
                   );
                 })}
             {logs?.length === 0 && (
-              <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No activity logged yet</td></tr>
+              <tr className="max-sm:block">
+                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground max-sm:block">
+                  No activity logged yet
+                </td>
+              </tr>
             )}
             {logs && logs.length > 0 && filtered.length === 0 && (
-              <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No entries match this filter</td></tr>
+              <tr className="max-sm:block">
+                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground max-sm:block">
+                  No entries match this filter
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
