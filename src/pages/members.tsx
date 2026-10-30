@@ -763,7 +763,7 @@ export function MemberProfile() {
 
         {/* Tabs — one scrollable row, so the counts never wrap awkwardly on a
             phone. */}
-        <div className="flex gap-1 overflow-x-auto border-b px-3 pt-2">
+        <div className="flex flex-nowrap gap-1 overflow-x-auto overscroll-x-contain border-b px-3 pt-2">
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;

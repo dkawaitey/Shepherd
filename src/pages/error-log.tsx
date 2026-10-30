@@ -205,7 +205,6 @@ export default function ErrorLogPage() {
       <PageHeader
         title="Error Log"
         code="el"
-        description="Every failed request Shepherd's users hit, with the reason and the Convex request id. Newest activity first; identical failures are grouped."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={exportCsv} disabled={!entries.length}>

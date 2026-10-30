@@ -74,13 +74,15 @@ export default function Settings() {
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Settings" code="cfg" />
 
-      <div className="mb-5 flex gap-1.5 overflow-x-auto panel p-1.5">
+      {/* One row, one direction: the strip scrolls sideways on a phone and
+          never wraps onto a second line. */}
+      <div className="mb-5 flex flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain panel p-1.5">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              "shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
               tab === t.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
@@ -154,16 +156,18 @@ function UsersTab() {
     <div className="space-y-4">
 
       <div className="overflow-x-auto panel">
-        <table className="w-full min-w-[760px] text-left text-[11px]">
+        {/* Phones get the four columns that matter; the rest return at md, so
+            the page only ever scrolls down. */}
+        <table className="w-full text-left text-[11px] md:min-w-[760px]">
           <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">User</th>
-              <th className="px-3 py-2">Linked Member</th>
-              <th className="px-3 py-2">Ministry Position</th>
-              <th className="px-3 py-2">Class</th>
+              <th className="hidden px-3 py-2 md:table-cell">Linked Member</th>
+              <th className="hidden px-3 py-2 sm:table-cell">Ministry Position</th>
+              <th className="hidden px-3 py-2 lg:table-cell">Class</th>
               <th className="px-3 py-2">System Role</th>
-              <th className="px-3 py-2">Account Status</th>
-              <th className="px-3 py-2">Permission Scope</th>
+              <th className="hidden px-3 py-2 sm:table-cell">Account Status</th>
+              <th className="hidden px-3 py-2 lg:table-cell">Permission Scope</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
@@ -195,7 +199,7 @@ function UsersTab() {
                         <div className="font-semibold">{u.name || "—"}</div>
                         <div className="text-[10px] text-muted-foreground">{u.email}</div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="hidden px-3 py-2.5 md:table-cell">
                         {u.member ? (
                           <Link
                             to={`/members/${u.member._id}`}
@@ -207,10 +211,10 @@ function UsersTab() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="hidden px-3 py-2.5 sm:table-cell">
                         {pos ? POSITION_LABELS[pos] : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td className="px-3 py-2.5">{u.member?.klass ?? "—"}</td>
+                      <td className="hidden px-3 py-2.5 lg:table-cell">{u.member?.klass ?? "—"}</td>
                       <td className="px-3 py-2.5">
                         <div className="flex flex-wrap items-center gap-1">
                           {shown.length === 0 ? (
@@ -241,7 +245,7 @@ function UsersTab() {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="hidden px-3 py-2.5 sm:table-cell">
                         <span
                           className={cn(
                             "inline-flex items-center gap-1 text-[10px]",
@@ -257,7 +261,7 @@ function UsersTab() {
                           {u.memberId ? "Linked" : "Not linked"}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">{scope}</td>
+                      <td className="hidden px-3 py-2.5 lg:table-cell">{scope}</td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {u._id !== me?._id && (
@@ -662,12 +666,6 @@ function SessionStartTimesCard() {
         <Clock className="h-4 w-4 text-primary" />
         <p className="term-label">// session start times</p>
       </div>
-      <p className="mb-3 text-[11px] leading-4 text-muted-foreground">
-        When each activity normally begins. Each mark is measured against these
-        times as it is recorded and then frozen to that start, so changing one
-        here never re-scores attendance already taken. Leave a field blank and
-        that activity falls back to its first recorded arrival.
-      </p>
       <div className="space-y-2">
         {types.map((type) => (
           <div key={type} className="flex items-center justify-between gap-3">
@@ -1325,14 +1323,14 @@ function AuditTab() {
         </div>
       </div>
       <div className="overflow-x-auto panel">
-        <table className="w-full min-w-[640px] text-left text-[11px]">
+        <table className="w-full text-left text-[11px] md:min-w-[640px]">
           <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Time</th>
               <th className="px-3 py-2">User</th>
               <th className="px-3 py-2">Action</th>
-              <th className="px-3 py-2">Entity</th>
-              <th className="px-3 py-2">Details</th>
+              <th className="hidden px-3 py-2 md:table-cell">Entity</th>
+              <th className="hidden px-3 py-2 md:table-cell">Details</th>
             </tr>
           </thead>
           <tbody>
@@ -1350,7 +1348,7 @@ function AuditTab() {
                       key={l._id}
                       className={cn("border-t align-top", promoted && "bg-status-green/5")}
                     >
-                      <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{fmtDateTime(new Date(l.createdAt).toISOString())}</td>
+                      <td className="px-3 py-2 text-muted-foreground sm:whitespace-nowrap">{fmtDateTime(new Date(l.createdAt).toISOString())}</td>
                       <td className="px-3 py-2">{l.userName ?? "—"}</td>
                       <td className="px-3 py-2">
                         <span
@@ -1364,8 +1362,8 @@ function AuditTab() {
                           {l.action}
                         </span>
                       </td>
-                      <td className="px-3 py-2">{l.entityType}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{l.details ?? "—"}</td>
+                      <td className="hidden px-3 py-2 md:table-cell">{l.entityType}</td>
+                      <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">{l.details ?? "—"}</td>
                     </tr>
                   );
                 })}

@@ -351,13 +351,16 @@ export default function AccessReview() {
         />
       ) : (
         <div className="overflow-x-auto panel">
-          <table className="w-full min-w-[680px] text-left text-[11px]">
+          {/* Phones get account, roles, state and actions. The two columns that
+              pushed the table past the screen width come back at sm/md, so the
+              page itself only ever scrolls down. */}
+          <table className="w-full text-left text-[11px] md:min-w-[680px]">
             <thead className="bg-muted/50 text-[9px] uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Account</th>
-                <th className="px-3 py-2">Last sign-in</th>
+                <th className="hidden px-3 py-2 sm:table-cell">Last sign-in</th>
                 <th className="px-3 py-2">Roles</th>
-                <th className="px-3 py-2">Member link</th>
+                <th className="hidden px-3 py-2 md:table-cell">Member link</th>
                 <th className="px-3 py-2">State</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
@@ -394,7 +397,7 @@ export default function AccessReview() {
                         {fmtDate(new Date(row.accountCreatedAt).toISOString())}
                       </div>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="hidden px-3 py-2.5 sm:table-cell">
                       <div className="tabular-nums">{relative(row.lastSignInAt)}</div>
                       <div className="text-[10px] text-muted-foreground">
                         {row.sessionCount} session{row.sessionCount === 1 ? "" : "s"}
@@ -428,7 +431,7 @@ export default function AccessReview() {
                             : "no roles"}
                       </div>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="hidden px-3 py-2.5 md:table-cell">
                       {row.member ? (
                         <>
                           <Link
@@ -485,12 +488,15 @@ export default function AccessReview() {
                                   : "Link a member profile"
                               }
                             >
-                              <UserPlus className="mr-1 h-3.5 w-3.5" />
-                              {row.memberId ? "Change" : "Link"}
+                              <UserPlus className="h-3.5 w-3.5 sm:mr-1" />
+                              <span className="hidden sm:inline">
+                                {row.memberId ? "Change" : "Link"}
+                              </span>
                             </Button>
                           )}
                           <Button variant="ghost" size="sm" onClick={() => openEditor(row)}>
-                            <UserCog className="mr-1 h-3.5 w-3.5" /> Manage
+                            <UserCog className="h-3.5 w-3.5 sm:mr-1" />
+                            <span className="hidden sm:inline">Manage</span>
                           </Button>
                           <Button
                             variant="ghost"

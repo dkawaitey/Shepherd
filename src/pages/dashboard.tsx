@@ -556,9 +556,6 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[10px] text-muted-foreground">
-            Each stage counts everyone at-or-beyond that milestone — people move toward serving and leadership.
-          </p>
         </div>
 
         {/* Right column */}

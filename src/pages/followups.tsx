@@ -166,9 +166,6 @@ export function StatusChangeDialog({
                 onChange={(e) => setOutcome(e.target.value)}
                 autoFocus
               />
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                The spiritual timeline and dashboard statistics update automatically after saving.
-              </p>
             </div>
           )}
 

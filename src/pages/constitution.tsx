@@ -78,7 +78,6 @@ export default function Constitution() {
       <PageHeader
         title="Youth Constitution"
         code="cn"
-        description="The constitution as adopted by the youth ministry — opened here in full, not handed over as a file."
         actions={
           canPublish ? (
             <Button variant="outline" onClick={() => setComposerOpen(true)}>

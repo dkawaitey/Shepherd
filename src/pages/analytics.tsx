@@ -150,9 +150,6 @@ export default function Analytics() {
               );
             })}
           </div>
-          <p className="mt-3 text-[10px] text-muted-foreground">
-            Biggest drops point to where follow-up and discipleship effort should focus.
-          </p>
         </div>
 
         {/* Volunteer performance */}

@@ -37,22 +37,22 @@ export default function Discipleship() {
       {/* Stage distribution */}
       <div>
         <p className="term-label mb-3">// current stage distribution</p>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {byStage.map((s) => (
             <Link
               key={s.stage}
               to={`/contacts?status=${s.stage}`}
-              className="group panel p-3.5 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+              className="group panel min-w-0 p-3 transition-colors hover:border-primary/50 hover:shadow-md"
             >
-              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="truncate text-[9.5px] font-medium uppercase tracking-wide text-muted-foreground">
                 {s.label}
               </div>
-              <div className="mt-1 stat-figure text-[24px] text-primary">
+              <div className="mt-1 stat-figure text-[22px] text-primary">
                 {s.count}
               </div>
-              <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground group-hover:text-primary">
+              <div className="mt-1 inline-flex items-center gap-1 text-[9.5px] text-muted-foreground group-hover:text-primary">
                 view people
-                <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
+                <ArrowRight className="h-2.5 w-2.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
               </div>
             </Link>
           ))}
@@ -61,7 +61,7 @@ export default function Discipleship() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Bible study progress */}
-        <div className="panel p-4">
+        <div className="panel min-w-0 p-4">
           <div className="mb-4 flex items-center justify-between">
             <p className="term-label">// bible study curriculum</p>
             <BookMarked className="h-4 w-4 text-muted-foreground" />
@@ -69,11 +69,11 @@ export default function Discipleship() {
           <div className="space-y-2.5">
             {bsCompletedByLesson.map((b) => (
               <div key={b.lesson}>
-                <div className="mb-1 flex justify-between text-[11px]">
-                  <span className="text-muted-foreground">
+                <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
+                  <span className="min-w-0 truncate text-muted-foreground">
                     {b.lesson}. {BIBLE_LESSONS[b.lesson - 1]}
                   </span>
-                  <span className="font-mono tabular-nums">
+                  <span className="shrink-0 font-mono text-[10px] tabular-nums">
                     {b.completed} done{b.inProgress ? ` · ${b.inProgress} in progress` : ""}
                   </span>
                 </div>
@@ -84,7 +84,7 @@ export default function Discipleship() {
         </div>
 
         {/* Recent journey activity */}
-        <div className="panel p-4">
+        <div className="panel min-w-0 p-4">
           <div className="mb-4 flex items-center justify-between">
             <p className="term-label">// recent journey activity</p>
             <Sparkle className="h-4 w-4 text-muted-foreground" />
@@ -94,7 +94,7 @@ export default function Discipleship() {
               Timeline events appear here as follow-ups complete and milestones are recorded.
             </p>
           ) : (
-            <div className="max-h-[420px] space-y-2.5 overflow-y-auto pr-1">
+            <div className="space-y-2.5 sm:max-h-[420px] sm:overflow-y-auto sm:pr-1">
               {recentEvents.map((ev) => (
                 <Link
                   key={ev._id}

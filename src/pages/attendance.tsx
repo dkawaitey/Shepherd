@@ -186,18 +186,10 @@ function CustomSessionStartsCard({
 
   return (
     <div className="mt-6 panel p-4">
-      <div className="mb-1 flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-2">
         <Clock className="h-4 w-4 text-primary" />
         <p className="term-label">// custom session start times</p>
       </div>
-      <p className="mb-3 text-[11px] leading-4 text-muted-foreground">
-        Give a single session its own start time — for a program that began at a
-        different hour. It can be set or changed at any time and is the baseline
-        for that session, including the attendance already taken for it. The
-        marks themselves (date, status, time) are never altered, and changing an
-        activity's default start in Ministry Settings never re-scores recorded
-        attendance.
-      </p>
       <div className="space-y-2">
         {shown.map((s) => {
           const custom = customByKey.get(s.key);
@@ -580,9 +572,6 @@ export default function Attendance() {
             />
           </div>
         </div>
-        <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
-          Attendance is recorded from each member's profile.
-        </p>
       </div>
 
       {/* History */}
@@ -875,7 +864,7 @@ export default function Attendance() {
         <div className="mt-6">
           <div className="mb-3 flex items-center gap-2">
             <TrendingDown className="h-4 w-4 text-status-red" />
-            <p className="term-label">drifting — lateness rising, attendance slipping</p>
+            <p className="term-label">drifting</p>
           </div>
           <div className="space-y-2">
             {drifting.map((t) => (
@@ -952,7 +941,7 @@ export default function Attendance() {
       <div className="mt-6">
         <div className="mb-3 flex items-center gap-2">
           <TriangleAlert className="h-4 w-4 text-status-amber" />
-          <p className="term-label">members needing follow-up — low attendance</p>
+          <p className="term-label">members needing follow-up</p>
         </div>
         {lowAttendance === undefined ? (
           <div className="h-20 animate-pulse panel" />
@@ -1004,7 +993,7 @@ export default function Attendance() {
         <div className="mt-6">
           <div className="mb-3 flex items-center gap-2">
             <CircleCheck className="h-4 w-4 text-status-green" />
-            <p className="term-label">recently followed up — low attendance</p>
+            <p className="term-label">recently followed up</p>
           </div>
           <div className="space-y-2">
             {recentFollowups.map((m) => (

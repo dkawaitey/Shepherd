@@ -276,13 +276,13 @@ export default function ContactProfile() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto px-3 pt-2">
+        <div className="flex flex-nowrap gap-1 overflow-x-auto overscroll-x-contain px-3 pt-2">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+                "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-md border-b-2 px-3 py-2 text-xs font-medium transition-colors",
                 tab === t.id
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground",
@@ -724,11 +724,6 @@ function TimelineTab({
             </section>
           </>
         )}
-        <p className="rounded-md border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
-          Timeline updates automatically when follow-ups are completed and Bible study lessons are
-          marked done. Manual updates let leaders record milestones like baptisms, church membership
-          and service.
-        </p>
       </div>
     </div>
   );
