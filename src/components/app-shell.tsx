@@ -33,6 +33,8 @@ import {
   FlaskConical,
   ShieldAlert,
   UserCog,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { releaseDevicePush, usePushNotifications } from "@/hooks/use-push-notifications";
 import { clearOfflineQueue, useOfflineSync } from "@/lib/offline-sync";
@@ -124,9 +126,9 @@ function hasMinistryAccess(user: {
   return effectiveUserRoles(user).length > 0;
 }
 
-function Brand() {
+function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
-    <div className="flex items-center gap-2.5">
+    <div className={cn("flex items-center gap-2.5", collapsed && "justify-center")}>
       <div className="relative grid size-9 shrink-0 place-items-center rounded-xl border border-border/70 bg-gradient-to-br from-primary/12 to-gold/12 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
         <img
           src="/sidebar-logo.png"
@@ -139,19 +141,28 @@ function Brand() {
           className="hidden size-6 object-contain dark:block"
         />
       </div>
-      <div className="min-w-0">
-        <div className="display-title truncate text-[15px] leading-none text-foreground">
-          Shepherd
+      {!collapsed && (
+        <div className="min-w-0">
+          <div className="display-title truncate text-[15px] leading-none text-foreground">
+            Shepherd
+          </div>
+          <div className="mt-1 truncate font-mono text-[8.5px] uppercase tracking-[0.16em] text-muted-foreground/80">
+            Youth Ministry
+          </div>
         </div>
-        <div className="mt-1 truncate font-mono text-[8.5px] uppercase tracking-[0.16em] text-muted-foreground/80">
-          Youth Ministry
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  onNavigate,
+  collapsed = false,
+}: {
+  onNavigate?: () => void;
+  /** Icon-only rail on desktop; never used for the mobile sheet. */
+  collapsed?: boolean;
+}) {
   const location = useLocation();
   const { user } = useAuth();
 
@@ -159,12 +170,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     location.pathname === to || location.pathname.startsWith(to + "/");
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="px-4 pt-5 pb-4">
-        <Brand />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className={cn("pt-5 pb-4", collapsed ? "px-2" : "px-4")}>
+        <Brand collapsed={collapsed} />
       </div>
-      <div className="rule-fade mx-4" />
-      <nav className="flex-1 overflow-y-auto px-2.5 py-3">
+      <div className={cn("rule-fade", collapsed ? "mx-2" : "mx-4")} />
+      <nav
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overscroll-contain py-3",
+          collapsed ? "px-2" : "px-2.5",
+        )}
+      >
         {GROUPS.map((group) => {
           const items = NAV.filter((item) => {
             if (item.group !== group) return false;
@@ -179,9 +195,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           if (items.length === 0) return null;
           return (
             <div key={group} className="mb-1.5">
-              <p className="term-label px-2.5 pt-2 pb-1.5 text-[9px] text-muted-foreground/65">
-                {group}
-              </p>
+              {collapsed ? (
+                <div className="rule-fade mx-1.5 my-2" />
+              ) : (
+                <p className="term-label px-2.5 pt-2 pb-1.5 text-[9px] text-muted-foreground/65">
+                  {group}
+                </p>
+              )}
               <div className="space-y-0.5">
                 {items.map((item) => {
                   const Icon = item.icon;
@@ -197,15 +217,23 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                       onTouchStart={() => preloadRoute(item.to)}
                       onFocus={() => preloadRoute(item.to)}
                       aria-current={active ? "page" : undefined}
+                      aria-label={collapsed ? item.label : undefined}
+                      title={collapsed ? item.label : undefined}
                       className={cn(
-                        "group relative flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] tracking-[-0.01em] transition-[background-color,color,box-shadow] duration-150",
+                        "group relative flex items-center rounded-[10px] text-[13px] tracking-[-0.01em] transition-[background-color,color,box-shadow] duration-150",
+                        collapsed ? "justify-center px-0 py-2" : "gap-2.5 px-2.5 py-2",
                         active
                           ? "bg-primary/[0.09] font-medium text-primary ring-1 ring-primary/12"
                           : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
                       )}
                     >
                       {active && (
-                        <span className="absolute top-1/2 -left-2.5 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+                        <span
+                          className={cn(
+                            "absolute top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-primary",
+                            collapsed ? "left-0" : "-left-2.5",
+                          )}
+                        />
                       )}
                       <Icon
                         className={cn(
@@ -215,17 +243,21 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                             : "text-muted-foreground/85 group-hover:text-foreground",
                         )}
                       />
-                      <span className="flex-1 truncate">{item.label}</span>
-                      <span
-                        className={cn(
-                          "font-mono text-[8.5px] uppercase tracking-[0.1em] transition-opacity",
-                          active
-                            ? "text-primary/60"
-                            : "text-muted-foreground/40 opacity-0 group-hover:opacity-100",
-                        )}
-                      >
-                        {item.code}
-                      </span>
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 truncate">{item.label}</span>
+                          <span
+                            className={cn(
+                              "font-mono text-[8.5px] uppercase tracking-[0.1em] transition-opacity",
+                              active
+                                ? "text-primary/60"
+                                : "text-muted-foreground/40 opacity-0 group-hover:opacity-100",
+                            )}
+                          >
+                            {item.code}
+                          </span>
+                        </>
+                      )}
                     </Link>
                   );
                 })}
@@ -234,14 +266,22 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           );
         })}
       </nav>
-      <div className="rule-fade mx-4" />
-      <div className="px-4 py-4">
-        <p className="font-mono text-[8.5px] uppercase tracking-[0.16em] text-muted-foreground/60">
-          Gethsemane · Ghana
-        </p>
-        <p className="mt-1 text-[11px] leading-4 text-muted-foreground/80">
-          Discipleship management
-        </p>
+      <div className={cn("rule-fade", collapsed ? "mx-2" : "mx-4")} />
+      <div className={cn("py-4", collapsed ? "px-2" : "px-4")}>
+        {collapsed ? (
+          <p className="text-center font-mono text-[8px] uppercase tracking-[0.14em] text-muted-foreground/50">
+            GH
+          </p>
+        ) : (
+          <>
+            <p className="font-mono text-[8.5px] uppercase tracking-[0.16em] text-muted-foreground/60">
+              Gethsemane · Ghana
+            </p>
+            <p className="mt-1 text-[11px] leading-4 text-muted-foreground/80">
+              Discipleship management
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -252,6 +292,26 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Desktop rail: 240px with labels, or a 68px icon rail. Remembered per
+  // device so a narrow laptop keeps the choice between visits.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("shepherd:sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("shepherd:sidebar-collapsed", next ? "1" : "0");
+      } catch {
+        // Private-mode storage can refuse writes; the choice still applies now.
+      }
+      return next;
+    });
+  };
   const touchActivity = useMutation(api.users.touchActivity);
   // Queued offline records belonging to this account (see lib/offline-sync).
   const offline = useOfflineSync(user?._id);
@@ -335,9 +395,16 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Desktop sidebar */}
-      <aside className="glass-sidebar fixed inset-y-0 left-0 z-30 hidden w-60 bg-sidebar md:block">
-        <SidebarContent />
+      {/* Desktop sidebar. Pinned to the viewport rather than the page, so
+          scrolling the app never drags it along — only its own nav list
+          scrolls, and only when the list is taller than the screen. */}
+      <aside
+        className={cn(
+          "glass-sidebar fixed inset-y-0 left-0 z-30 hidden overflow-hidden bg-sidebar transition-[width] duration-200 ease-out md:block",
+          collapsed ? "w-[4.25rem]" : "w-60",
+        )}
+      >
+        <SidebarContent collapsed={collapsed} />
       </aside>
 
       {/* Mobile sidebar */}
@@ -347,7 +414,12 @@ export function AppShell() {
         </SheetContent>
       </Sheet>
 
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col md:pl-60">
+      <div
+        className={cn(
+          "relative z-10 flex min-w-0 flex-1 flex-col transition-[padding] duration-200 ease-out",
+          collapsed ? "md:pl-[4.25rem]" : "md:pl-60",
+        )}
+      >
         {/* Topbar */}
         <header className="glass-topbar sticky top-0 z-20 flex h-14 items-center gap-3 bg-background/70 px-4 md:h-16 md:px-7">
           <Button
@@ -358,6 +430,21 @@ export function AppShell() {
             aria-label="Open navigation"
           >
             <Menu className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="-ml-1.5 hidden md:inline-flex"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
           </Button>
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <div className="min-w-0">
