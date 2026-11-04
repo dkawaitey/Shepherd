@@ -33,6 +33,7 @@ import {
   ROLE_LABELS,
   ROLES,
   normalizePostCategory,
+  postReminderExpired,
 } from "@/convex/constants";
 import { REACTION_PALETTE, reactionMeta } from "@/lib/reactions";
 import { categoryMeta } from "@/lib/post-categories";
@@ -1046,8 +1047,12 @@ function PostCard({
   const CategoryIcon = category.Icon;
 
   // A post reminder re-notifies people, so it is the author's to send and
-  // only when they opted into the button while composing.
-  const canRemind = isAuthor && !!post.allowReminder;
+  // only when they opted into the button while composing — and only while the
+  // post is still current. The feed already clears the flag for a post whose
+  // day has passed; checking the date here also retires the button on a tab
+  // left open overnight, without waiting for a write to the post.
+  const canRemind =
+    isAuthor && !!post.allowReminder && !postReminderExpired(post.createdAt);
 
   return (
     <article

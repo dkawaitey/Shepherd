@@ -426,7 +426,7 @@ export function PostComposerDialog({
             <button
               type="button"
               onClick={() => setAllowReminder((v) => !v)}
-              title="Show a Remind button on this post so you can push a reminder later"
+              title="Show a Remind button on this post for the rest of the day, so you can push a reminder later"
               className={cn(
                 "flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors",
                 allowReminder

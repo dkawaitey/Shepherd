@@ -92,6 +92,27 @@ export const normalizePostCategory = (
 export const postCategory = (value?: string | null): string =>
   normalizePostCategory(value) ?? DEFAULT_POST_CATEGORY;
 
+/** One calendar day, in milliseconds. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A post's "Remind later" button is only good for the day the post went up.
+ *
+ * A reminder re-notifies people about something current; once the post's own
+ * date is behind us it would nag about an old notice, so the reminder lapses
+ * at the next UTC midnight and the button goes away. Day boundaries are UTC so
+ * the feed, the reminder mutation and every reader agree on the exact moment —
+ * a client in another timezone cannot keep offering a reminder the server will
+ * refuse.
+ */
+export const postReminderExpired = (
+  createdAt: number,
+  now: number = Date.now(),
+): boolean => {
+  const nextDayStartsAt = Math.floor(createdAt / DAY_MS) * DAY_MS + DAY_MS;
+  return now >= nextDayStartsAt;
+};
+
 // ===== Ministry positions (Member Directory) =====
 // The member's ministry position is the source of truth for system permissions:
 // the linked user account inherits the corresponding system roles automatically.

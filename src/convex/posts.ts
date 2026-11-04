@@ -25,6 +25,7 @@ import {
   ROLES,
   normalizePostCategory,
   postCategory,
+  postReminderExpired,
   type Role,
 } from "./constants";
 import { checkRateLimit } from "./rateLimit";
@@ -450,9 +451,14 @@ export const list = query({
       if (r.targetType === "post") mine.set(r.targetId, r.kind);
     }
 
+    const now = Date.now();
     return await Promise.all(
       page.map(async (p) => ({
         ...p,
+        // The reminder is spent once the post's own date is past, whatever the
+        // row still says — read it off here so the button disappears on its
+        // own instead of waiting for someone to write to the post.
+        allowReminder: !!p.allowReminder && !postReminderExpired(p.createdAt, now),
         ...(await engagementFor(ctx, p)),
         myReaction: mine.get(p._id) ?? null,
         poll: await pollFor(ctx, p, user._id),
@@ -1239,6 +1245,11 @@ export const remind = mutation({
     if (!post || post.isDeleted) throw new ConvexError("Post not found");
     if (!post.allowReminder) {
       throw new ConvexError("Reminders are not enabled for this post");
+    }
+    if (postReminderExpired(post.createdAt)) {
+      throw new ConvexError(
+        "This post's date has passed, so its reminder has expired",
+      );
     }
     const isAuthor = post.authorId === user._id;
     if (!isAuthor && !hasRole(user, ROLES.ADMIN)) {
