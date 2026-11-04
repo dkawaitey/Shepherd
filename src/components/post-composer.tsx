@@ -35,6 +35,7 @@ import {
 import {
   BarChart3,
   BellRing,
+  CalendarDays,
   FileIcon,
   Paperclip,
   Plus,
@@ -96,6 +97,9 @@ export function PostComposerDialog({
   // Adds a "Remind" button on the published post so the author can re-notify
   // everyone later without writing a duplicate announcement.
   const [allowReminder, setAllowReminder] = useState(false);
+  // The day the post is for. The reminder button lives until this day ends, so
+  // a notice about next Friday can still be reminded about all week.
+  const [eventDate, setEventDate] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<PendingFile[]>([]);
@@ -141,6 +145,7 @@ export function PostComposerDialog({
     setPollOptions(["", ""]);
     setPollMultiple(false);
     setAllowReminder(false);
+    setEventDate("");
     setError(null);
   };
 
@@ -241,6 +246,7 @@ export function PostComposerDialog({
         category: category || undefined,
         media: media.length > 0 ? media : undefined,
         allowReminder: allowReminder || undefined,
+        eventDate: eventDate || undefined,
         poll: pollOpen
           ? {
               question: pollQuestion.trim(),
@@ -426,7 +432,7 @@ export function PostComposerDialog({
             <button
               type="button"
               onClick={() => setAllowReminder((v) => !v)}
-              title="Show a Remind button on this post for the rest of the day, so you can push a reminder later"
+              title="Show a Remind button on this post until the day it is for ends, so you can push a reminder later"
               className={cn(
                 "flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors",
                 allowReminder
@@ -437,6 +443,25 @@ export function PostComposerDialog({
               <BellRing className="h-3.5 w-3.5" />
               Remind later
             </button>
+
+            <label
+              title="The day this post is for — the Remind button stays until that day ends"
+              className={cn(
+                "flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors",
+                eventDate
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-border bg-muted/40 text-muted-foreground",
+              )}
+            >
+              <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+              <input
+                type="date"
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+                aria-label="The day this post is for"
+                className="w-[7.25rem] bg-transparent text-[11px] text-current outline-none dark:[color-scheme:dark]"
+              />
+            </label>
 
             <Input
               value={tags}

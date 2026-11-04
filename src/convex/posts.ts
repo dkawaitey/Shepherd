@@ -23,6 +23,7 @@ import {
   REACTION_KINDS,
   ROLE_LABELS,
   ROLES,
+  normalizeEventDate,
   normalizePostCategory,
   postCategory,
   postReminderExpired,
@@ -458,7 +459,8 @@ export const list = query({
         // The reminder is spent once the post's own date is past, whatever the
         // row still says — read it off here so the button disappears on its
         // own instead of waiting for someone to write to the post.
-        allowReminder: !!p.allowReminder && !postReminderExpired(p.createdAt, now),
+        allowReminder:
+          !!p.allowReminder && !postReminderExpired(p.createdAt, p.eventDate, now),
         ...(await engagementFor(ctx, p)),
         myReaction: mine.get(p._id) ?? null,
         poll: await pollFor(ctx, p, user._id),
@@ -959,6 +961,11 @@ export const create = mutation({
      * a button on the post, without writing a new announcement.
      */
     allowReminder: v.optional(v.boolean()),
+    /**
+     * The day the post is for ("YYYY-MM-DD") — an event a few days out, say.
+     * The reminder button lasts until that day ends.
+     */
+    eventDate: v.optional(v.string()),
     /** Optional poll attached to this announcement. */
     poll: v.optional(
       v.object({
@@ -1025,6 +1032,14 @@ export const create = mutation({
     }
 
     const now = Date.now();
+
+    // A date the author typed is either a real calendar day or nothing at all;
+    // it decides how long the reminder button stays available, so it must not
+    // be a value that silently rolls over (see normalizeEventDate).
+    const eventDate = normalizeEventDate(args.eventDate);
+    if (args.eventDate && !eventDate) {
+      throw new ConvexError("That date is not one we recognise — use YYYY-MM-DD");
+    }
 
     // Validate the poll up front, so a bad option list fails before any writes.
     let pollInput:
@@ -1118,6 +1133,7 @@ export const create = mutation({
       category: category ?? DEFAULT_POST_CATEGORY,
       isPinned: false,
       allowReminder: args.allowReminder ?? false,
+      eventDate,
       // Denormalized engagement counters start at zero.
       commentCount: 0,
       reactionCount: 0,
@@ -1246,7 +1262,7 @@ export const remind = mutation({
     if (!post.allowReminder) {
       throw new ConvexError("Reminders are not enabled for this post");
     }
-    if (postReminderExpired(post.createdAt)) {
+    if (postReminderExpired(post.createdAt, post.eventDate)) {
       throw new ConvexError(
         "This post's date has passed, so its reminder has expired",
       );

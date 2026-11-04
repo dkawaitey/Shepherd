@@ -575,6 +575,8 @@ type FeedPost = {
   poll: FeedPoll | null;
   /** Author opted into a manual "Remind" button on this post. */
   allowReminder?: boolean;
+  /** The day the post is for ("YYYY-MM-DD"), if the author set one. */
+  eventDate?: string;
   /** Last time a reminder push was sent (drives the cooldown note). */
   lastRemindedAt?: number;
 };
@@ -586,6 +588,14 @@ type PollResultOption = {
   /** Who chose this option — only sent to viewers allowed to see details. */
   voters?: { name: string; at: number }[];
 };
+
+/** A post's own day ("2026-11-09") as a short label, e.g. "9 Nov". */
+function formatPostDay(day: string) {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
+}
 
 /** Rank medal for the top three options (number badge for the rest). */
 function rankBadge(rank: number) {
@@ -1052,7 +1062,9 @@ function PostCard({
   // day has passed; checking the date here also retires the button on a tab
   // left open overnight, without waiting for a write to the post.
   const canRemind =
-    isAuthor && !!post.allowReminder && !postReminderExpired(post.createdAt);
+    isAuthor &&
+    !!post.allowReminder &&
+    !postReminderExpired(post.createdAt, post.eventDate);
 
   return (
     <article
@@ -1084,6 +1096,12 @@ function PostCard({
               </div>
               <div className="text-[10px] text-muted-foreground">
                 {post.author} · {fmtDateTime(new Date(post.createdAt).toISOString())}
+                {post.eventDate && (
+                  <span title="The day this post is for">
+                    {" · for "}
+                    {formatPostDay(post.eventDate)}
+                  </span>
+                )}
                 {wasEdited && (
                   <span
                     className="text-muted-foreground/70"

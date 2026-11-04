@@ -409,6 +409,10 @@ const schema = defineSchema(
       pollId: v.optional(v.id("polls")),
       /** Author opted in to a manual "Remind" button on this post. */
       allowReminder: v.optional(v.boolean()),
+      /** The day this post is for ("YYYY-MM-DD"), e.g. the event's date. The
+       *  reminder button stays until that day ends; without it the reminder
+       *  expires at the end of the day the post was published. */
+      eventDate: v.optional(v.string()),
       /** Last time a reminder push was sent for this post. */
       lastRemindedAt: v.optional(v.number()),
       /** How many reminder pushes have been sent for this post. */

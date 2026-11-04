@@ -95,23 +95,51 @@ export const postCategory = (value?: string | null): string =>
 /** One calendar day, in milliseconds. */
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** When a calendar day ("YYYY-MM-DD") begins, in epoch ms. */
+const dayStart = (day: string): number => Date.parse(`${day}T00:00:00Z`);
+
 /**
- * A post's "Remind later" button is only good for the day the post went up.
+ * Canonical "YYYY-MM-DD", or undefined when the value is not a real date.
  *
- * A reminder re-notifies people about something current; once the post's own
- * date is behind us it would nag about an old notice, so the reminder lapses
- * at the next UTC midnight and the button goes away. Day boundaries are UTC so
- * the feed, the reminder mutation and every reader agree on the exact moment —
- * a client in another timezone cannot keep offering a reminder the server will
- * refuse.
+ * "2026-02-31" is rejected rather than silently rolled forward into March, so
+ * a typo cannot move a post's reminder to a day the author never meant.
  */
+export const normalizeEventDate = (
+  value?: string | null,
+): string | undefined => {
+  const v = (value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
+  const ms = dayStart(v);
+  if (!Number.isFinite(ms)) return undefined;
+  return new Date(ms).toISOString().slice(0, 10) === v ? v : undefined;
+};
+
+/**
+ * When a post's "Remind later" button stops being offered.
+ *
+ * The reminder lasts until the end of the day the post is *for* — a notice
+ * published today about something five days out can still be reminded about
+ * right up to that day, and only then is it spent. A post with no date of its
+ * own keeps the reminder for the day it was published. Day boundaries are UTC
+ * so the feed, the reminder mutation and every reader agree on the exact
+ * moment — a client in another timezone cannot keep offering a reminder the
+ * server will refuse.
+ */
+export const postReminderExpiresAt = (
+  createdAt: number,
+  eventDate?: string | null,
+): number => {
+  const day = normalizeEventDate(eventDate);
+  const startOfDay = day ? dayStart(day) : Math.floor(createdAt / DAY_MS) * DAY_MS;
+  return startOfDay + DAY_MS;
+};
+
+/** True once a post's reminder has lapsed (see postReminderExpiresAt). */
 export const postReminderExpired = (
   createdAt: number,
+  eventDate?: string | null,
   now: number = Date.now(),
-): boolean => {
-  const nextDayStartsAt = Math.floor(createdAt / DAY_MS) * DAY_MS + DAY_MS;
-  return now >= nextDayStartsAt;
-};
+): boolean => now >= postReminderExpiresAt(createdAt, eventDate);
 
 // ===== Ministry positions (Member Directory) =====
 // The member's ministry position is the source of truth for system permissions:
