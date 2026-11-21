@@ -16,6 +16,7 @@ import type * as contacts from "../contacts.js";
 import type * as crons from "../crons.js";
 import type * as customerio from "../customerio.js";
 import type * as dashboard from "../dashboard.js";
+import type * as dataExport from "../dataExport.js";
 import type * as discipleship from "../discipleship.js";
 import type * as emailHtml from "../emailHtml.js";
 import type * as emails from "../emails.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   customerio: typeof customerio;
   dashboard: typeof dashboard;
+  dataExport: typeof dataExport;
   discipleship: typeof discipleship;
   emailHtml: typeof emailHtml;
   emails: typeof emails;

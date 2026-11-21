@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -36,6 +36,15 @@ import {
   effectivePosition,
 } from "@/convex/constants";
 import { parseStartTimes } from "@/lib/attendance-trend";
+import {
+  TABLE_LABELS,
+  exportDay,
+  downloadJson,
+  fetchEverything,
+  fetchTable,
+  rowsFromDocs,
+} from "@/lib/data-export";
+import { EXPORT_TABLES, type ExportTable } from "@/convex/dataExport";
 import { Mark, PageHeader, fmtDateTime, downloadCsv, downloadPdf, formatRoles, formatError } from "@/components/shared";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +52,7 @@ import {
   ArrowRight,
   Bell,
   Clock,
+  Database,
   Download,
   FileText,
   MailCheck,
@@ -59,6 +69,7 @@ const TABS = [
   { id: "notifications", label: "Notifications" },
   { id: "integrations", label: "Integrations" },
   { id: "audit", label: "Audit Logs" },
+  { id: "data", label: "Data Export" },
 ];
 
 
@@ -97,6 +108,7 @@ export default function Settings() {
       {tab === "notifications" && <NotificationsTab />}
       {tab === "integrations" && <IntegrationsTab />}
       {tab === "audit" && <AuditTab />}
+      {tab === "data" && <DataTab />}
     </div>
   );
 }
@@ -1395,6 +1407,112 @@ function AuditTab() {
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Full data export. The ministry's records leave the app as one complete JSON
+ * archive, or one table at a time as CSV for a spreadsheet.
+ */
+function DataTab() {
+  const convex = useConvex();
+  // What is running, so every button stays disabled and the label explains
+  // the wait instead of leaving the page looking stuck.
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const exportAll = async () => {
+    setBusy("Starting…");
+    try {
+      const tables = await fetchEverything(convex, (table, done, total) => {
+        setBusy(`Reading ${TABLE_LABELS[table].toLowerCase()} (${done + 1}/${total})…`);
+      });
+      downloadJson(`shepherd-export-${exportDay()}.json`, {
+        exportedAt: new Date().toISOString(),
+        counts: Object.fromEntries(
+          Object.entries(tables).map(([table, docs]) => [table, docs.length]),
+        ),
+        tables,
+      });
+      toast.success("Everything exported");
+    } catch (err) {
+      toast.error(formatError(err, "Export failed"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const exportTable = async (table: ExportTable) => {
+    setBusy(`Reading ${TABLE_LABELS[table].toLowerCase()}…`);
+    try {
+      const docs = await fetchTable(convex, table);
+      if (!docs.length) {
+        toast.error(`No ${TABLE_LABELS[table].toLowerCase()} recorded yet`);
+        return;
+      }
+      downloadCsv(
+        `shepherd-${table}-${exportDay()}.csv`,
+        rowsFromDocs(docs).rows,
+      );
+      toast.success(`${TABLE_LABELS[table]} exported`);
+    } catch (err) {
+      toast.error(formatError(err, "Export failed"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="panel p-5">
+        <div className="flex items-start gap-3">
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl border border-border/80 bg-gradient-to-br from-primary/12 to-gold/10">
+            <Database className="h-4 w-4 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-foreground">Complete export</h3>
+            <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+              One JSON file holding every ministry record — {EXPORT_TABLES.length} tables
+              covering members, attendance, contacts, follow-ups, Bible study, prayer and
+              notes, announcements with their comments and engagement, poll results, accounts,
+              settings and the audit and error logs. Private and counselling notes are included
+              as written, so treat the file as confidential. Device push subscriptions and
+              sign-in secrets are never included.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button onClick={exportAll} disabled={!!busy}>
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                {busy ? "Exporting…" : "Export everything"}
+              </Button>
+              {busy && (
+                <span className="text-[11px] text-muted-foreground">{busy}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          One table as CSV
+        </div>
+        {/* Every table, in the same order as the archive, so a single record
+            type can go straight into a spreadsheet without the rest. */}
+        <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+          {EXPORT_TABLES.map((table) => (
+            <button
+              key={table}
+              type="button"
+              onClick={() => exportTable(table)}
+              disabled={!!busy}
+              className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left text-[11px] font-medium transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-50"
+            >
+              <span className="truncate">{TABLE_LABELS[table]}</span>
+              <Download className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
